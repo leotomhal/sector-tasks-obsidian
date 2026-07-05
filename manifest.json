@@ -3,7 +3,7 @@
   "name": "Sector Tasks",
   "version": "0.18.0",
   "minAppVersion": "1.6.6",
-  "description": "A task board that reads and writes a single Tasks-plugin-format Markdown file, grouped by configurable tags. Designed for Carl Pullein's Time Sector System, usable with any tag scheme. Creating and editing tasks uses the Tasks plugin's own input modal (required).",
+  "description": "A task dashboard for organising tasksreads, grouped by configurable tags. Designed for Carl Pullein's Time Sector System, usable with any scheme. Requires the ObisdianTasks plugin.",
   "author": "Tom Leonhardt",
   "isDesktopOnly": false
 }
