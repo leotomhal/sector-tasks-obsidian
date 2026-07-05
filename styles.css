@@ -1775,6 +1775,12 @@ button.belki-review-tool-danger:hover {
   min-width: 0;
 }
 
+.belki-review-sector-chip {
+  background: var(--belki-chip-bg);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
 .belki-review-hotkey-hint {
   color: var(--belki-muted);
   font-size: 11px;

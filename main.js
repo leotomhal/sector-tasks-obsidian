@@ -1815,11 +1815,15 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
         if (!isFormField) {
           const key = event.key.toLowerCase();
           const step = this.currentReviewStep();
-          if (step && step.kind === "inbox" && /^[1-9]$/.test(event.key)) {
+          if (step && (step.kind === "inbox" || step.kind === "date") && /^[1-9]$/.test(event.key)) {
             const sector = this.settings.sectors[Number(event.key) - 1];
             if (sector) {
               this.stopEscape(event);
-              this.runReviewAction(() => this.applyReviewInboxAction("assign", sector.tag));
+              if (step.kind === "date") {
+                this.runReviewAction(() => this.applyReviewDateAssign(sector.tag));
+              } else {
+                this.runReviewAction(() => this.applyReviewInboxAction("assign", sector.tag));
+              }
               return;
             }
           }
@@ -2203,6 +2207,14 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     const task = this.currentReviewTask();
     if (task && action === "assign" && sectorTag) {
       await this.store.updateTask(task.id, { project: sectorTag });
+    }
+    await this.advanceReview();
+  }
+  async applyReviewDateAssign(sectorTag) {
+    const task = this.currentReviewTask();
+    if (task && sectorTag) {
+      await this.store.updateTask(task.id, { project: sectorTag });
+      await this.store.updateTaskViaModal(task.id);
     }
     await this.advanceReview();
   }
@@ -3462,6 +3474,10 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
       }
     });
     const meta = card.createDiv({ cls: "belki-review-task-meta" });
+    if (step.kind === "date") {
+      const currentSector = this.settings.sectors.find((s) => s.tag === task.project);
+      meta.createSpan({ cls: "belki-review-sector-chip", text: currentSector ? currentSector.label : "Inbox" });
+    }
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
@@ -3522,6 +3538,18 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
         this.runReviewAction(() => this.applyReviewWaitingAction("wait"));
       });
     } else if (step.kind === "date") {
+      if (import_obsidian7.Platform.isMobile) {
+        const row = actions.createDiv({ cls: "belki-review-inbox-row" });
+        for (const sector of this.settings.sectors) {
+          const sectorButton = row.createEl("button", { cls: "belki-button", text: sector.label });
+          sectorButton.addEventListener("click", () => {
+            this.runReviewAction(() => this.applyReviewDateAssign(sector.tag));
+          });
+        }
+      } else {
+        const hint = this.settings.sectors.slice(0, 9).map((sector, index) => `${index + 1} ${sector.label}`).join(" \u00B7 ");
+        actions.createDiv({ cls: "belki-review-hotkey-hint", text: hint });
+      }
       const rescheduleButton = actions.createEl("button", { cls: "belki-button" });
       rescheduleButton.createSpan({ cls: "belki-review-btn-label", text: "Reschedule" });
       withHotkey(rescheduleButton, "r");
