@@ -6,7 +6,7 @@ belki-style board, but reads/writes **a single** Markdown file in **Tasks plugin
 Since version 0.3.0 the community plugin **"Tasks"** is mandatory. Creating and editing tasks runs through Tasks' own input modal (`apiV1.createTaskLineModal` / `editTaskLineModal`). Without the Tasks plugin installed and enabled, these actions do not work; a notice is shown on load.
 
 ## Installation
-1. In your vault: create the folder `.obsidian/plugins/sektor-tasks/`.
+1. In your vault: create the folder `.obsidian/plugins/sector-tasks/`.
 2. Copy `main.js`, `manifest.json`, `styles.css` into it.
 3. Restart Obsidian → Settings → Community plugins → enable "Sector Tasks".
 4. In the plugin settings, set the **Tasks file** path (default: `Tasks.md`).

@@ -1729,7 +1729,7 @@ function getPriorityClass(priority) {
 
 
 // src/views/TaskBoardView.ts
-var VIEW_TYPE_BELKI = "sektor-task-board";
+var VIEW_TYPE_BELKI = "sector-task-board";
 var LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
 function renderLinkedText(text, el, app) {
   LINK_RE.lastIndex = 0;
