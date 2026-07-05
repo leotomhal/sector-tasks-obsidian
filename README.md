@@ -58,7 +58,7 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **0.18.2** — see [manifest.json](./manifest.json).
+Current version: **0.18.3** — see [manifest.json](./manifest.json).
 
 ## Development transparency
 
