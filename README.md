@@ -60,6 +60,10 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 Current version: **0.18.0** — see [manifest.json](./manifest.json).
 
+## Development transparency
+
+This plugin was developed in close collaboration with an AI assistant (Claude). All code is AI-generated; direction, feature decisions, testing, and bug reports are human. Review the code before trusting it with your notes — as you should with any plugin.
+
 ## License
 
 MIT, see [licence.md](./licence.md). Based on [belki](https://github.com/Fevol/belki) by Yasin Aribuga (also MIT).
