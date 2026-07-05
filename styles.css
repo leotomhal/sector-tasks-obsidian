@@ -63,7 +63,7 @@
 }
 
 .belki-sidebar-content {
-  display: contents;
+  display: block;
 }.belki-add-sidebar,
 .belki-add-inline,
 .belki-button,
@@ -1708,27 +1708,27 @@ button.belki-review-close:hover {
   margin-top: 12px;
 }
 
-button.belki-review-tool-button {
+.belki-review-card .belki-review-task-tools button.belki-review-tool-button {
   appearance: none;
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   color: var(--belki-muted);
   cursor: pointer;
   font-size: 12px;
-  outline: none !important;
+  outline: none;
   padding: 0;
 }
 
-button.belki-review-tool-button:hover,
-button.belki-review-tool-button:focus,
-button.belki-review-tool-button:focus-visible,
-button.belki-review-tool-button:active {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  outline: none !important;
+.belki-review-card .belki-review-task-tools button.belki-review-tool-button:hover,
+.belki-review-card .belki-review-task-tools button.belki-review-tool-button:focus,
+.belki-review-card .belki-review-task-tools button.belki-review-tool-button:focus-visible,
+.belki-review-card .belki-review-task-tools button.belki-review-tool-button:active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  outline: none;
 }
 
 button.belki-review-tool-button:hover {

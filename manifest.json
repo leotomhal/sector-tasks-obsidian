@@ -1,9 +1,9 @@
 {
   "id": "sector-tasks",
   "name": "Sector Tasks",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "minAppVersion": "1.6.6",
-  "description": "A task dashboard for organising tasksreads, grouped by configurable tags. Designed for Carl Pullein's Time Sector System, usable with any scheme. Requires the ObisdianTasks plugin.",
-  "author": "Tom Leonhardt",
+  "description": "Task board over a single Tasks-plugin-format Markdown file, grouped by configurable sector tags. Designed for Carl Pullein's Time Sector System, usable with any tag scheme. Requires the Tasks plugin for creating and editing tasks.",
+  "author": "Tom Leonhardt (fork of belki by Yasin Aribuga)",
   "isDesktopOnly": false
 }

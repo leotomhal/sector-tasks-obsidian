@@ -728,20 +728,20 @@ function fontStackForOption(option) {
   return BELKI_FONT_STACKS[option] || BELKI_FONT_STACKS.system;
 }
 var THEME_COLOR_KEYS = [
-  { key: "bg", cssVar: "--belki-bg", label: "Hintergrund" },
+  { key: "bg", cssVar: "--belki-bg", label: "Background" },
   { key: "surface", cssVar: "--belki-surface", label: "Surfaces (modals, chips)" },
-  { key: "sidebarBg", cssVar: "--belki-sidebar-bg", label: "Sidebar-Hintergrund" },
+  { key: "sidebarBg", cssVar: "--belki-sidebar-bg", label: "Sidebar background" },
   { key: "hover", cssVar: "--belki-hover", label: "Hover" },
-  { key: "border", cssVar: "--belki-border", label: "Rahmen" },
-  { key: "borderSoft", cssVar: "--belki-border-soft", label: "Rahmen (dezent)" },
+  { key: "border", cssVar: "--belki-border", label: "Border" },
+  { key: "borderSoft", cssVar: "--belki-border-soft", label: "Border (soft)" },
   { key: "text", cssVar: "--belki-text", label: "Text" },
   { key: "muted", cssVar: "--belki-muted", label: "Muted text" },
-  { key: "faint", cssVar: "--belki-faint", label: "Text (blass)" },
-  { key: "accent", cssVar: "--belki-accent", label: "Akzent" },
-  { key: "accentHover", cssVar: "--belki-accent-hover", label: "Akzent (Hover)" },
-  { key: "onAccent", cssVar: "--belki-on-accent", label: "Text auf Akzent" },
+  { key: "faint", cssVar: "--belki-faint", label: "Text (faint)" },
+  { key: "accent", cssVar: "--belki-accent", label: "Accent" },
+  { key: "accentHover", cssVar: "--belki-accent-hover", label: "Accent (hover)" },
+  { key: "onAccent", cssVar: "--belki-on-accent", label: "Text on accent" },
   { key: "danger", cssVar: "--belki-danger", label: "Danger / delete" },
-  { key: "chipBg", cssVar: "--belki-chip-bg", label: "Chip-Hintergrund" }
+  { key: "chipBg", cssVar: "--belki-chip-bg", label: "Chip background" }
 ];
 var THEME_PRESETS = {
   light: {
