@@ -74,4 +74,4 @@ This plugin was developed in close collaboration with an AI assistant (Claude). 
 
 ## License
 
-MIT, see [LICENSE](./LICENSE). Based on [belki](https://github.com/aribuga/belki) by Yasin Aribuga (also MIT).
+MIT, see [LICENSE](./LICENSE). Based on [belki](https://github.com/aribuga/obsidian-belki-tasks) by Yasin Aribuga (also MIT).
