@@ -35,9 +35,9 @@ Many task plugins manage their own data format. But if you already use the **Tas
 
 ## Screenshots
 <p style="align: center">
-<img src="/img/inbox.png" style="width: 32px" />
-<img src="/img/edittask.png" style="width: 32px" />
-<img src="/img/review-monthly.png" style="width: 32px" />
+<img src="/img/inbox.png" style="width: 32%" />
+<img src="/img/edittask.png" style="width: 32%" />
+<img src="/img/review-monthly.png" style="width: 32%" />
 </p>
 
 ## Requirements
