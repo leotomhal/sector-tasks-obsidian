@@ -34,9 +34,11 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
 
 ## Screenshots
-![Screenshot of Inbox-Processing](/img/inbox.png)
-![Screenshot of Edit Task Window](/img/edittask.png)
-![Screenshot of Review](/img/review-monthly.png)
+<p style="align: center">
+<img src="/img/inbox.png" style="width: 32px" />
+<img src="/img/edittask.png" style="width: 32px" />
+<img src="/img/review-monthly.png" style="width: 32px" />
+</p>
 
 ## Requirements
 The community plugin **Tasks** must be installed and enabled. Also, tasks should be kept in a single file.
