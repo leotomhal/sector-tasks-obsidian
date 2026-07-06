@@ -2,6 +2,8 @@
 
 An Obsidian task dashboard in the style of [belki](https://github.com/aribuga/obsidian-belki-tasks), but reading and writing **a single Markdown file** in **Tasks-plugin format** (emoji syntax), requires the [Obsidian Tasks Plugin](https://publish.obsidian.md/tasks/Introduction). Grouping follows **configurable sector tags** — designed for [Carl Pullein](https://www.carlpullein.com/)'s Time Sector System, but usable with any tag scheme.
 
+![Screenshot today view showing entire plugin.](/img/overview.png)
+
 ## The Time Sector System
 
 The default sector setup implements the [Time Sector System](https://www.carlpullein.com/blog/a-revolutionary-new-time-management-system-designed-for-the-21st-century/1/5/2020) by productivity coach [Carl Pullein](https://www.carlpullein.com/). Its core idea: instead of organizing tasks by project, you organize them by **when** you will do them — this week, next week, this month, next month, or long term. Processing a new task then requires only one decision: When will you do it? Daily, weekly and monthly planning sessions move tasks up between sectors; routines and waiting-for items live in their own sectors. The system builds on Pullein's **COD workflow** (Collect, Organise, Do): capture everything quickly, organise by time sector, then focus on doing this week's list. Pullein explains it in depth on [his YouTube channel](https://www.youtube.com/@Carl_Pullein).
@@ -29,6 +31,11 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
 - Full-text search across all tasks
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
+
+## Screenshots
+![Screenshot of Inbox-Processing](/img/inbox.png)
+![Screenshot of Edit Task Window](/img/edittask.png)
+![Screenshot of Review](/img/review-monthly.png)
 
 ## Requirements
 The community plugin **Tasks** must be installed and enabled. Also, tasks should be kept in a single file.
