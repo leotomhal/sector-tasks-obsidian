@@ -3,6 +3,7 @@
 An Obsidian task dashboard in the style of [belki](https://github.com/aribuga/obsidian-belki-tasks), but reading and writing **a single Markdown file** in **Tasks-plugin format** (emoji syntax), requires the [Obsidian Tasks Plugin](https://publish.obsidian.md/tasks/Introduction). Grouping follows **configurable sector tags** — designed for [Carl Pullein](https://www.carlpullein.com/)'s Time Sector System, but usable with any tag scheme.
 
 ![Screenshot today view showing entire plugin.](/img/overview.png)
+Overview.
 
 ## The Time Sector System
 
