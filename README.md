@@ -36,21 +36,21 @@ Many task plugins manage their own data format. But if you already use the **Tas
 ## Screenshots
 ### Desktop version
 <p style="align: center">
-<img style="width 32%" src="/img/inbox.png" />
-<img style="width 32%" src="/img/edittask.png" />
-<img style="width 32%" src="/img/review-monthly.png" />
+<img style="width: 32%" src="/img/inbox.png" />
+<img style="width: 32%" src="/img/edittask.png" />
+<img style="width: 32%" src="/img/review-monthly.png" />
 </p>
 
 ### Mobile
 <p style="align: center">
-<img style="width: 32%" src="/img/mobile-inbox.png" />
-<img style="width: 32%" src="/img/mobile-menu.png" />
-<img style="width: 32%" src="/img/mobile-inbox-process.png" />
+<img style="height: 300px; max-width: 32%" src="/img/mobile-inbox.png" />
+<img style="height: 300px; max-width: 32%" src="/img/mobile-menu.png" />
+<img style="height: 300px; max-width: 32%" src="/img/mobile-inbox-process.png" />
 </p>
 <p style="align: center">
-<img style="width: 32%" src="/img/mobile-daily.png" />
-<img style="width: 32%" src="/img/mobile-weekly.png" />
-<img style="width: 32%" src="/img/mobile-waiting.png" />
+<img style="height: 300px; max-width: 32%" src="/img/mobile-daily.png" />
+<img style="height: 300px; max-width: 32%" src="/img/mobile-weekly.png" />
+<img style="height: 300px; max-width: 32%" src="/img/mobile-waiting.png" />
 </p>
 
 ## Requirements
