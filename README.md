@@ -34,10 +34,23 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
 
 ## Screenshots
+### Desktop version
 <p style="align: center">
-<div style="width 32%">![Screenshot of Inbox-Processing](/img/inbox.png)</div>
-<div style="width 32%">![Screenshot of Edit Task Window](/img/edittask.png)</div>
-<div style="width 32%">![Screenshot of Review](/img/review-monthly.png)</div>
+<img style="width 32%" src="/img/inbox.png" />
+<img style="width 32%" src="/img/edittask.png" />
+<img style="width 32%" src="/img/review-monthly.png" />
+</p>
+
+### Mobile
+<p style="align: center">
+<img style="width 32%" src="/img/mobile-inbox.png" />
+<img style="width 32%" src="/img/mobile-menu.png" />
+<img style="width 32%" src="/img/mobile-inbox-process.png" />
+</p>
+<p style="align: center">
+<img style="width 32%" src="/img/mobile-daily.png" />
+<img style="width 32%" src="/img/mobile-weekly.png" />
+<img style="width 32%" src="/img/mobile-waiting.png" />
 </p>
 
 ## Requirements
