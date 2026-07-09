@@ -32,7 +32,8 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
 - Full-text search across all tasks
 - **Command palette:** "Quick add task (Inbox)" opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
-- **Sector rollover:** the "Roll over sectors (new week/month)" command moves each rollover-enabled sector's tasks one sector up (defaults: Next week → This week on a new ISO week, Next month → This month on a new calendar month). Guarded per period: running it mid-week or mid-month does nothing, so July never pulls in August's tasks; per-sector cadence is configurable in the sector settings
+- **Review reminders:** the Weekly and Monthly Review buttons show a dot as long as no review of that kind has been completed in the current ISO week / calendar month
+- **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off)
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
 
 ## Screenshots
