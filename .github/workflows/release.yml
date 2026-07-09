@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "*"
+  release:
+    types:
+      - published
+
+concurrency:
+  group: release-${{ github.ref }}
 
 jobs:
   release:
@@ -13,12 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create release
+      - name: Create release or attach assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" \
-            --title "$tag" \
-            --generate-notes \
-            main.js manifest.json styles.css
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
+              main.js manifest.json styles.css
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --generate-notes \
+              main.js manifest.json styles.css
+          fi
