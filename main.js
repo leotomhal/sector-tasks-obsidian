@@ -3914,6 +3914,13 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
         new import_obsidian8.Notice("belki labels normalized.");
       }
     });
+    this.addCommand({
+      id: "quick-add-task",
+      name: "Quick add task (Inbox)",
+      callback: () => {
+        void this.store.createTaskViaModal(void 0).then(() => this.refreshBelkiViews());
+      }
+    });
     this.addSettingTab(new BelkiSettingTab(this.app, this));
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
