@@ -124,13 +124,14 @@ function hexToRgb(hex) {
 // src/tasksFormat.ts
 var DEFAULT_SECTORS = [
   { tag: "01this-week", label: "This week", inWeekly: true, inMonthly: true },
-  { tag: "02next-week", label: "Next week", inWeekly: true, inMonthly: true },
+  { tag: "02next-week", label: "Next week", inWeekly: true, inMonthly: true, rollover: "weekly" },
   { tag: "03this-month", label: "This month", inWeekly: true, inMonthly: true },
-  { tag: "04next-month", label: "Next month", inWeekly: false, inMonthly: true },
+  { tag: "04next-month", label: "Next month", inWeekly: false, inMonthly: true, rollover: "monthly" },
   { tag: "05longterm", label: "Long term", inWeekly: false, inMonthly: true },
   { tag: "routines", label: "Routines", inWeekly: false, inMonthly: false },
   { tag: "waiting", label: "Waiting", isWaiting: true, inWeekly: false, inMonthly: false }
 ];
+var DEFAULT_SECTOR_ROLLOVER = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.rollover]));
 var SECTOR_TAG_PATTERN = /^[A-Za-z0-9_\-\/]+$/;
 var INBOX_SECTOR = "Inbox";
 var TASK_MARKER_TAG = "task";
@@ -154,12 +155,14 @@ function normalizeSectors(rawSectors) {
     if (isReservedSectorTag(lower) || seen.has(lower)) continue;
     seen.add(lower);
     const label = ((entry == null ? void 0 : entry.label) || "").trim() || tag;
+    const rawRollover = entry == null ? void 0 : entry.rollover;
     result.push({
       tag,
       label,
       isWaiting: (entry == null ? void 0 : entry.isWaiting) === true,
       inWeekly: (entry == null ? void 0 : entry.inWeekly) === true,
-      inMonthly: (entry == null ? void 0 : entry.inMonthly) === true
+      inMonthly: (entry == null ? void 0 : entry.inMonthly) === true,
+      rollover: rawRollover === "weekly" || rawRollover === "monthly" || rawRollover === "none" ? rawRollover : DEFAULT_SECTOR_ROLLOVER.get(lower) || "none"
     });
   }
   return result.length ? result : DEFAULT_SECTORS.map((s) => ({ ...s }));
@@ -645,7 +648,9 @@ var DEFAULT_SETTINGS = {
   labelFont: "system",
   themePreset: "obsidian",
   themeColors: {},
-  reviewSession: null
+  reviewSession: null,
+  lastWeeklyRollover: "",
+  lastMonthlyRollover: ""
 };
 var OVERDUE_RANGE_LABELS = {
   yesterday: "Yesterday",
@@ -1007,7 +1012,7 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
         void this.commitSectorEdit(index, tagValue, labelValue);
       });
     });
-    const reviewRow = new import_obsidian.Setting(this.containerEl).setName("Include in review").setDesc(sector.isWaiting === true ? 'A "Waiting for" sector is always reviewed as the final step of Weekly and Monthly Review.' : "Which review workflows should list this sector?");
+    const reviewRow = new import_obsidian.Setting(this.containerEl).setName("Include in review").setDesc(sector.isWaiting === true ? 'A "Waiting for" sector is always reviewed as the final step of Weekly and Monthly Review.' : 'Which review workflows should list this sector? "Rollover" moves its tasks to the sector above via the "Roll over sectors" command — only once a new week/month has actually started.');
     if (sector.isWaiting !== true) {
       reviewRow.controlEl.createSpan({ text: "Weekly", cls: "belki-inline-toggle-label" });
       reviewRow.addToggle((toggle) => {
@@ -1025,6 +1030,15 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.refreshBelkiViews();
         });
       });
+      if (index > 0) {
+        reviewRow.controlEl.createSpan({ text: "Rollover", cls: "belki-inline-toggle-label" });
+        reviewRow.addDropdown((dropdown) => {
+          dropdown.addOption("none", "No rollover").addOption("weekly", "On new week").addOption("monthly", "On new month").setValue(sector.rollover === "weekly" || sector.rollover === "monthly" ? sector.rollover : "none").onChange(async (value) => {
+            sector.rollover = value;
+            await this.plugin.saveSettings();
+          });
+        });
+      }
     }
     reviewRow.controlEl.createSpan({ text: 'Waiting for', cls: "belki-inline-toggle-label" });
     reviewRow.addToggle((toggle) => {
@@ -1087,7 +1101,8 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
       label: newLabel,
       isWaiting: current.isWaiting === true,
       inWeekly: current.inWeekly === true,
-      inMonthly: current.inMonthly === true
+      inMonthly: current.inMonthly === true,
+      rollover: current.rollover === "weekly" || current.rollover === "monthly" ? current.rollover : "none"
     };
     applySectorSettings(sectors);
     if (tagChanged) {
@@ -1125,7 +1140,7 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
       return;
     }
     const label = (rawLabel || "").trim() || tag;
-    this.plugin.settings.sectors = [...this.plugin.settings.sectors, { tag, label, isWaiting: false, inWeekly: false, inMonthly: false }];
+    this.plugin.settings.sectors = [...this.plugin.settings.sectors, { tag, label, isWaiting: false, inWeekly: false, inMonthly: false, rollover: "none" }];
     applySectorSettings(this.plugin.settings.sectors);
     await this.plugin.saveSettings();
     this.plugin.refreshBelkiViews();
@@ -1261,6 +1276,19 @@ function toIsoDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+function currentIsoWeekKey() {
+  const now = /* @__PURE__ */ new Date();
+  const target = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  target.setDate(target.getDate() - (target.getDay() + 6) % 7 + 3);
+  const firstThursday = new Date(target.getFullYear(), 0, 4);
+  firstThursday.setDate(firstThursday.getDate() - (firstThursday.getDay() + 6) % 7 + 3);
+  const week = 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60 * 1e3));
+  return `${target.getFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+function currentMonthKey() {
+  const now = /* @__PURE__ */ new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 function isIsoDate(value) {
   return Boolean(value && ISO_DATE_PATTERN.test(value));
@@ -3880,6 +3908,11 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
   }
   async onload() {
     await this.loadSettings();
+    if (!this.settings.lastWeeklyRollover || !this.settings.lastMonthlyRollover) {
+      this.settings.lastWeeklyRollover = this.settings.lastWeeklyRollover || currentIsoWeekKey();
+      this.settings.lastMonthlyRollover = this.settings.lastMonthlyRollover || currentMonthKey();
+      await this.saveSettings();
+    }
     if (!getTasksApi(this.app)) {
       new import_obsidian8.Notice(
         "Sector Tasks requires the community plugin \u201CTasks\u201D to be installed and enabled. Task creation and editing will not work until it is active."
@@ -3919,6 +3952,13 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
       name: "Quick add task (Inbox)",
       callback: () => {
         void this.store.createTaskViaModal(void 0).then(() => this.refreshBelkiViews());
+      }
+    });
+    this.addCommand({
+      id: "rollover-sectors",
+      name: "Roll over sectors (new week/month)",
+      callback: () => {
+        void this.rolloverSectors();
       }
     });
     this.addSettingTab(new BelkiSettingTab(this.app, this));
@@ -3996,6 +4036,41 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
       new import_obsidian8.Notice("belki could not reload task data.");
       console.error(error);
     }
+  }
+  async rolloverSectors() {
+    const weekKey = currentIsoWeekKey();
+    const monthKey = currentMonthKey();
+    const weekDue = this.settings.lastWeeklyRollover !== weekKey;
+    const monthDue = this.settings.lastMonthlyRollover !== monthKey;
+    if (!weekDue && !monthDue) {
+      new import_obsidian8.Notice("Rollover: the current week and month have already been started – nothing to move.");
+      return;
+    }
+    const sectors = this.settings.sectors;
+    const activeTasks = this.store.getTasks().filter((t) => !t.completed);
+    const summaries = [];
+    for (let i = 1; i < sectors.length; i++) {
+      const sector = sectors[i];
+      const cadence = sector.rollover;
+      if (cadence !== "weekly" && cadence !== "monthly") continue;
+      if (cadence === "weekly" ? !weekDue : !monthDue) continue;
+      const target = sectors[i - 1];
+      if (target.isWaiting === true) continue;
+      const ids = activeTasks.filter((t) => {
+        const project = normalizeTaskProject(t.project);
+        return project && project.toLowerCase() === sector.tag.toLowerCase();
+      }).map((t) => t.id);
+      if (!ids.length) continue;
+      await this.store.updateManyTasks(ids, { project: target.tag });
+      summaries.push(`${ids.length} ${sector.label} → ${target.label}`);
+    }
+    if (weekDue) this.settings.lastWeeklyRollover = weekKey;
+    if (monthDue) this.settings.lastMonthlyRollover = monthKey;
+    await this.saveSettings();
+    this.refreshBelkiViews();
+    new import_obsidian8.Notice(
+      summaries.length ? `Rollover: ${summaries.join(", ")}.` : "Rollover: new period started, but no tasks to move."
+    );
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
