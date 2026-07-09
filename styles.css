@@ -291,6 +291,15 @@
   color: var(--belki-muted);
 }
 
+.belki-review-reminder {
+  background: var(--belki-todoist-red, #db4c3f);
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 7px;
+  justify-self: end;
+  width: 7px;
+}
+
 .belki-main {
   min-width: 0;
   overflow: auto;
