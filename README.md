@@ -31,6 +31,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
 - **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
 - Full-text search across all tasks
+- **Command palette:** "Quick add task (Inbox)" opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
 
 ## Screenshots
