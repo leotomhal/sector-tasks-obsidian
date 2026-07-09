@@ -69,7 +69,7 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **0.18.3** — see [manifest.json](./manifest.json).
+Current version: **0.21.0** — see [manifest.json](./manifest.json).
 
 ## Development transparency
 
@@ -78,3 +78,7 @@ This plugin was developed in close collaboration with an AI assistant (Claude). 
 ## License
 
 MIT, see [LICENSE](./LICENSE). Based on [belki](https://github.com/aribuga/obsidian-belki-tasks) by Yasin Aribuga (also MIT).
+
+## Contact
+
+Questions, bug reports, or feedback: [tom@beyondthevault.de](mailto:tom@beyondthevault.de)
