@@ -2974,6 +2974,12 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     row.toggleClass("is-completed", task.completed);
     row.toggleClass("is-highlighted", this.highlightedTaskId === task.id);
     row.toggleClass("is-selected", this.selectedTaskIds.has(task.id));
+    if (!task.completed) {
+      row.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showDueDateMenu(this.store, task, event);
+      });
+    }
     row.addEventListener("click", (event) => {
       if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
@@ -3936,6 +3942,35 @@ function searchableText(task) {
 // src/views/TodaySidebarView.ts
 var VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 var TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
+function showDueDateMenu(store, task, event) {
+  const menu = new import_obsidian7.Menu();
+  const current = task.due;
+  const options = [
+    { label: "Today", value: todayIso() },
+    { label: "Tomorrow", value: addDaysIso(1) },
+    { label: "Next week", value: addDaysIso(7) }
+  ];
+  for (const option of options) {
+    menu.addItem((item) => {
+      item.setTitle(`Due: ${option.label}`).setChecked(current === option.value).onClick(() => {
+        void store.updateTask(task.id, { due: option.value });
+      });
+    });
+  }
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle("Remove due date").setDisabled(!current).onClick(() => {
+      void store.updateTask(task.id, { due: void 0 });
+    });
+  });
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle("Edit in Tasks modal…").setIcon("pencil").onClick(() => {
+      void store.updateTaskViaModal(task.id);
+    });
+  });
+  menu.showAtMouseEvent(event);
+}
 var TodaySidebarView = class extends import_obsidian7.ItemView {
   constructor(leaf, store, settings) {
     super(leaf);
@@ -3959,6 +3994,7 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
   async onClose() {
     var _a;
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
+    this.updateTabBadge(0);
   }
   refresh() {
     this.render();
@@ -3982,13 +4018,15 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
       (t) => !t.completed && !archivedSet.has(normalizeTaskProject(t.project) || "")
     );
     const today = todayIso();
-    const byUrgency = (a, b) => compareIsoDates(a.due || "", b.due || "") || (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title);
+    const tomorrow = addDaysIso(1);
+    const byPriority = (a, b) => (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title);
+    const byUrgency = (a, b) => compareIsoDates(a.due || "", b.due || "") || byPriority(a, b);
     const overdue = open.filter((t) => t.due && t.due < today).sort(byUrgency);
-    const dueToday = open.filter((t) => t.due === today).sort(
-      (a, b) => (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title)
-    );
-    if (overdue.length === 0 && dueToday.length === 0) {
-      container.createDiv({ cls: "belki-today-empty", text: "Nothing due today." });
+    const dueToday = open.filter((t) => t.due === today).sort(byPriority);
+    const dueTomorrow = open.filter((t) => t.due === tomorrow).sort(byPriority);
+    this.updateTabBadge(overdue.length + dueToday.length);
+    if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
+      container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
     }
     if (overdue.length) {
@@ -3997,6 +4035,22 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
     if (dueToday.length) {
       this.renderSection(container, "Due today", dueToday, false);
     }
+    if (dueTomorrow.length) {
+      this.renderSection(container, "Due tomorrow", dueTomorrow, false);
+    }
+  }
+  updateTabBadge(count) {
+    const tabHeader = this.leaf && this.leaf.tabHeaderEl;
+    if (!tabHeader) return;
+    let badge = tabHeader.querySelector(".belki-today-tab-badge");
+    if (count <= 0) {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = tabHeader.createSpan({ cls: "belki-today-tab-badge" });
+    }
+    badge.setText(String(count));
   }
   renderSection(container, label, tasks, showDate) {
     const section = container.createDiv({ cls: "belki-today-section" });
@@ -4011,6 +4065,10 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
     const row = parent.createDiv({ cls: "belki-today-row" });
     row.addEventListener("click", () => {
       void this.store.updateTaskViaModal(task.id);
+    });
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showDueDateMenu(this.store, task, event);
     });
     const checkbox = row.createEl("button", {
       cls: "belki-today-checkbox",
