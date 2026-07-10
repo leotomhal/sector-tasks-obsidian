@@ -1886,7 +1886,7 @@ button.belki-review-discard:hover {
 }
 
 .belki-today-heading {
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 600;
 }
 
@@ -1896,11 +1896,11 @@ button.belki-review-discard:hover {
   box-shadow: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 16px;
-  height: 24px;
+  font-size: 18px;
+  height: 26px;
   line-height: 1;
   padding: 0;
-  width: 24px;
+  width: 26px;
 }
 
 .belki-today-panel button.belki-today-add:hover {
@@ -1915,11 +1915,11 @@ button.belki-review-discard:hover {
 .belki-today-section-label {
   color: var(--text-muted);
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   gap: 6px;
   letter-spacing: 0.05em;
-  margin-bottom: 2px;
+  margin-bottom: 3px;
   text-transform: uppercase;
 }
 
@@ -1933,8 +1933,8 @@ button.belki-review-discard:hover {
   border-radius: 6px;
   cursor: pointer;
   display: flex;
-  gap: 8px;
-  padding: 5px 6px;
+  gap: 9px;
+  padding: 6px 7px;
 }
 
 .belki-today-row:hover {
@@ -1948,10 +1948,10 @@ button.belki-review-discard:hover {
   box-shadow: none;
   cursor: pointer;
   flex: 0 0 auto;
-  height: 16px;
+  height: 18px;
   margin-top: 2px;
   padding: 0;
-  width: 16px;
+  width: 18px;
 }
 
 .belki-today-panel button.belki-today-checkbox:hover {
@@ -1964,15 +1964,15 @@ button.belki-review-discard:hover {
 }
 
 .belki-today-task-title {
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .belki-today-meta {
   color: var(--text-muted);
-  font-size: 11px;
-  margin-top: 1px;
+  font-size: 12px;
+  margin-top: 2px;
 }
 
 .belki-today-meta.is-overdue {
@@ -1981,6 +1981,6 @@ button.belki-review-discard:hover {
 
 .belki-today-empty {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 14.5px;
   padding: 12px 6px;
 }
