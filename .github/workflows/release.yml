@@ -27,6 +27,12 @@ jobs:
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
               main.js manifest.json styles.css
+            # Fill in auto-generated notes if the release body is still empty
+            # (e.g. a release drafted through the GitHub UI without notes).
+            body="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body -q .body)"
+            if [ -z "$body" ]; then
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --generate-notes
+            fi
           else
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
               --title "$tag" \
