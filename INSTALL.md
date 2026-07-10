@@ -1,6 +1,6 @@
-# Sector Tasks (belki fork)
+# Sector Tasks
 
-belki-style board, but reads/writes **a single** Markdown file in **Tasks plugin format** (emoji syntax). Grouping by **configurable sector tags** — the defaults implement [Carl Pullein's Time Sector System](https://www.carlpullein.com/blog/a-revolutionary-new-time-management-system-designed-for-the-21st-century/1/5/2020) (see the README for a short explanation), but any tag scheme works.
+A task board that reads/writes **a single** Markdown file in **Tasks plugin format** (emoji syntax). Grouping by **configurable sector tags** — the defaults implement [Carl Pullein's Time Sector System](https://www.carlpullein.com/blog/a-revolutionary-new-time-management-system-designed-for-the-21st-century/1/5/2020) (see the README for a short explanation), but any tag scheme works.
 
 ## Requirement
 Since version 0.3.0 the community plugin **"Tasks"** is mandatory. Creating and editing tasks runs through Tasks' own input modal (`apiV1.createTaskLineModal` / `editTaskLineModal`). Without the Tasks plugin installed and enabled, these actions do not work; a notice is shown on load.
