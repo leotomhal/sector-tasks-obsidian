@@ -841,7 +841,7 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     applyBelkiFontSettings(containerEl, this.plugin.settings);
-    new import_obsidian.Setting(containerEl).setName("Tasks file").setDesc("Path to the Markdown file belki reads and writes. All '#task' lines in this file are managed by belki.").addText((text) => {
+    new import_obsidian.Setting(containerEl).setName("Tasks file").setDesc("Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin.").addText((text) => {
       text.setPlaceholder("Tasks.md").setValue(this.plugin.settings.tasksFilePath).onChange(async (value) => {
         this.plugin.settings.tasksFilePath = value.trim() || DEFAULT_SETTINGS.tasksFilePath;
         await this.plugin.saveSettings();
@@ -954,7 +954,7 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
       if (projects.length === 0) {
         appearance.createDiv({
           cls: "setting-item-description",
-          text: "No projects yet. belki will generate stable colors when projects appear."
+          text: "No projects yet. Sector Tasks will generate stable colors when projects appear."
         });
       }
       for (const project of projects) {
@@ -1627,7 +1627,7 @@ var TaskStore = class {
   async save() {
     const file = await this.ensureFile(this.filePath);
     if (!file) {
-      new import_obsidian2.Notice("belki could not write the tasks file. Check the file path in settings.");
+      new import_obsidian2.Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
       return;
     }
     const tasksById = new Map(this.tasks.map((t) => [t.id, t]));
@@ -1717,7 +1717,7 @@ var TaskStore = class {
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
     const kind = existing instanceof import_obsidian2.TFolder ? "folder" : "something";
-    new import_obsidian2.Notice(`belki: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
+    new import_obsidian2.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
 function normalizeOptional(value) {
@@ -2350,7 +2350,7 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     if (active.length === 0 && tasks.length === 0) {
       main.createDiv({
         cls: "belki-empty",
-        text: `No tasks yet. Add one and belki will write it to ${this.store.filePath}.`
+        text: `No tasks yet. Add one and Sector Tasks will write it to ${this.store.filePath}.`
       });
     }
   }
@@ -4084,7 +4084,7 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new import_obsidian8.Notice("belki labels normalized.");
+        new import_obsidian8.Notice("Sector Tasks labels normalized.");
       }
     });
     this.addCommand({
@@ -4174,7 +4174,7 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new import_obsidian8.Notice("belki could not reload task data.");
+      new import_obsidian8.Notice("Sector Tasks could not reload task data.");
       console.error(error);
     }
   }
@@ -4262,7 +4262,7 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
       await this.store.load();
       await this.pruneCompletedTasks();
     } catch (error) {
-      new import_obsidian8.Notice("belki could not initialize task storage. Open the developer console for details.");
+      new import_obsidian8.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath
