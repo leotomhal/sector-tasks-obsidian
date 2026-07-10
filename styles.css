@@ -1984,3 +1984,18 @@ button.belki-review-discard:hover {
   font-size: 14.5px;
   padding: 12px 6px;
 }
+
+.belki-today-tab-badge {
+  align-items: center;
+  background: var(--belki-todoist-red, #db4c3f);
+  border-radius: 9px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1;
+  margin-left: 5px;
+  min-width: 16px;
+  padding: 2px 4px;
+}
