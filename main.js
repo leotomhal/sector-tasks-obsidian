@@ -873,94 +873,107 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
       this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
     });
     this.addNewSectorSetting();
-    new import_obsidian.Setting(containerEl).setName("Fonts").setHeading();
-    this.addFontSetting(
-      "UI Font",
-      "Used for sidebar, headings, buttons, settings, and the general interface.",
-      "uiFont"
-    );
-    this.addFontSetting(
-      "Task Title Font",
-      "Used for task row titles and the task detail title input.",
-      "taskTitleFont"
-    );
-    this.addFontSetting(
-      "Task Description Font",
-      "Used for task row descriptions and the task detail description textarea.",
-      "taskDescriptionFont"
-    );
-    this.addFontSetting(
-      "Label Font",
-      "Used for label chip text.",
-      "labelFont"
-    );
-    new import_obsidian.Setting(containerEl).setName("Theme").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
-      for (const [value, label] of THEME_PRESET_OPTIONS) {
-        dropdown.addOption(value, label);
-      }
-      dropdown.setValue(this.plugin.settings.themePreset).onChange(async (value) => {
-        const preset = normalizeThemePreset(value);
-        if (preset === "custom" && this.plugin.settings.themePreset !== "custom") {
-          const base = this.plugin.settings.themePreset === "dark" ? THEME_PRESETS.dark : THEME_PRESETS.light;
-          this.plugin.settings.themeColors = { ...base };
-        }
-        this.plugin.settings.themePreset = preset;
-        await this.plugin.saveSettings();
-        this.plugin.refreshBelkiViews();
-        this.display();
-      });
+    const appearance = containerEl.createEl("details", { cls: "belki-settings-appearance" });
+    if (this.appearanceOpen === true) {
+      appearance.setAttr("open", "");
+    }
+    appearance.addEventListener("toggle", () => {
+      this.appearanceOpen = appearance.open;
     });
-    if (this.plugin.settings.themePreset === "custom") {
-      for (const entry of THEME_COLOR_KEYS) {
-        this.addThemeColorSetting(entry);
+    appearance.createEl("summary", { cls: "belki-settings-appearance-summary", text: "Appearance" });
+    appearance.createDiv({
+      cls: "setting-item-description",
+      text: "Fonts, theme colors, sidebar icons, and project/label colors. Everything here is cosmetic."
+    });
+    const rootContainer = this.containerEl;
+    this.containerEl = appearance;
+    try {
+      new import_obsidian.Setting(appearance).setName("Fonts").setHeading();
+      this.addFontSetting(
+        "UI Font",
+        "Used for sidebar, headings, buttons, settings, and the general interface.",
+        "uiFont"
+      );
+      this.addFontSetting(
+        "Task Title Font",
+        "Used for task row titles and the task detail title input.",
+        "taskTitleFont"
+      );
+      this.addFontSetting(
+        "Label Font",
+        "Used for label chip text.",
+        "labelFont"
+      );
+      new import_obsidian.Setting(appearance).setName("Theme").setHeading();
+      new import_obsidian.Setting(appearance).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
+        for (const [value, label] of THEME_PRESET_OPTIONS) {
+          dropdown.addOption(value, label);
+        }
+        dropdown.setValue(this.plugin.settings.themePreset).onChange(async (value) => {
+          const preset = normalizeThemePreset(value);
+          if (preset === "custom" && this.plugin.settings.themePreset !== "custom") {
+            const base = this.plugin.settings.themePreset === "dark" ? THEME_PRESETS.dark : THEME_PRESETS.light;
+            this.plugin.settings.themeColors = { ...base };
+          }
+          this.plugin.settings.themePreset = preset;
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+          this.display();
+        });
+      });
+      if (this.plugin.settings.themePreset === "custom") {
+        for (const entry of THEME_COLOR_KEYS) {
+          this.addThemeColorSetting(entry);
+        }
+        new import_obsidian.Setting(appearance).setName("Reset").setDesc("Reset custom colors to a preset.").addButton((button) => {
+          button.setButtonText("Load light").onClick(async () => {
+            this.plugin.settings.themeColors = { ...THEME_PRESETS.light };
+            await this.plugin.saveSettings();
+            this.plugin.refreshBelkiViews();
+            this.display();
+          });
+        }).addButton((button) => {
+          button.setButtonText("Load dark").onClick(async () => {
+            this.plugin.settings.themeColors = { ...THEME_PRESETS.dark };
+            await this.plugin.saveSettings();
+            this.plugin.refreshBelkiViews();
+            this.display();
+          });
+        });
       }
-      new import_obsidian.Setting(containerEl).setName("Reset").setDesc("Reset custom colors to a preset.").addButton((button) => {
-        button.setButtonText("Load light").onClick(async () => {
-          this.plugin.settings.themeColors = { ...THEME_PRESETS.light };
-          await this.plugin.saveSettings();
-          this.plugin.refreshBelkiViews();
-          this.display();
+      new import_obsidian.Setting(appearance).setName("Sidebar icons").setDesc("Lucide-Icon-Namen (siehe lucide.dev/icons), z. B. \u201Esearch\u201C, \u201Ecalendar-check\u201C.").setHeading();
+      this.addIconSetting("Search icon", "search");
+      this.addIconSetting("Inbox icon", "inbox");
+      this.addIconSetting("Today icon", "today");
+      this.addIconSetting("Upcoming icon", "upcoming");
+      this.addIconSetting("Filters icon", "filters");
+      this.addIconSetting("Projects icon", "projects");
+      this.addIconSetting("Completed icon", "completed");
+      new import_obsidian.Setting(appearance).setName("Project colors").setHeading();
+      const projects = this.plugin.getProjectNames();
+      if (projects.length === 0) {
+        appearance.createDiv({
+          cls: "setting-item-description",
+          text: "No projects yet. belki will generate stable colors when projects appear."
         });
-      }).addButton((button) => {
-        button.setButtonText("Load dark").onClick(async () => {
-          this.plugin.settings.themeColors = { ...THEME_PRESETS.dark };
-          await this.plugin.saveSettings();
-          this.plugin.refreshBelkiViews();
-          this.display();
+      }
+      for (const project of projects) {
+        this.addProjectColorSetting(project);
+      }
+      new import_obsidian.Setting(appearance).setName("Label colors").setHeading();
+      this.addLabelRegistrySetting();
+      const labels = this.plugin.getLabelNames();
+      if (labels.length === 0) {
+        appearance.createDiv({
+          cls: "setting-item-description",
+          text: "No labels yet. Add one here or create one from Filters & Labels."
         });
-      });
-    }
-    new import_obsidian.Setting(containerEl).setName("Sidebar icons").setDesc("Lucide-Icon-Namen (siehe lucide.dev/icons), z. B. \u201Esearch\u201C, \u201Ecalendar-check\u201C.").setHeading();
-    this.addIconSetting("Search icon", "search");
-    this.addIconSetting("Inbox icon", "inbox");
-    this.addIconSetting("Today icon", "today");
-    this.addIconSetting("Upcoming icon", "upcoming");
-    this.addIconSetting("Filters icon", "filters");
-    this.addIconSetting("Projects icon", "projects");
-    this.addIconSetting("Completed icon", "completed");
-    new import_obsidian.Setting(containerEl).setName("Project colors").setHeading();
-    const projects = this.plugin.getProjectNames();
-    if (projects.length === 0) {
-      containerEl.createDiv({
-        cls: "setting-item-description",
-        text: "No projects yet. belki will generate stable colors when projects appear."
-      });
-    }
-    for (const project of projects) {
-      this.addProjectColorSetting(project);
-    }
-    new import_obsidian.Setting(containerEl).setName("Label colors").setHeading();
-    this.addLabelRegistrySetting();
-    const labels = this.plugin.getLabelNames();
-    if (labels.length === 0) {
-      containerEl.createDiv({
-        cls: "setting-item-description",
-        text: "No labels yet. Add one here or create one from Filters & Labels."
-      });
-    }
-    for (const label of labels) {
-      this.addLabelColorSetting(label);
+      }
+      for (const label of labels) {
+        this.addLabelColorSetting(label);
+      }
+    } finally {
+      this.containerEl = rootContainer;
     }
   }
   addIconSetting(name, key) {
@@ -3920,6 +3933,114 @@ function searchableText(task) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+// src/views/TodaySidebarView.ts
+var VIEW_TYPE_BELKI_TODAY = "sector-task-today";
+var TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
+var TodaySidebarView = class extends import_obsidian7.ItemView {
+  constructor(leaf, store, settings) {
+    super(leaf);
+    this.store = store;
+    this.settings = settings;
+    this.navigation = false;
+  }
+  getViewType() {
+    return VIEW_TYPE_BELKI_TODAY;
+  }
+  getDisplayText() {
+    return "Today's tasks";
+  }
+  getIcon() {
+    return this.settings.icons.today || "calendar-check";
+  }
+  async onOpen() {
+    this.unsubscribe = this.store.subscribe(() => this.render());
+    this.render();
+  }
+  async onClose() {
+    var _a;
+    (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
+  }
+  refresh() {
+    this.render();
+  }
+  render() {
+    const container = this.contentEl;
+    container.empty();
+    container.addClass("belki-today-panel");
+    const header = container.createDiv({ cls: "belki-today-header" });
+    header.createSpan({ cls: "belki-today-heading", text: "Today" });
+    const addButton = header.createEl("button", {
+      cls: "belki-today-add",
+      text: "+",
+      attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
+    });
+    addButton.addEventListener("click", () => {
+      void this.store.createTaskViaModal("");
+    });
+    const archivedSet = new Set(this.settings.archivedProjects);
+    const open = this.store.getTasks().filter(
+      (t) => !t.completed && !archivedSet.has(normalizeTaskProject(t.project) || "")
+    );
+    const today = todayIso();
+    const byUrgency = (a, b) => compareIsoDates(a.due || "", b.due || "") || (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title);
+    const overdue = open.filter((t) => t.due && t.due < today).sort(byUrgency);
+    const dueToday = open.filter((t) => t.due === today).sort(
+      (a, b) => (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title)
+    );
+    if (overdue.length === 0 && dueToday.length === 0) {
+      container.createDiv({ cls: "belki-today-empty", text: "Nothing due today." });
+      return;
+    }
+    if (overdue.length) {
+      this.renderSection(container, "Overdue", overdue, true);
+    }
+    if (dueToday.length) {
+      this.renderSection(container, "Due today", dueToday, false);
+    }
+  }
+  renderSection(container, label, tasks, showDate) {
+    const section = container.createDiv({ cls: "belki-today-section" });
+    const head = section.createDiv({ cls: "belki-today-section-label" });
+    head.createSpan({ text: label });
+    head.createSpan({ cls: "belki-today-section-count", text: String(tasks.length) });
+    for (const task of tasks) {
+      this.renderRow(section, task, showDate);
+    }
+  }
+  renderRow(parent, task, showDate) {
+    const row = parent.createDiv({ cls: "belki-today-row" });
+    row.addEventListener("click", () => {
+      void this.store.updateTaskViaModal(task.id);
+    });
+    const checkbox = row.createEl("button", {
+      cls: "belki-today-checkbox",
+      attr: { type: "button", "aria-label": `Complete ${task.title}` }
+    });
+    const priorityColor = getPriorityColor(task.priority);
+    checkbox.setCssProps({ "--belki-today-priority": priorityColor.color });
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.store.toggleComplete(task.id);
+    });
+    const content = row.createDiv({ cls: "belki-today-content" });
+    content.createDiv({ cls: "belki-today-task-title", text: task.title });
+    const metaParts = [];
+    if (showDate && task.due) {
+      metaParts.push(formatDueDateChip(task.due));
+    }
+    const project = normalizeTaskProject(task.project);
+    if (project) {
+      metaParts.push(projectDisplayName(project));
+    }
+    if (metaParts.length) {
+      content.createDiv({
+        cls: `belki-today-meta${showDate && task.due ? " is-overdue" : ""}`,
+        text: metaParts.join(" · ")
+      });
+    }
+  }
+};
+
 // src/main.ts
 var BelkiPlugin = class extends import_obsidian8.Plugin {
   constructor() {
@@ -3937,6 +4058,10 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
     this.registerView(
       VIEW_TYPE_BELKI,
       (leaf) => new TaskBoardView(leaf, this.store, this.settings, () => this.saveSettings())
+    );
+    this.registerView(
+      VIEW_TYPE_BELKI_TODAY,
+      (leaf) => new TodaySidebarView(leaf, this.store, this.settings)
     );
     this.addRibbonIcon("check-circle-2", "Open Sector Tasks", () => {
       void this.activateView();
@@ -3967,6 +4092,13 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
       name: "Quick add task (Inbox)",
       callback: () => {
         void this.store.createTaskViaModal(void 0).then(() => this.refreshBelkiViews());
+      }
+    });
+    this.addCommand({
+      id: "open-today-sidebar",
+      name: "Open Today sidebar",
+      callback: () => {
+        void this.activateTodaySidebar();
       }
     });
     this.addSettingTab(new BelkiSettingTab(this.app, this));
@@ -4065,6 +4197,23 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
         view.refresh();
       }
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI_TODAY)) {
+      const view = leaf.view;
+      if (view instanceof TodaySidebarView) {
+        view.refresh();
+      }
+    }
+  }
+  async activateTodaySidebar() {
+    const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI_TODAY);
+    if (existing.length > 0) {
+      await this.app.workspace.revealLeaf(existing[0]);
+      return;
+    }
+    const leaf = this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    await leaf.setViewState({ type: VIEW_TYPE_BELKI_TODAY, active: true });
+    await this.app.workspace.revealLeaf(leaf);
   }
   getProjectNames() {
     return uniqueRealProjects([
