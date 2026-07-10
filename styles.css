@@ -1853,3 +1853,134 @@ button.belki-review-discard:hover {
 .belki-inline-toggle-label:first-child {
   margin-left: 0;
 }
+
+/* Settings: collapsible appearance group */
+.belki-settings-appearance {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  margin-top: 24px;
+  padding: 0 16px 8px;
+}
+
+.belki-settings-appearance-summary {
+  cursor: pointer;
+  font-size: 1.1em;
+  font-weight: 600;
+  padding: 12px 0;
+}
+
+.belki-settings-appearance > .setting-item-description {
+  padding-bottom: 8px;
+}
+
+/* Today sidebar panel */
+.belki-today-panel {
+  padding: 8px 12px;
+}
+
+.belki-today-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.belki-today-heading {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.belki-today-panel button.belki-today-add {
+  background: transparent;
+  border-radius: 6px;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  height: 24px;
+  line-height: 1;
+  padding: 0;
+  width: 24px;
+}
+
+.belki-today-panel button.belki-today-add:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.belki-today-section {
+  margin-top: 10px;
+}
+
+.belki-today-section-label {
+  color: var(--text-muted);
+  display: flex;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+.belki-today-section-count {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.belki-today-row {
+  align-items: flex-start;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  padding: 5px 6px;
+}
+
+.belki-today-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.belki-today-panel button.belki-today-checkbox {
+  background: transparent;
+  border: 1.5px solid var(--belki-today-priority, var(--text-faint));
+  border-radius: 50%;
+  box-shadow: none;
+  cursor: pointer;
+  flex: 0 0 auto;
+  height: 16px;
+  margin-top: 2px;
+  padding: 0;
+  width: 16px;
+}
+
+.belki-today-panel button.belki-today-checkbox:hover {
+  background: color-mix(in srgb, var(--belki-today-priority, var(--text-faint)) 25%, transparent);
+}
+
+.belki-today-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.belki-today-task-title {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.belki-today-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 1px;
+}
+
+.belki-today-meta.is-overdue {
+  color: var(--color-red, #e03e3e);
+}
+
+.belki-today-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 12px 6px;
+}
