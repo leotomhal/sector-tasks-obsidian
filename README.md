@@ -70,7 +70,7 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **0.23.0** — see [manifest.json](./manifest.json).
+Current version: **0.24.0** — see [manifest.json](./manifest.json).
 
 ## Development transparency
 
