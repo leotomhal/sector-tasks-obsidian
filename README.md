@@ -16,27 +16,35 @@ Many task plugins manage their own data format. But if you already use the **Tas
 
 ## Features
 
+### Board & sectors
 - Board view grouped by sectors (default: `#01this-week` → `#02next-week` → `#03this-month` → `#04next-month` → `#05longterm` → `#routines` → `#waiting`), plus an **Inbox** for tasks without a sector tag
 - Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic)
+- Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
+- Sort modes: smart, due date, priority, deadline, created, project
+- Full-text search across all tasks
+- Jump button per task: opens the underlying note at the matching `🆔` line
+
+### Capturing & editing
+- Creating & editing tasks exclusively through the native Tasks modal (`apiV1.createTaskLineModal` / `editTaskLineModal`) — full compatibility with Tasks free-text syntax, including recurrences like `every 15 july`
+- Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
+- **Quick add task (Inbox)** command: opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
+- **Right-click due dates:** right-click any task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal
+
+### Reviews
 - Each sector can be independently included in **Weekly** and/or **Monthly Review** — no fixed positional assumption about which sectors belong where
-- Did I mention? **Weekly/Monthly Review**: a guided, sector-by-sector walkthrough (Inbox → configured sectors → Waiting), with Stay/Up/Down/Inbox per task, or Follow up/Keep waiting for Waiting-tagged tasks; progress persists across interruptions
+- **Weekly/Monthly Review**: a guided, sector-by-sector walkthrough (Inbox → configured sectors → Waiting), with Stay/Up/Down/Inbox per task, or Follow up/Keep waiting for Waiting-tagged tasks; progress persists across interruptions
 - **Daily Review**: a shorter, date-based walkthrough (Inbox → due today → due tomorrow or overdue), with Reschedule/Next per task instead of sector logic
 - **PROCESS button** in the Inbox: runs the review workflow for the Inbox only
-
-- Creating & editing tasks exclusively through the native Tasks modal (`apiV1.createTaskLineModal` / `editTaskLineModal`) — full compatibility with Tasks free-text syntax, including recurrences like `every 15 july`
-- Only lines tagged `#task` are managed; everything else in the file is left untouched
-- Jump button per task: opens the underlying note at the matching `🆔` line
-- Additional `#tags` on the line are preserved
-- Sort modes: smart, due date, priority, deadline, created, project
-- Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
-- **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
-- Full-text search across all tasks
-- **Command palette:** "Quick add task (Inbox)" opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Review reminders:** the Weekly and Monthly Review buttons show a dot as long as no review of that kind has been completed in the current ISO week / calendar month
+- **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
+
+### Today sidebar
+- The **Open Today sidebar** command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in
+- The tab shows a badge with the count of overdue + due-today tasks; header buttons quick-add to the Inbox and jump to the full board
+
+### Housekeeping & appearance
 - **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off)
-- **Today sidebar:** the "Open Today sidebar" command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in; the tab shows a badge with the count of overdue + due-today tasks, and a button in the header jumps to the full board
-- **Right-click due dates:** right-click any task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal
-- **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
+- **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually; all cosmetic options live in a collapsible **Appearance** settings group
 
 ## Screenshots
 ### Desktop version
