@@ -1890,6 +1890,36 @@ button.belki-review-discard:hover {
   font-weight: 600;
 }
 
+.belki-today-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.belki-today-panel button.belki-today-icon-button {
+  align-items: center;
+  background: transparent;
+  border-radius: 6px;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  width: 26px;
+}
+
+.belki-today-panel button.belki-today-icon-button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.belki-today-panel button.belki-today-icon-button svg {
+  height: 16px;
+  width: 16px;
+}
+
 .belki-today-panel button.belki-today-add {
   background: transparent;
   border-radius: 6px;

@@ -34,7 +34,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Command palette:** "Quick add task (Inbox)" opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Review reminders:** the Weekly and Monthly Review buttons show a dot as long as no review of that kind has been completed in the current ISO week / calendar month
 - **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off)
-- **Today sidebar:** the "Open Today sidebar" command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in; the tab shows a badge with the count of overdue + due-today tasks
+- **Today sidebar:** the "Open Today sidebar" command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in; the tab shows a badge with the count of overdue + due-today tasks, and a button in the header jumps to the full board
 - **Right-click due dates:** right-click any task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually
 
@@ -71,7 +71,7 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **0.25.0** — see [manifest.json](./manifest.json).
+Current version: **0.26.0** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md).
 
 ## Development transparency
 
