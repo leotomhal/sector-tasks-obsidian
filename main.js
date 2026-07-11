@@ -3999,13 +3999,36 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
   refresh() {
     this.render();
   }
+  async openBoard() {
+    const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
+    if (leaves.length > 0) {
+      const view = leaves[0].view;
+      if (view instanceof TaskBoardView) {
+        view.openToday();
+      }
+      this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: VIEW_TYPE_BELKI, active: true });
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
+  }
   render() {
     const container = this.contentEl;
     container.empty();
     container.addClass("belki-today-panel");
     const header = container.createDiv({ cls: "belki-today-header" });
     header.createSpan({ cls: "belki-today-heading", text: "Today" });
-    const addButton = header.createEl("button", {
+    const headerActions = header.createDiv({ cls: "belki-today-header-actions" });
+    const boardButton = headerActions.createEl("button", {
+      cls: "belki-today-icon-button",
+      attr: { type: "button", "aria-label": "Open board" }
+    });
+    (0, import_obsidian7.setIcon)(boardButton, "layout-grid");
+    boardButton.addEventListener("click", () => {
+      void this.openBoard();
+    });
+    const addButton = headerActions.createEl("button", {
       cls: "belki-today-add",
       text: "+",
       attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
