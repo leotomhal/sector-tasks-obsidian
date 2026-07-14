@@ -2135,7 +2135,7 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
       });
     }
     const reviewSection = content.createDiv({ cls: "belki-sidebar-section" });
-    reviewSection.createDiv({ cls: "belki-sidebar-heading", text: "Review" });
+    reviewSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Review" });
     this.renderReviewNavButton(reviewSection, "daily");
     this.renderReviewNavButton(reviewSection, "weekly");
     this.renderReviewNavButton(reviewSection, "monthly");
@@ -4081,7 +4081,7 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
       this.renderSection(container, "Due today", dueToday, false);
     }
     if (dueTomorrow.length) {
-      this.renderSection(container, "Due tomorrow", dueTomorrow, false);
+      this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
     }
   }
   updateTabBadge(count) {
@@ -4097,11 +4097,28 @@ var TodaySidebarView = class extends import_obsidian7.ItemView {
     }
     badge.setText(String(count));
   }
-  renderSection(container, label, tasks, showDate) {
+  renderSection(container, label, tasks, showDate, collapsible = false) {
+    if (!this.collapsedSections) this.collapsedSections = /* @__PURE__ */ new Set();
     const section = container.createDiv({ cls: "belki-today-section" });
     const head = section.createDiv({ cls: "belki-today-section-label" });
+    const collapsed = collapsible && this.collapsedSections.has(label);
+    if (collapsible) {
+      head.addClass("is-collapsible");
+      head.toggleClass("is-collapsed", collapsed);
+      const chevron = head.createSpan({ cls: "belki-today-collapse-icon" });
+      (0, import_obsidian7.setIcon)(chevron, "chevron-down");
+      head.addEventListener("click", () => {
+        if (this.collapsedSections.has(label)) {
+          this.collapsedSections.delete(label);
+        } else {
+          this.collapsedSections.add(label);
+        }
+        this.render();
+      });
+    }
     head.createSpan({ text: label });
     head.createSpan({ cls: "belki-today-section-count", text: String(tasks.length) });
+    if (collapsed) return;
     for (const task of tasks) {
       this.renderRow(section, task, showDate);
     }

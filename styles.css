@@ -275,6 +275,10 @@
   line-height: 1;
 }
 
+.belki-sidebar-heading-static::before {
+  content: none;
+}
+
 .belki-count,
 .belki-section-count {
   color: var(--belki-muted);
@@ -1956,6 +1960,26 @@ button.belki-review-discard:hover {
 .belki-today-section-count {
   color: var(--text-faint);
   font-weight: 500;
+}
+
+.belki-today-section-label.is-collapsible {
+  cursor: pointer;
+}
+
+.belki-today-collapse-icon {
+  align-items: center;
+  color: var(--text-faint);
+  display: inline-flex;
+  transition: transform 0.12s ease;
+}
+
+.belki-today-collapse-icon svg {
+  height: 13px;
+  width: 13px;
+}
+
+.belki-today-section-label.is-collapsed .belki-today-collapse-icon {
+  transform: rotate(-90deg);
 }
 
 .belki-today-row {
