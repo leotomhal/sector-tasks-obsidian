@@ -10,6 +10,8 @@ core is covered by tests — see the earlier entries for the full feature histor
 
 ### Changed
 - Added `authorUrl` to the manifest.
+- Removed the misleading collapse chevron from the sidebar's "Review" heading.
+- The Today sidebar's "Due tomorrow" section can now be collapsed by clicking its header.
 
 ## 0.27.0
 
