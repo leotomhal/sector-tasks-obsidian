@@ -3,6 +3,14 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.0.0
+
+First stable release. The Time Sector workflow is complete and the file-writing
+core is covered by tests — see the earlier entries for the full feature history.
+
+### Changed
+- Added `authorUrl` to the manifest.
+
 ## 0.27.0
 
 ### Changed
