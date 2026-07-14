@@ -3,6 +3,14 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 0.27.0
+
+### Changed
+- **Auto-cleanup safety net:** completed tasks removed by the auto-delete cleanup are now appended to an archive note (`<tasks file> (archive).md`) before deletion; if the archive can't be written, nothing is deleted.
+
+### Internal
+- Added a test suite (`node --test`) covering the task-line parse/serialize round-trip, recurrence handling, and tag/label helpers, plus a CI workflow that runs it on every push and pull request.
+
 ## 0.26.0
 
 ### New

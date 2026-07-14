@@ -43,7 +43,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - The tab shows a badge with the count of overdue + due-today tasks; header buttons quick-add to the Inbox and jump to the full board
 
 ### Housekeeping & appearance
-- **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off)
+- **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off); removed tasks are archived to a sibling `… (archive).md` note first, and deletion is skipped if that archive write fails
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually; all cosmetic options live in a collapsible **Appearance** settings group
 
 ## Screenshots
@@ -79,11 +79,11 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **0.26.0** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md).
+Current version: **0.27.0** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md).
 
 ## Development transparency
 
-This plugin was developed in close collaboration with an AI assistant (Claude). All code is AI-generated; direction, feature decisions, testing, and bug reports are human. Review the code before trusting it with your notes — as you should with any plugin.
+This plugin was developed in close collaboration with an AI assistant (Claude). All code is AI-generated; direction, feature decisions, testing, and bug reports are human. Review the code before trusting it with your notes — as you should with any plugin. The task-line parsing/serialization (the part that writes to your file) is covered by an automated test suite (`npm test` / `node --test`).
 
 ## License
 

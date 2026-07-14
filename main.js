@@ -1581,6 +1581,28 @@ var TaskStore = class {
   async deleteTask(id) {
     await this.deleteManyTasks([id]);
   }
+  get archiveFilePath() {
+    const p = this.filePath;
+    return p.replace(/\.md$/i, "") + " (archive).md";
+  }
+  async archiveCompletedTasks(tasks) {
+    if (!tasks.length) return false;
+    const file = await this.ensureFile(this.archiveFilePath);
+    if (!file) return false;
+    const lines = tasks.map((t) => serializeTaskLine(t));
+    const block = `
+
+## Archived ${todayIso()}
+${lines.join("\n")}
+`;
+    try {
+      await this.app.vault.append(file, block);
+      return true;
+    } catch (error) {
+      console.warn("[belki] Could not append to archive file.", error, { path: this.archiveFilePath });
+      return false;
+    }
+  }
   async deleteManyTasks(ids) {
     const idSet = new Set(ids);
     if (!this.tasks.some((t) => idSet.has(t.id))) return;
@@ -4263,13 +4285,18 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) return;
     const cutoff = addDaysIso(-days);
-    const ids = this.store.getTasks().filter(
+    const tasks = this.store.getTasks().filter(
       (t) => t.completed && isIsoDate(t.completedDate) && t.completedDate < cutoff
-    ).map((t) => t.id);
-    if (!ids.length) return;
-    await this.store.deleteManyTasks(ids);
+    );
+    if (!tasks.length) return;
+    const archived = await this.store.archiveCompletedTasks(tasks);
+    if (!archived) {
+      new import_obsidian8.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      return;
+    }
+    await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new import_obsidian8.Notice(`Sector Tasks: removed ${ids.length} completed task${ids.length === 1 ? "" : "s"} older than ${days} days.`);
+    new import_obsidian8.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -4356,4 +4383,20 @@ function toSettingsData(value) {
     return {};
   }
   return value;
+}
+
+// Pure helpers exposed for the test suite. Obsidian loads the plugin via the
+// default export, so this extra property has no effect at runtime.
+if (typeof module !== "undefined" && module.exports) {
+  module.exports.__testables = {
+    parseTaskLine,
+    serializeTaskLine,
+    ensureTaskMarker,
+    ensureSectorInLine,
+    parseTasksRecurrence,
+    serializeTasksRecurrence,
+    nextOccurrence,
+    normalizeLabelName,
+    extractTags
+  };
 }
