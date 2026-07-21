@@ -846,8 +846,25 @@ var BelkiSettingTab = class extends import_obsidian.PluginSettingTab {
         this.plugin.settings.tasksFilePath = value.trim() || DEFAULT_SETTINGS.tasksFilePath;
         await this.plugin.saveSettings();
         await this.plugin.reloadTasks();
+        updatePathWarning();
       });
     });
+    const pathWarning = containerEl.createDiv({ cls: "belki-path-warning" });
+    const updatePathWarning = () => {
+      const path = (0, import_obsidian.normalizePath)(this.plugin.settings.tasksFilePath || DEFAULT_SETTINGS.tasksFilePath);
+      const existing = this.app.vault.getAbstractFileByPath(path);
+      if (existing instanceof import_obsidian.TFile) {
+        pathWarning.removeClass("is-visible");
+        pathWarning.setText("");
+      } else if (existing) {
+        pathWarning.addClass("is-visible");
+        pathWarning.setText(`⚠ "${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`);
+      } else {
+        pathWarning.addClass("is-visible");
+        pathWarning.setText(`⚠ No file found at "${path}". It will be created on the first write — double-check the path if you expected an existing file.`);
+      }
+    };
+    updatePathWarning();
     new import_obsidian.Setting(containerEl).setName("Default overdue range").setDesc("Default range used by the Today overdue section.").addDropdown((dropdown) => {
       for (const range of OVERDUE_RANGES) {
         dropdown.addOption(range, overdueRangeLabel(range));
@@ -4221,6 +4238,13 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
         void this.activateTodaySidebar();
       }
     });
+    this.addCommand({
+      id: "cleanup-completed-tasks",
+      name: "Clean up completed tasks now",
+      callback: () => {
+        void this.pruneCompletedTasks(true);
+      }
+    });
     this.addSettingTab(new BelkiSettingTab(this.app, this));
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
@@ -4298,14 +4322,25 @@ var BelkiPlugin = class extends import_obsidian8.Plugin {
       console.error(error);
     }
   }
-  async pruneCompletedTasks() {
+  async pruneCompletedTasks(manual = false) {
     const days = this.settings.autoDeleteCompletedAfterDays;
-    if (!Number.isInteger(days) || days <= 0) return;
+    if (!Number.isInteger(days) || days <= 0) {
+      if (manual) {
+        new import_obsidian8.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+      }
+      return;
+    }
     const cutoff = addDaysIso(-days);
-    const tasks = this.store.getTasks().filter(
-      (t) => t.completed && isIsoDate(t.completedDate) && t.completedDate < cutoff
-    );
-    if (!tasks.length) return;
+    const completed = this.store.getTasks().filter((t) => t.completed);
+    const tasks = completed.filter((t) => isIsoDate(t.completedDate) && t.completedDate < cutoff);
+    if (!tasks.length) {
+      if (manual) {
+        const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
+        const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
+        new import_obsidian8.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+      }
+      return;
+    }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
       new import_obsidian8.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
