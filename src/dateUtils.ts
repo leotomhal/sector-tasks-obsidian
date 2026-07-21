@@ -8,12 +8,12 @@ export function yesterdayIso() {
   yesterday.setDate(yesterday.getDate() - 1);
   return toIsoDate(yesterday);
 }
-export function addDaysIso(days) {
+export function addDaysIso(days: number): string {
   const date = /* @__PURE__ */ new Date();
   date.setDate(date.getDate() + days);
   return toIsoDate(date);
 }
-export function toIsoDate(date) {
+export function toIsoDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -32,25 +32,25 @@ export function currentMonthKey() {
   const now = /* @__PURE__ */ new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
-export function isIsoDate(value) {
+export function isIsoDate(value?: string): boolean {
   return Boolean(value && ISO_DATE_PATTERN.test(value));
 }
-export function compareIsoDates(a, b) {
+export function compareIsoDates(a: string, b: string): number {
   if (a === b) {
     return 0;
   }
   return a < b ? -1 : 1;
 }
-export function isBeforeToday(value) {
+export function isBeforeToday(value?: string): boolean {
   return isIsoDate(value) && value < todayIso();
 }
-export function isToday(value) {
+export function isToday(value?: string): boolean {
   return isIsoDate(value) && value === todayIso();
 }
-export function isAfterToday(value) {
+export function isAfterToday(value?: string): boolean {
   return isIsoDate(value) && value > todayIso();
 }
-export function formatDueDateChip(value) {
+export function formatDueDateChip(value?: string): string {
   if (!isIsoDate(value)) return "Date";
   if (value === todayIso()) return "Today";
   if (value === addDaysIso(1)) return "Tomorrow";

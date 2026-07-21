@@ -11,7 +11,7 @@ export const BELKI_COLOR_PALETTE = [
   { name: "brown", regular: "#64473A", light: "#E9E5DF" },
   { name: "blue", regular: "#0C6E99", light: "#DDEBF1" }
 ];
-export function colorForName(value, override?) {
+export function colorForName(value: string, override?: string): { regular: string; light: string } {
   if (override) {
     return {
       regular: override,
@@ -24,10 +24,10 @@ export function colorForName(value, override?) {
     light: color.light
   };
 }
-export function getProjectColor(projectName, projectColors) {
+export function getProjectColor(projectName: string, projectColors: Record<string, string>): { regular: string; light: string } {
   return colorForName(projectName, projectColors[projectName]);
 }
-export function getLabelColor(labelName, labelColors) {
+export function getLabelColor(labelName: string, labelColors: Record<string, string>): { regular: string; light: string } {
   const normalized = normalizeLabelName(labelName);
   const direct = labelColors[normalized];
   if (direct) {
@@ -38,14 +38,14 @@ export function getLabelColor(labelName, labelColors) {
   );
   return colorForName(normalized, existing == null ? void 0 : existing[1]);
 }
-export function hashString(value) {
+export function hashString(value: string): number {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
     hash = value.charCodeAt(index) + ((hash << 5) - hash);
   }
   return Math.abs(hash);
 }
-export function lightColorForOverride(value) {
+export function lightColorForOverride(value: string): string {
   const matchingPaletteColor = BELKI_COLOR_PALETTE.find(
     (color) => color.regular.toLowerCase() === value.toLowerCase()
   );
@@ -58,7 +58,7 @@ export function lightColorForOverride(value) {
   }
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.14)`;
 }
-export function hexToRgb(hex) {
+export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const match = hex.trim().match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
   if (!match) {
     return null;

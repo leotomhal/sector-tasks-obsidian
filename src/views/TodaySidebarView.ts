@@ -1,12 +1,14 @@
-import { ItemView, Menu, setIcon } from "obsidian";
+import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
+import type { BelkiSettings, Task } from "../types";
+import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { addDaysIso, compareIsoDates, formatDueDateChip, todayIso } from "../dateUtils";
 import { getPriorityColor } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
 
 export const VIEW_TYPE_BELKI_TODAY = "sector-task-today";
-export const TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
-export function showDueDateMenu(store, task, event) {
+export const TODAY_PRIORITY_RANK: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
+export function showDueDateMenu(store: TaskStore, task: Task, event: MouseEvent) {
   const menu = new Menu();
   const current = task.due;
   const options = [
@@ -35,9 +37,12 @@ export function showDueDateMenu(store, task, event) {
   });
   menu.showAtMouseEvent(event);
 }
-export const TodaySidebarView = class extends ItemView {
-  [key: string]: any;
-  constructor(leaf, store, settings) {
+export class TodaySidebarView extends ItemView {
+  store: TaskStore;
+  settings: BelkiSettings;
+  unsubscribe?: () => void;
+  collapsedSections?: Set<string>;
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings) {
     super(leaf);
     this.store = store;
     this.settings = settings;
@@ -57,8 +62,7 @@ export const TodaySidebarView = class extends ItemView {
     this.render();
   }
   async onClose() {
-    let _a;
-    (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
+    this.unsubscribe?.();
     this.updateTabBadge(0);
   }
   refresh() {
@@ -107,8 +111,8 @@ export const TodaySidebarView = class extends ItemView {
     );
     const today = todayIso();
     const tomorrow = addDaysIso(1);
-    const byPriority = (a, b) => (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title);
-    const byUrgency = (a, b) => compareIsoDates(a.due || "", b.due || "") || byPriority(a, b);
+    const byPriority = (a: Task, b: Task) => (TODAY_PRIORITY_RANK[a.priority] ?? 4) - (TODAY_PRIORITY_RANK[b.priority] ?? 4) || a.title.localeCompare(b.title);
+    const byUrgency = (a: Task, b: Task) => compareIsoDates(a.due || "", b.due || "") || byPriority(a, b);
     const overdue = open.filter((t) => t.due && t.due < today).sort(byUrgency);
     const dueToday = open.filter((t) => t.due === today).sort(byPriority);
     const dueTomorrow = open.filter((t) => t.due === tomorrow).sort(byPriority);
@@ -127,11 +131,11 @@ export const TodaySidebarView = class extends ItemView {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
     }
   }
-  updateTabBadge(count) {
+  updateTabBadge(count: number) {
     // tabHeaderEl is an internal, undocumented Obsidian API not present in the public types.
-    const tabHeader = this.leaf && (this.leaf as any).tabHeaderEl;
+    const tabHeader = this.leaf && (this.leaf as unknown as { tabHeaderEl?: HTMLElement }).tabHeaderEl;
     if (!tabHeader) return;
-    let badge = tabHeader.querySelector(".belki-today-tab-badge");
+    let badge: HTMLElement | null = tabHeader.querySelector(".belki-today-tab-badge");
     if (count <= 0) {
       if (badge) badge.remove();
       return;
@@ -141,7 +145,7 @@ export const TodaySidebarView = class extends ItemView {
     }
     badge.setText(String(count));
   }
-  renderSection(container, label, tasks, showDate, collapsible = false) {
+  renderSection(container: HTMLElement, label: string, tasks: Task[], showDate: boolean, collapsible = false) {
     if (!this.collapsedSections) this.collapsedSections = /* @__PURE__ */ new Set();
     const section = container.createDiv({ cls: "belki-today-section" });
     const head = section.createDiv({ cls: "belki-today-section-label" });
@@ -167,7 +171,7 @@ export const TodaySidebarView = class extends ItemView {
       this.renderRow(section, task, showDate);
     }
   }
-  renderRow(parent, task, showDate) {
+  renderRow(parent: HTMLElement, task: Task, showDate: boolean) {
     const row = parent.createDiv({ cls: "belki-today-row" });
     row.addEventListener("click", () => {
       void this.store.updateTaskViaModal(task.id);
@@ -188,7 +192,7 @@ export const TodaySidebarView = class extends ItemView {
     });
     const content = row.createDiv({ cls: "belki-today-content" });
     content.createDiv({ cls: "belki-today-task-title", text: task.title });
-    const metaParts = [];
+    const metaParts: string[] = [];
     if (showDate && task.due) {
       metaParts.push(formatDueDateChip(task.due));
     }

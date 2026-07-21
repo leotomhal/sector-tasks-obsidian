@@ -1,13 +1,21 @@
-import { Notice, TFile, TFolder, normalizePath } from "obsidian";
+import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
+import type { BelkiSettings, FileBlock, Task } from "./types";
 import { formatDueDateChip, todayIso } from "./dateUtils";
 import { dedupeLabels } from "./labels";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
 import { INBOX_SECTOR, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, getTasksApi, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
-export const TaskStore = class {
-  [key: string]: any;
-  constructor(app, settings) {
+export class TaskStore {
+  app: App;
+  settings: BelkiSettings;
+  tasks: Task[];
+  fileModel: { blocks: FileBlock[] };
+  listeners: Set<() => void>;
+  warnedStorageIssues: Set<string>;
+  writing: boolean;
+  lastKnownDiskContent: string | null;
+  constructor(app: App, settings: BelkiSettings) {
     this.app = app;
     this.settings = settings;
     this.tasks = [];
@@ -20,10 +28,10 @@ export const TaskStore = class {
   get filePath() {
     return normalizePath(this.settings.tasksFilePath || "Tasks.md");
   }
-  isCurrentlyWriting(path) {
+  isCurrentlyWriting(path: string): boolean {
     return this.writing && normalizePath(path) === this.filePath;
   }
-  isTaskStorageFile(path) {
+  isTaskStorageFile(path: string): boolean {
     return normalizePath(path) === this.filePath;
   }
   getTasks() {
@@ -33,7 +41,7 @@ export const TaskStore = class {
   getProjects() {
     return [...SECTOR_TAGS];
   }
-  subscribe(listener) {
+  subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -58,16 +66,16 @@ export const TaskStore = class {
   async reloadFromDisk() {
     await this.load();
   }
-  parseContent(content) {
+  parseContent(content: string): { blocks: FileBlock[]; tasks: Task[] } {
     const lines = content === "" ? [] : content.split(/\r?\n/);
-    const blocks = [];
-    const tasks = [];
+    const blocks: FileBlock[] = [];
+    const tasks: Task[] = [];
     let order = 0;
     for (const line of lines) {
       if (isTaskLine(line) && hasTaskMarker(line)) {
         const parsed = parseTaskLine(line, createId(), order);
         if (parsed) {
-          (parsed.task as any).sourcePath = this.filePath;
+          parsed.task.sourcePath = this.filePath;
           tasks.push(parsed.task);
           blocks.push({ type: "task", taskId: parsed.task.id });
           order += 1;
@@ -78,7 +86,7 @@ export const TaskStore = class {
     }
     return { blocks, tasks };
   }
-  async createTask(input) {
+  async createTask(input: Partial<Task> & { title: string }) {
     const title = input.title.trim();
     if (!title) return;
     const task = {
@@ -103,7 +111,7 @@ export const TaskStore = class {
     this.fileModel.blocks.push({ type: "task", taskId: task.id });
     await this.save();
   }
-  async createTaskViaModal(sector) {
+  async createTaskViaModal(sector?: string) {
     const api = getTasksApi(this.app);
     if (!api) {
       new Notice("Tasks plugin not available \u2013 cannot create task.");
@@ -123,7 +131,7 @@ export const TaskStore = class {
     this.fileModel.blocks.push({ type: "task", taskId: task.id });
     await this.save();
   }
-  async updateTaskViaModal(id) {
+  async updateTaskViaModal(id: string) {
     const api = getTasksApi(this.app);
     if (!api) {
       new Notice("Tasks plugin not available \u2013 cannot edit task.");
@@ -144,10 +152,10 @@ export const TaskStore = class {
     this.tasks = this.tasks.map((t) => t.id === id ? updated : t);
     await this.save();
   }
-  async updateTask(id, patch) {
+  async updateTask(id: string, patch: Partial<Task>) {
     await this.updateManyTasks([id], patch);
   }
-  async updateManyTasks(ids, patch) {
+  async updateManyTasks(ids: string[], patch: Partial<Task>) {
     const idSet = new Set(ids);
     if (idSet.size === 0) return;
     let changed = false;
@@ -170,7 +178,7 @@ export const TaskStore = class {
     if (!changed) return;
     await this.save();
   }
-  async toggleComplete(id) {
+  async toggleComplete(id: string) {
     const task = this.tasks.find((t) => t.id === id);
     if (!task) return;
     if (task.repeat && !task.completed) {
@@ -196,14 +204,14 @@ export const TaskStore = class {
       completedDate: task.completed ? void 0 : todayIso()
     });
   }
-  async deleteTask(id) {
+  async deleteTask(id: string) {
     await this.deleteManyTasks([id]);
   }
   get archiveFilePath() {
     const p = this.filePath;
     return p.replace(/\.md$/i, "") + " (archive).md";
   }
-  async archiveCompletedTasks(tasks) {
+  async archiveCompletedTasks(tasks: Task[]): Promise<boolean> {
     if (!tasks.length) return false;
     const file = await this.ensureFile(this.archiveFilePath);
     if (!file) return false;
@@ -221,7 +229,7 @@ ${lines.join("\n")}
       return false;
     }
   }
-  async deleteManyTasks(ids) {
+  async deleteManyTasks(ids: string[]) {
     const idSet = new Set(ids);
     if (!this.tasks.some((t) => idSet.has(t.id))) return;
     this.tasks = this.tasks.filter((t) => !idSet.has(t.id)).map((t, index) => ({ ...t, order: index }));
@@ -231,7 +239,7 @@ ${lines.join("\n")}
     await this.save();
   }
   /** Move all tasks of one sector to another (UI "rename project"). */
-  async renameProject(oldName, newName) {
+  async renameProject(oldName: string, newName: string) {
     const oldLower = (oldName || "").trim().toLowerCase();
     const newTag = (newName || "").trim();
     this.tasks = this.tasks.map((task) => {
@@ -309,7 +317,7 @@ ${lines.join("\n")}
     for (const listener of this.listeners) listener();
   }
   // --- File helpers --------------------------------------------------------
-  async ensureFile(path) {
+  async ensureFile(path: string): Promise<TFile | null> {
     const normalizedPath = normalizePath(path);
     const existing = this.app.vault.getAbstractFileByPath(normalizedPath);
     if (existing instanceof TFile) return existing;
@@ -328,7 +336,7 @@ ${lines.join("\n")}
       return null;
     }
   }
-  async ensureParentFolders(path) {
+  async ensureParentFolders(path: string): Promise<boolean> {
     const parts = normalizePath(path).split("/");
     parts.pop();
     let current = "";
@@ -344,7 +352,7 @@ ${lines.join("\n")}
         await this.app.vault.createFolder(current);
       } catch (error) {
         const after = this.app.vault.getAbstractFileByPath(current);
-        const alreadyExists = /already exists/i.test(String((error == null ? void 0 : error.message) ?? error));
+        const alreadyExists = /already exists/i.test(String((error as Error | null)?.message ?? error));
         if (after instanceof TFolder || alreadyExists) {
           continue;
         }
@@ -354,7 +362,7 @@ ${lines.join("\n")}
     }
     return true;
   }
-  warnWrongType(path, existing) {
+  warnWrongType(path: string, existing: unknown) {
     const key = `wrong-type:${path}`;
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
@@ -362,20 +370,20 @@ ${lines.join("\n")}
     new Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
-export function normalizeOptional(value) {
+export function normalizeOptional(value?: string): string | undefined {
   const trimmed = (value || "").trim();
   return trimmed ? trimmed : void 0;
 }
-export function normalizeSector(value) {
+export function normalizeSector(value?: string): string | undefined {
   const v = (value || "").trim();
   if (!v || v === INBOX_SECTOR) return void 0;
   const match = SECTOR_TAGS.find((s) => s.toLowerCase() === v.toLowerCase());
   return match || void 0;
 }
-export function createId() {
+export function createId(): string {
   return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 }
-export function cloneTask(task) {
+export function cloneTask(task: Task): Task {
   return {
     ...task,
     labels: [...task.labels],
