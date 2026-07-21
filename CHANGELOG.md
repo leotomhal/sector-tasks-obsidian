@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.1
+
+### Fixed
+- Restored support for Obsidian 1.7.2: `minAppVersion` is back to 1.7.2. Obsidian 1.13+ keeps the new declarative settings tab (settings search, drag-and-drop sectors); older versions get the previous imperative settings tab as a fallback. Version 1.3.0 itself remains marked as requiring 1.13.0 in `versions.json`, since it shipped without that fallback.
+
 ## 1.3.0
 
 ### New
