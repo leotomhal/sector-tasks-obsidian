@@ -1,6 +1,6 @@
 import { dedupeLabels } from "./labels";
 
-export var DEFAULT_SECTORS = [
+export const DEFAULT_SECTORS = [
   { tag: "01this-week", label: "This week", inWeekly: true, inMonthly: true },
   { tag: "02next-week", label: "Next week", inWeekly: true, inMonthly: true },
   { tag: "03this-month", label: "This month", inWeekly: true, inMonthly: true },
@@ -9,12 +9,12 @@ export var DEFAULT_SECTORS = [
   { tag: "routines", label: "Routines", inWeekly: false, inMonthly: false },
   { tag: "waiting", label: "Waiting", isWaiting: true, inWeekly: false, inMonthly: false }
 ];
-export var SECTOR_TAG_PATTERN = /^[A-Za-z0-9_\-\/]+$/;
-export var INBOX_SECTOR = "Inbox";
-export var TASK_MARKER_TAG = "task";
-export var SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
-export var SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
-export var SECTOR_LABELS = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.label]));
+export const SECTOR_TAG_PATTERN = /^[A-Za-z0-9_\-/]+$/;
+export const INBOX_SECTOR = "Inbox";
+export const TASK_MARKER_TAG = "task";
+export let SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
+export let SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
+export let SECTOR_LABELS = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.label]));
 export function normalizeSectorTag(value) {
   return (value || "").trim().replace(/^#/, "");
 }
@@ -48,31 +48,31 @@ export function applySectorSettings(sectors) {
   SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
   SECTOR_LABELS = new Map(list.map((s) => [s.tag.toLowerCase(), s.label || s.tag]));
 }
-export var PRIORITY_EMOJI_TO_BELKI = [
+export const PRIORITY_EMOJI_TO_BELKI = [
   ["\u{1F53A}", "P1"],
   ["\u23EB", "P1"],
   ["\u{1F53C}", "P2"],
   ["\u{1F53D}", "P3"],
   ["\u23EC", "P4"]
 ];
-export var BELKI_TO_PRIORITY_EMOJI = {
+export const BELKI_TO_PRIORITY_EMOJI = {
   none: "",
   P1: "\u23EB",
   P2: "\u{1F53C}",
   P3: "\u{1F53D}",
   P4: "\u23EC"
 };
-export var PRIORITY_EMOJIS = PRIORITY_EMOJI_TO_BELKI.map(([e]) => e);
-export var E_DUE = "\u{1F4C5}";
-export var E_DONE = "\u2705";
-export var E_CREATED = "\u2795";
-export var E_RECUR = "\u{1F501}";
-export var E_ID = "\u{1F194}";
-export var E_SCHEDULED = "\u23F3";
-export var E_START = "\u{1F6EB}";
-export var E_CANCELLED = "\u274C";
-export var ISO = "\\d{4}-\\d{2}-\\d{2}";
-export var TASK_LINE = /^(\s*)- \[( |x|X|\/|-)\]\s+(.*)$/;
+export const PRIORITY_EMOJIS = PRIORITY_EMOJI_TO_BELKI.map(([e]) => e);
+export const E_DUE = "\u{1F4C5}";
+export const E_DONE = "\u2705";
+export const E_CREATED = "\u2795";
+export const E_RECUR = "\u{1F501}";
+export const E_ID = "\u{1F194}";
+export const E_SCHEDULED = "\u23F3";
+export const E_START = "\u{1F6EB}";
+export const E_CANCELLED = "\u274C";
+export const ISO = "\\d{4}-\\d{2}-\\d{2}";
+export const TASK_LINE = /^(\s*)- \[( |x|X|\/|-)\]\s+(.*)$/;
 export function dateAfter(emoji, text) {
   const re = new RegExp(`${emoji}\\s*(${ISO})`);
   const m = text.match(re);
@@ -82,7 +82,7 @@ export function stripField(emoji, text) {
   const re = new RegExp(`\\s*${emoji}\\s*(${ISO})?`, "g");
   return text.replace(re, " ");
 }
-export var WEEKDAY_INDEX = {
+export const WEEKDAY_INDEX = {
   sunday: 0,
   monday: 1,
   tuesday: 2,
@@ -91,7 +91,7 @@ export var WEEKDAY_INDEX = {
   friday: 5,
   saturday: 6
 };
-export var MONTH_INDEX = {
+export const MONTH_INDEX = {
   january: 1,
   february: 2,
   march: 3,
@@ -144,7 +144,7 @@ export function parseTasksRecurrence(raw) {
   return { frequency: "yearly", interval: 1, mode, ends, raw: rawTrimmed };
 }
 export function serializeTasksRecurrence(rule) {
-  var _a;
+  let _a;
   if (rule.raw && rule.raw.trim()) return rule.raw.trim();
   const i = (_a = rule.interval) != null ? _a : 1;
   const plural = (unit) => i === 1 ? unit : `${i} ${unit}s`;
@@ -172,7 +172,7 @@ export function serializeTasksRecurrence(rule) {
 }
 export function extractTags(text) {
   const out = [];
-  const re = /(^|\s)#([A-Za-z0-9_\-\/]+)/g;
+  const re = /(^|\s)#([A-Za-z0-9_\-/]+)/g;
   let m;
   while ((m = re.exec(text)) !== null) {
     out.push(m[2]);
@@ -203,7 +203,7 @@ export function parseTaskLine(line, id, order) {
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
   let repeat;
-  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+)`));
+  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+)`, "u"));
   if (recurMatch) repeat = parseTasksRecurrence(recurMatch[1]);
   let priority = "none";
   for (const [emoji, p] of PRIORITY_EMOJI_TO_BELKI) {
@@ -218,7 +218,7 @@ export function parseTaskLine(line, id, order) {
   body = stripField(E_SCHEDULED, body);
   body = stripField(E_START, body);
   body = stripField(E_CANCELLED, body);
-  body = body.replace(new RegExp(`${E_RECUR}\\s*[^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+`, "g"), " ");
+  body = body.replace(new RegExp(`${E_RECUR}\\s*[^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+`, "gu"), " ");
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);
@@ -271,7 +271,7 @@ export function serializeTaskLine(task, indent = 0) {
   return `${pad}- ${box} ${parts.join(" ")}`;
 }
 export function getTasksApi(app) {
-  var _a, _b;
+  let _a, _b;
   return (_b = (_a = app.plugins) == null ? void 0 : _a.plugins["obsidian-tasks-plugin"]) == null ? void 0 : _b.apiV1;
 }
 export function ensureSectorInLine(line, sector) {

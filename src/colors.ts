@@ -1,6 +1,6 @@
 import { normalizeLabelName } from "./labels";
 
-export var BELKI_COLOR_PALETTE = [
+export const BELKI_COLOR_PALETTE = [
   { name: "yellow", regular: "#DFAB00", light: "#FBF3DA" },
   { name: "red", regular: "#E03E3E", light: "#FBE4E3" },
   { name: "purple", regular: "#6940A5", light: "#EAE5F2" },

@@ -1,7 +1,7 @@
 import { toIsoDate } from "./dateUtils";
 
 export function nextOccurrence(rule, fromDate) {
-  var _a;
+  let _a;
   const [year, month, day] = fromDate.split("-").map(Number);
   const date = new Date(year, month - 1, day);
   const interval = (_a = rule.interval) != null ? _a : 1;

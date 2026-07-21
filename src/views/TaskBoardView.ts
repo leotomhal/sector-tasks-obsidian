@@ -10,8 +10,8 @@ import { applyBelkiFontSettings, applyBelkiThemeSettings, normalizeOverdueRange,
 import { E_ID, SECTOR_SET } from "../tasksFormat";
 import { OVERDUE_RANGES } from "../types";
 
-export var VIEW_TYPE_BELKI = "sector-task-board";
-export var LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
+export const VIEW_TYPE_BELKI = "sector-task-board";
+export const LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
 export function renderLinkedText(text, el, app) {
   LINK_RE.lastIndex = 0;
   let last = 0;
@@ -53,7 +53,7 @@ export function renderLinkedText(text, el, app) {
   }
   if (last < text.length) el.appendText(text.slice(last));
 }
-export var SORT_OPTIONS = [
+export const SORT_OPTIONS = [
   { mode: "smart", label: "Smart" },
   { mode: "due", label: "Due date" },
   { mode: "priority", label: "Priority" },
@@ -62,7 +62,7 @@ export var SORT_OPTIONS = [
   { mode: "project", label: "Sector" },
   { mode: "alphabetical", label: "Alphabetical" }
 ];
-export var TaskBoardView = class extends ItemView {
+export const TaskBoardView = class extends ItemView {
   [key: string]: any;
   constructor(leaf, store, settings, saveSettings) {
     super(leaf);
@@ -168,7 +168,7 @@ export var TaskBoardView = class extends ItemView {
     this.render();
   }
   async onClose() {
-    var _a, _b;
+    let _a, _b;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
     this.composerCleanup = null;
     this.removeProjectMenu();
@@ -176,7 +176,7 @@ export var TaskBoardView = class extends ItemView {
     (_b = this.unsubscribe) == null ? void 0 : _b.call(this);
   }
   removeProjectMenu() {
-    var _a;
+    let _a;
     (_a = this.projectMenuEl) == null ? void 0 : _a.remove();
     this.projectMenuEl = null;
   }
@@ -204,7 +204,7 @@ export var TaskBoardView = class extends ItemView {
     this.render();
   }
   render() {
-    var _a, _b, _c;
+    let _a, _b, _c;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
     this.composerCleanup = null;
     this.removeProjectMenu();
@@ -333,8 +333,8 @@ export var TaskBoardView = class extends ItemView {
         "--belki-project-color": color.regular
       });
       button.createSpan({ cls: "belki-project-dot" }).setCssStyles({ backgroundColor: color.regular });
-      button.createEl("span", { cls: "belki-nav-label", text: projectDisplayName(cleanProject) });
-      button.createEl("span", { cls: "belki-count", text: String(count) });
+      button.createSpan({ cls: "belki-nav-label", text: projectDisplayName(cleanProject) });
+      button.createSpan({ cls: "belki-count", text: String(count) });
       this.enableProjectDrop(button, cleanProject);
       button.addEventListener("click", () => {
         this.mode = "projects";
@@ -350,8 +350,8 @@ export var TaskBoardView = class extends ItemView {
       });
       archiveButton.toggleClass("is-active", this.mode === "archived");
       archiveButton.createSpan({ cls: "belki-project-dot" });
-      archiveButton.createEl("span", { cls: "belki-nav-label", text: "Archived" });
-      archiveButton.createEl("span", { cls: "belki-count", text: String(this.settings.archivedProjects.length) });
+      archiveButton.createSpan({ cls: "belki-nav-label", text: "Archived" });
+      archiveButton.createSpan({ cls: "belki-count", text: String(this.settings.archivedProjects.length) });
       archiveButton.addEventListener("click", () => {
         this.mode = "archived";
         this.selectedProject = null;
@@ -379,10 +379,10 @@ export var TaskBoardView = class extends ItemView {
     const button = parent.createEl("button", { cls: "belki-project-button" });
     button.createSpan({ cls: "belki-project-dot" });
     const label = isActiveSession ? `Resume ${reviewTypeLabel(type)}` : reviewTypeLabel(type);
-    button.createEl("span", { cls: "belki-nav-label", text: label });
+    button.createSpan({ cls: "belki-nav-label", text: label });
     const reminderDue = type === "weekly" ? this.settings.lastWeeklyReviewKey !== currentIsoWeekKey() : type === "monthly" ? this.settings.lastMonthlyReviewKey !== currentMonthKey() : false;
     if (reminderDue && !isActiveSession) {
-      button.createEl("span", {
+      button.createSpan({
         cls: "belki-review-reminder",
         attr: { "aria-label": type === "weekly" ? "No weekly review completed this week yet" : "No monthly review completed this month yet" }
       });
@@ -393,7 +393,7 @@ export var TaskBoardView = class extends ItemView {
         if (idx === session.stepIndex) return sum + (step.taskIds.length - session.taskIndex);
         return sum + step.taskIds.length;
       }, 0);
-      button.createEl("span", { cls: "belki-count", text: String(Math.max(remaining, 0)) });
+      button.createSpan({ cls: "belki-count", text: String(Math.max(remaining, 0)) });
     }
     button.addEventListener("click", () => {
       this.mobileNavOpen = false;
@@ -544,13 +544,13 @@ export var TaskBoardView = class extends ItemView {
     const button = parent.createEl("button", { cls: "belki-nav-button" });
     const active = label === "Search" ? false : label === "Sectors" ? this.mode === "projects" && this.selectedProject === null : this.mode === mode;
     button.toggleClass("is-active", active);
-    const iconSpan = button.createEl("span", { cls: "belki-nav-icon" });
+    const iconSpan = button.createSpan({ cls: "belki-nav-icon" });
     if (iconKey && this.settings.icons[iconKey]) {
       setIcon(iconSpan, this.settings.icons[iconKey]);
     }
-    button.createEl("span", { cls: "belki-nav-label", text: label });
+    button.createSpan({ cls: "belki-nav-label", text: label });
     if (count !== void 0) {
-      button.createEl("span", { cls: "belki-count", text: String(count) });
+      button.createSpan({ cls: "belki-count", text: String(count) });
     }
     button.addEventListener("click", () => {
       if (label === "Search") {
@@ -1113,7 +1113,7 @@ export var TaskBoardView = class extends ItemView {
     });
   }
   showDropTargets(tasks) {
-    var _a;
+    let _a;
     this.clearDropTargets();
     const list = (tasks || []).filter((t) => !t.completed);
     if (list.length === 0) return;
@@ -1140,16 +1140,13 @@ export var TaskBoardView = class extends ItemView {
   }
   createDragImage(row, count) {
     if (count && count > 1) {
-      const badge = activeDocument.createElement("div");
-      badge.addClass("belki-drag-preview");
-      badge.addClass("belki-drag-preview-multi");
+      const badge = activeDocument.body.createDiv({ cls: ["belki-drag-preview", "belki-drag-preview-multi"] });
       badge.setText(`${count} tasks`);
       badge.setCssStyles({
         position: "absolute",
         top: "-9999px",
         left: "-9999px"
       });
-      activeDocument.body.appendChild(badge);
       return badge;
     }
     const dragImage = row.cloneNode(true);
@@ -1164,7 +1161,7 @@ export var TaskBoardView = class extends ItemView {
     return dragImage;
   }
   getDraggedTasks(event) {
-    var _a, _b;
+    let _a, _b;
     let ids = this.draggedTaskIds;
     if (!ids || ids.length === 0) {
       const fallbackId = this.draggedTaskId || ((_a = event.dataTransfer) == null ? void 0 : _a.getData("application/x-belki-task-id")) || ((_b = event.dataTransfer) == null ? void 0 : _b.getData("text/plain"));
@@ -1253,7 +1250,7 @@ export var TaskBoardView = class extends ItemView {
         event.stopPropagation();
       });
       dragHandle.addEventListener("dragstart", (event) => {
-        var _a, _b;
+        let _a, _b;
         event.stopPropagation();
         const dragIds = this.selectedTaskIds.has(task.id) && this.selectedTaskIds.size > 1 ? Array.from(this.selectedTaskIds) : [task.id];
         this.draggedTaskIds = dragIds;
@@ -1404,7 +1401,8 @@ export var TaskBoardView = class extends ItemView {
       const lines = content.split(/\r?\n/);
       const needle = `${E_ID} ${task.id}`;
       line = lines.findIndex((l) => l.includes(needle));
-    } catch (e) {
+    } catch {
+      // best-effort: placing the cursor on the task line is optional
     }
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.openFile(file);
@@ -1526,7 +1524,7 @@ export var TaskBoardView = class extends ItemView {
     return compareTasksByMode(a, b, this.settings.sortMode);
   }
   getTitle() {
-    var _a;
+    let _a;
     if (this.mode === "inbox") {
       return "Inbox";
     }
@@ -1982,7 +1980,7 @@ export var TaskBoardView = class extends ItemView {
     event.stopImmediatePropagation();
   }
 };
-export var LabelPromptModal = class extends Modal {
+export const LabelPromptModal = class extends Modal {
   [key: string]: any;
   constructor(app, onSubmit) {
     super(app);

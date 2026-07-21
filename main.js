@@ -154,7 +154,7 @@ var DEFAULT_SECTORS = [
   { tag: "routines", label: "Routines", inWeekly: false, inMonthly: false },
   { tag: "waiting", label: "Waiting", isWaiting: true, inWeekly: false, inMonthly: false }
 ];
-var SECTOR_TAG_PATTERN = /^[A-Za-z0-9_\-\/]+$/;
+var SECTOR_TAG_PATTERN = /^[A-Za-z0-9_\-/]+$/;
 var INBOX_SECTOR = "Inbox";
 var TASK_MARKER_TAG = "task";
 var SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
@@ -289,7 +289,7 @@ function parseTasksRecurrence(raw) {
   return { frequency: "yearly", interval: 1, mode, ends, raw: rawTrimmed };
 }
 function serializeTasksRecurrence(rule) {
-  var _a;
+  let _a;
   if (rule.raw && rule.raw.trim()) return rule.raw.trim();
   const i = (_a = rule.interval) != null ? _a : 1;
   const plural = (unit) => i === 1 ? unit : `${i} ${unit}s`;
@@ -317,7 +317,7 @@ function serializeTasksRecurrence(rule) {
 }
 function extractTags(text) {
   const out = [];
-  const re = /(^|\s)#([A-Za-z0-9_\-\/]+)/g;
+  const re = /(^|\s)#([A-Za-z0-9_\-/]+)/g;
   let m;
   while ((m = re.exec(text)) !== null) {
     out.push(m[2]);
@@ -348,7 +348,7 @@ function parseTaskLine(line, id, order) {
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
   let repeat;
-  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+)`));
+  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+)`, "u"));
   if (recurMatch) repeat = parseTasksRecurrence(recurMatch[1]);
   let priority = "none";
   for (const [emoji, p] of PRIORITY_EMOJI_TO_BELKI) {
@@ -363,7 +363,7 @@ function parseTaskLine(line, id, order) {
   body = stripField(E_SCHEDULED, body);
   body = stripField(E_START, body);
   body = stripField(E_CANCELLED, body);
-  body = body.replace(new RegExp(`${E_RECUR}\\s*[^📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+`, "g"), " ");
+  body = body.replace(new RegExp(`${E_RECUR}\\s*[^📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+`, "gu"), " ");
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);
@@ -416,7 +416,7 @@ function serializeTaskLine(task, indent = 0) {
   return `${pad}- ${box} ${parts.join(" ")}`;
 }
 function getTasksApi(app) {
-  var _a, _b;
+  let _a, _b;
   return (_b = (_a = app.plugins) == null ? void 0 : _a.plugins["obsidian-tasks-plugin"]) == null ? void 0 : _b.apiV1;
 }
 function ensureSectorInLine(line, sector) {
@@ -523,7 +523,7 @@ var TodaySidebarView = class extends import_obsidian.ItemView {
     this.render();
   }
   async onClose() {
-    var _a;
+    let _a;
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
     this.updateTabBadge(0);
   }
@@ -1746,7 +1746,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     this.render();
   }
   async onClose() {
-    var _a, _b;
+    let _a, _b;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
     this.composerCleanup = null;
     this.removeProjectMenu();
@@ -1754,7 +1754,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     (_b = this.unsubscribe) == null ? void 0 : _b.call(this);
   }
   removeProjectMenu() {
-    var _a;
+    let _a;
     (_a = this.projectMenuEl) == null ? void 0 : _a.remove();
     this.projectMenuEl = null;
   }
@@ -1782,7 +1782,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     this.render();
   }
   render() {
-    var _a, _b, _c;
+    let _a, _b, _c;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
     this.composerCleanup = null;
     this.removeProjectMenu();
@@ -1911,8 +1911,8 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         "--belki-project-color": color.regular
       });
       button.createSpan({ cls: "belki-project-dot" }).setCssStyles({ backgroundColor: color.regular });
-      button.createEl("span", { cls: "belki-nav-label", text: projectDisplayName(cleanProject) });
-      button.createEl("span", { cls: "belki-count", text: String(count) });
+      button.createSpan({ cls: "belki-nav-label", text: projectDisplayName(cleanProject) });
+      button.createSpan({ cls: "belki-count", text: String(count) });
       this.enableProjectDrop(button, cleanProject);
       button.addEventListener("click", () => {
         this.mode = "projects";
@@ -1928,8 +1928,8 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
       });
       archiveButton.toggleClass("is-active", this.mode === "archived");
       archiveButton.createSpan({ cls: "belki-project-dot" });
-      archiveButton.createEl("span", { cls: "belki-nav-label", text: "Archived" });
-      archiveButton.createEl("span", { cls: "belki-count", text: String(this.settings.archivedProjects.length) });
+      archiveButton.createSpan({ cls: "belki-nav-label", text: "Archived" });
+      archiveButton.createSpan({ cls: "belki-count", text: String(this.settings.archivedProjects.length) });
       archiveButton.addEventListener("click", () => {
         this.mode = "archived";
         this.selectedProject = null;
@@ -1957,10 +1957,10 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const button = parent.createEl("button", { cls: "belki-project-button" });
     button.createSpan({ cls: "belki-project-dot" });
     const label = isActiveSession ? `Resume ${reviewTypeLabel(type)}` : reviewTypeLabel(type);
-    button.createEl("span", { cls: "belki-nav-label", text: label });
+    button.createSpan({ cls: "belki-nav-label", text: label });
     const reminderDue = type === "weekly" ? this.settings.lastWeeklyReviewKey !== currentIsoWeekKey() : type === "monthly" ? this.settings.lastMonthlyReviewKey !== currentMonthKey() : false;
     if (reminderDue && !isActiveSession) {
-      button.createEl("span", {
+      button.createSpan({
         cls: "belki-review-reminder",
         attr: { "aria-label": type === "weekly" ? "No weekly review completed this week yet" : "No monthly review completed this month yet" }
       });
@@ -1971,7 +1971,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         if (idx === session.stepIndex) return sum + (step.taskIds.length - session.taskIndex);
         return sum + step.taskIds.length;
       }, 0);
-      button.createEl("span", { cls: "belki-count", text: String(Math.max(remaining, 0)) });
+      button.createSpan({ cls: "belki-count", text: String(Math.max(remaining, 0)) });
     }
     button.addEventListener("click", () => {
       this.mobileNavOpen = false;
@@ -2122,13 +2122,13 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const button = parent.createEl("button", { cls: "belki-nav-button" });
     const active = label === "Search" ? false : label === "Sectors" ? this.mode === "projects" && this.selectedProject === null : this.mode === mode;
     button.toggleClass("is-active", active);
-    const iconSpan = button.createEl("span", { cls: "belki-nav-icon" });
+    const iconSpan = button.createSpan({ cls: "belki-nav-icon" });
     if (iconKey && this.settings.icons[iconKey]) {
       (0, import_obsidian3.setIcon)(iconSpan, this.settings.icons[iconKey]);
     }
-    button.createEl("span", { cls: "belki-nav-label", text: label });
+    button.createSpan({ cls: "belki-nav-label", text: label });
     if (count !== void 0) {
-      button.createEl("span", { cls: "belki-count", text: String(count) });
+      button.createSpan({ cls: "belki-count", text: String(count) });
     }
     button.addEventListener("click", () => {
       if (label === "Search") {
@@ -2691,7 +2691,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     });
   }
   showDropTargets(tasks) {
-    var _a;
+    let _a;
     this.clearDropTargets();
     const list = (tasks || []).filter((t) => !t.completed);
     if (list.length === 0) return;
@@ -2718,16 +2718,13 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
   }
   createDragImage(row, count) {
     if (count && count > 1) {
-      const badge = activeDocument.createElement("div");
-      badge.addClass("belki-drag-preview");
-      badge.addClass("belki-drag-preview-multi");
+      const badge = activeDocument.body.createDiv({ cls: ["belki-drag-preview", "belki-drag-preview-multi"] });
       badge.setText(`${count} tasks`);
       badge.setCssStyles({
         position: "absolute",
         top: "-9999px",
         left: "-9999px"
       });
-      activeDocument.body.appendChild(badge);
       return badge;
     }
     const dragImage = row.cloneNode(true);
@@ -2742,7 +2739,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     return dragImage;
   }
   getDraggedTasks(event) {
-    var _a, _b;
+    let _a, _b;
     let ids = this.draggedTaskIds;
     if (!ids || ids.length === 0) {
       const fallbackId = this.draggedTaskId || ((_a = event.dataTransfer) == null ? void 0 : _a.getData("application/x-belki-task-id")) || ((_b = event.dataTransfer) == null ? void 0 : _b.getData("text/plain"));
@@ -2831,7 +2828,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         event.stopPropagation();
       });
       dragHandle.addEventListener("dragstart", (event) => {
-        var _a, _b;
+        let _a, _b;
         event.stopPropagation();
         const dragIds = this.selectedTaskIds.has(task.id) && this.selectedTaskIds.size > 1 ? Array.from(this.selectedTaskIds) : [task.id];
         this.draggedTaskIds = dragIds;
@@ -3104,7 +3101,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     return compareTasksByMode(a, b, this.settings.sortMode);
   }
   getTitle() {
-    var _a;
+    let _a;
     if (this.mode === "inbox") {
       return "Inbox";
     }
@@ -3764,7 +3761,7 @@ function searchableText(task) {
 
 // src/repeatUtils.ts
 function nextOccurrence(rule, fromDate) {
-  var _a;
+  let _a;
   const [year, month, day] = fromDate.split("-").map(Number);
   const date = new Date(year, month - 1, day);
   const interval = (_a = rule.interval) != null ? _a : 1;
@@ -4396,13 +4393,13 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
   async activateTodaySidebar() {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI_TODAY);
     if (existing.length > 0) {
-      await this.app.workspace.revealLeaf(existing[0]);
+      this.app.workspace.revealLeaf(existing[0]);
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE_BELKI_TODAY, active: true });
-    await this.app.workspace.revealLeaf(leaf);
+    this.app.workspace.revealLeaf(leaf);
   }
   getProjectNames() {
     return uniqueRealProjects([

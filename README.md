@@ -80,7 +80,7 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **1.2.0** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md); ideas not yet built are in the [roadmap](./ROADMAP.md).
+Current version: **1.2.1** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md); ideas not yet built are in the [roadmap](./ROADMAP.md).
 
 ## Development transparency
 

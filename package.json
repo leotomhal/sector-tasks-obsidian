@@ -1,18 +1,22 @@
 {
   "name": "sector-tasks-obsidian",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Task board over a single Tasks-plugin-format Markdown file, grouped by configurable sector tags.",
   "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint src/",
     "test": "node --test"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "builtin-modules": "^4.0.0",
     "esbuild": "^0.28.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.1",
     "obsidian": "^1.7.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.65.0"
   }
 }

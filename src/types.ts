@@ -1,4 +1,4 @@
-export var SORT_MODES = [
+export const SORT_MODES = [
   "smart",
   "due",
   "priority",
@@ -7,13 +7,13 @@ export var SORT_MODES = [
   "project",
   "alphabetical"
 ];
-export var OVERDUE_RANGES = [
+export const OVERDUE_RANGES = [
   "yesterday",
   "last7",
   "last30",
   "older"
 ];
-export var FONT_OPTIONS = [
+export const FONT_OPTIONS = [
   "system",
   "ibmPlexSans",
   "ibmPlexMono",

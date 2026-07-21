@@ -5,7 +5,7 @@ import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
 import { INBOX_SECTOR, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, getTasksApi, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
-export var TaskStore = class {
+export const TaskStore = class {
   [key: string]: any;
   constructor(app, settings) {
     this.app = app;

@@ -1,4 +1,4 @@
-export var ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export function todayIso() {
   const now = /* @__PURE__ */ new Date();
   return toIsoDate(now);
