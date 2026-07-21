@@ -1714,7 +1714,10 @@ export class TaskBoardView extends ItemView {
         return;
       }
       const searchPool = this.settings.searchExcludeCompleted ? this.store.getTasks().filter((task) => !task.completed) : this.store.getTasks();
-      matches = searchPool.filter((task) => searchableText(task).includes(query)).slice(0, 25);
+      matches = searchPool
+        .filter((task) => searchableText(task).includes(query))
+        .sort((a, b) => Number(a.completed) - Number(b.completed))
+        .slice(0, 25);
       selectedIndex = Math.min(selectedIndex, Math.max(matches.length - 1, 0));
       if (matches.length === 0) {
         results.createDiv({ cls: "belki-search-empty", text: "No matching tasks." });
@@ -1723,11 +1726,15 @@ export class TaskBoardView extends ItemView {
       for (const [index, task] of matches.entries()) {
         const result = results.createEl("button", { cls: "belki-search-result" });
         result.toggleClass("is-selected", index === selectedIndex);
+        result.toggleClass("is-completed", task.completed);
         result.createDiv({ cls: "belki-search-title", text: task.title });
         if (task.description) {
           renderLinkedText(task.description, result.createDiv({ cls: "belki-search-description" }), this.app);
         }
         const meta = result.createDiv({ cls: "belki-search-meta" });
+        if (task.completed) {
+          meta.createSpan({ cls: "belki-search-completed-badge", text: "Completed" });
+        }
         meta.createSpan({ text: projectDisplayName(task.project) });
         if (task.due) {
           meta.createSpan({ text: formatDueChip(task.due) });
