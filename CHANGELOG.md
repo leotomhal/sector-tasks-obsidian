@@ -3,6 +3,12 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.1.0
+
+### New
+- **"Clean up completed tasks now"** command — runs the auto-delete cleanup on demand and reports the result, including why nothing was removed (e.g. completed tasks without a `✅` date, which are never deleted).
+- **Tasks-file path warning** in settings: a note appears under the "Tasks file" field when the path points to a folder or to a file that doesn't exist yet.
+
 ## 1.0.0
 
 First stable release. The Time Sector workflow is complete and the file-writing

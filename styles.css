@@ -2053,3 +2053,15 @@ button.belki-review-discard:hover {
   min-width: 16px;
   padding: 2px 4px;
 }
+
+.belki-path-warning {
+  display: none;
+}
+
+.belki-path-warning.is-visible {
+  color: var(--text-error, #e03e3e);
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: -6px 0 14px;
+}
