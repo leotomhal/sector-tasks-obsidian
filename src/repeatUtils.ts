@@ -1,10 +1,10 @@
+import type { RepeatRule } from "./types";
 import { toIsoDate } from "./dateUtils";
 
-export function nextOccurrence(rule, fromDate) {
-  let _a;
+export function nextOccurrence(rule: RepeatRule, fromDate: string): string {
   const [year, month, day] = fromDate.split("-").map(Number);
   const date = new Date(year, month - 1, day);
-  const interval = (_a = rule.interval) != null ? _a : 1;
+  const interval = rule.interval ?? 1;
   switch (rule.frequency) {
     case "daily":
       date.setDate(date.getDate() + interval);
@@ -43,7 +43,7 @@ export function nextOccurrence(rule, fromDate) {
   }
   return toIsoDate(date);
 }
-export function isRepeatEnded(rule, occurrenceCount, nextDate) {
+export function isRepeatEnded(rule: RepeatRule, occurrenceCount: number, nextDate: string): boolean {
   if (rule.ends === "never") return false;
   if (rule.ends === "onDate" && rule.endsDate) {
     return nextDate > rule.endsDate;

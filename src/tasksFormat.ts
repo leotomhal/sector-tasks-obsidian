@@ -1,6 +1,8 @@
 import { dedupeLabels } from "./labels";
+import type { App } from "obsidian";
+import type { RepeatRule, SectorConfig, Task, TasksApiV1 } from "./types";
 
-export const DEFAULT_SECTORS = [
+export const DEFAULT_SECTORS: SectorConfig[] = [
   { tag: "01this-week", label: "This week", inWeekly: true, inMonthly: true },
   { tag: "02next-week", label: "Next week", inWeekly: true, inMonthly: true },
   { tag: "03this-month", label: "This month", inWeekly: true, inMonthly: true },
@@ -15,16 +17,16 @@ export const TASK_MARKER_TAG = "task";
 export let SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
 export let SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
 export let SECTOR_LABELS = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.label]));
-export function normalizeSectorTag(value) {
+export function normalizeSectorTag(value?: string): string {
   return (value || "").trim().replace(/^#/, "");
 }
-export function isReservedSectorTag(lowerTag) {
+export function isReservedSectorTag(lowerTag: string): boolean {
   return lowerTag === TASK_MARKER_TAG || lowerTag === "inbox";
 }
-export function normalizeSectors(rawSectors) {
+export function normalizeSectors(rawSectors?: SectorConfig[]): SectorConfig[] {
   const source = Array.isArray(rawSectors) && rawSectors.length ? rawSectors : DEFAULT_SECTORS;
   const seen = /* @__PURE__ */ new Set();
-  const result = [];
+  const result: SectorConfig[] = [];
   for (const entry of source) {
     const tag = normalizeSectorTag(entry == null ? void 0 : entry.tag);
     if (!tag || !SECTOR_TAG_PATTERN.test(tag)) continue;
@@ -42,7 +44,7 @@ export function normalizeSectors(rawSectors) {
   }
   return result.length ? result : DEFAULT_SECTORS.map((s) => ({ ...s }));
 }
-export function applySectorSettings(sectors) {
+export function applySectorSettings(sectors: SectorConfig[]) {
   const list = sectors && sectors.length ? sectors : DEFAULT_SECTORS;
   SECTOR_TAGS = list.map((s) => s.tag);
   SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
@@ -55,7 +57,7 @@ export const PRIORITY_EMOJI_TO_BELKI = [
   ["\u{1F53D}", "P3"],
   ["\u23EC", "P4"]
 ];
-export const BELKI_TO_PRIORITY_EMOJI = {
+export const BELKI_TO_PRIORITY_EMOJI: Record<string, string> = {
   none: "",
   P1: "\u23EB",
   P2: "\u{1F53C}",
@@ -73,16 +75,16 @@ export const E_START = "\u{1F6EB}";
 export const E_CANCELLED = "\u274C";
 export const ISO = "\\d{4}-\\d{2}-\\d{2}";
 export const TASK_LINE = /^(\s*)- \[( |x|X|\/|-)\]\s+(.*)$/;
-export function dateAfter(emoji, text) {
+export function dateAfter(emoji: string, text: string): string | undefined {
   const re = new RegExp(`${emoji}\\s*(${ISO})`);
   const m = text.match(re);
   return m ? m[1] : void 0;
 }
-export function stripField(emoji, text) {
+export function stripField(emoji: string, text: string): string {
   const re = new RegExp(`\\s*${emoji}\\s*(${ISO})?`, "g");
   return text.replace(re, " ");
 }
-export const WEEKDAY_INDEX = {
+export const WEEKDAY_INDEX: Record<string, number> = {
   sunday: 0,
   monday: 1,
   tuesday: 2,
@@ -91,7 +93,7 @@ export const WEEKDAY_INDEX = {
   friday: 5,
   saturday: 6
 };
-export const MONTH_INDEX = {
+export const MONTH_INDEX: Record<string, number> = {
   january: 1,
   february: 2,
   march: 3,
@@ -105,7 +107,7 @@ export const MONTH_INDEX = {
   november: 11,
   december: 12
 };
-export function parseTasksRecurrence(raw) {
+export function parseTasksRecurrence(raw: string): RepeatRule | undefined {
   const rawTrimmed = raw.trim();
   const text = rawTrimmed.toLowerCase();
   if (!text.startsWith("every")) return void 0;
@@ -143,11 +145,10 @@ export function parseTasksRecurrence(raw) {
   }
   return { frequency: "yearly", interval: 1, mode, ends, raw: rawTrimmed };
 }
-export function serializeTasksRecurrence(rule) {
-  let _a;
+export function serializeTasksRecurrence(rule: RepeatRule): string {
   if (rule.raw && rule.raw.trim()) return rule.raw.trim();
-  const i = (_a = rule.interval) != null ? _a : 1;
-  const plural = (unit) => i === 1 ? unit : `${i} ${unit}s`;
+  const i = rule.interval ?? 1;
+  const plural = (unit: string) => i === 1 ? unit : `${i} ${unit}s`;
   const when = rule.mode === "completedDate" ? " when done" : "";
   switch (rule.frequency) {
     case "daily":
@@ -170,26 +171,26 @@ export function serializeTasksRecurrence(rule) {
     }
   }
 }
-export function extractTags(text) {
-  const out = [];
+export function extractTags(text: string): string[] {
+  const out: string[] = [];
   const re = /(^|\s)#([A-Za-z0-9_\-/]+)/g;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     out.push(m[2]);
   }
   return out;
 }
-export function stripTags(text, tags) {
+export function stripTags(text: string, tags: string[]): string {
   let out = text;
   for (const t of tags) {
     out = out.replace(new RegExp(`(^|\\s)#${escapeRe(t)}\\b`, "g"), "$1");
   }
   return out;
 }
-export function escapeRe(s) {
+export function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-export function parseTaskLine(line, id, order) {
+export function parseTaskLine(line: string, id: string, order: number): { task: Task; indent: number } | null {
   const m = line.match(TASK_LINE);
   if (!m) return null;
   const indent = m[1].length;
@@ -199,10 +200,10 @@ export function parseTaskLine(line, id, order) {
   const due = dateAfter(E_DUE, body);
   const completedDate = dateAfter(E_DONE, body);
   const created = dateAfter(E_CREATED, body);
-  let existingId;
+  let existingId: string | undefined;
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
-  let repeat;
+  let repeat: RepeatRule | undefined;
   const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+)`, "u"));
   if (recurMatch) repeat = parseTasksRecurrence(recurMatch[1]);
   let priority = "none";
@@ -228,7 +229,7 @@ export function parseTaskLine(line, id, order) {
   );
   body = stripTags(body, tags);
   const title = body.replace(/\s+/g, " ").trim() || "Untitled task";
-  const task = {
+  const task: Task = {
     id: existingId || id,
     title,
     completed,
@@ -250,7 +251,7 @@ export function parseTaskLine(line, id, order) {
   };
   return { task, indent };
 }
-export function serializeTaskLine(task, indent = 0) {
+export function serializeTaskLine(task: Task, indent = 0): string {
   const pad = " ".repeat(indent);
   const box = task.completed ? "[x]" : "[ ]";
   const parts = [task.title.trim()];
@@ -270,11 +271,12 @@ export function serializeTaskLine(task, indent = 0) {
   parts.push(`${E_ID} ${task.id}`);
   return `${pad}- ${box} ${parts.join(" ")}`;
 }
-export function getTasksApi(app) {
-  let _a, _b;
-  return (_b = (_a = app.plugins) == null ? void 0 : _a.plugins["obsidian-tasks-plugin"]) == null ? void 0 : _b.apiV1;
+export function getTasksApi(app: App): TasksApiV1 | undefined {
+  // App.plugins is an internal, undocumented Obsidian API; the cast keeps the access typed.
+  const withPlugins = app as App & { plugins?: { plugins?: Record<string, { apiV1?: TasksApiV1 }> } };
+  return withPlugins.plugins?.plugins?.["obsidian-tasks-plugin"]?.apiV1;
 }
-export function ensureSectorInLine(line, sector) {
+export function ensureSectorInLine(line: string, sector?: string): string {
   if (!sector) return line;
   const tag = `#${sector}`;
   if (new RegExp(`(^|\\s)${tag}\\b`, "i").test(line)) return line;
@@ -284,15 +286,15 @@ export function ensureSectorInLine(line, sector) {
   }
   return `${line} ${tag}`;
 }
-export function ensureTaskMarker(line) {
+export function ensureTaskMarker(line: string): string {
   if (new RegExp(`(^|\\s)#${TASK_MARKER_TAG}\\b`, "i").test(line)) return line;
   const boxMatch = line.match(/^(\s*[-*]\s*\[[ xX]\]\s*)(.*)$/);
   if (boxMatch) return `${boxMatch[1]}${boxMatch[2]} #${TASK_MARKER_TAG}`.replace(/\s+#/, " #");
   return `${line} #${TASK_MARKER_TAG}`;
 }
-export function isTaskLine(line) {
+export function isTaskLine(line: string): boolean {
   return TASK_LINE.test(line);
 }
-export function hasTaskMarker(line) {
+export function hasTaskMarker(line: string): boolean {
   return new RegExp(`(^|\\s)#${TASK_MARKER_TAG}\\b`, "i").test(line);
 }

@@ -1,4 +1,6 @@
-import { Notice, PluginSettingTab, Setting, TFile, normalizePath } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, TFile, normalizePath } from "obsidian";
+import type { BelkiSettings, SectorConfig } from "./types";
+import type BelkiPlugin from "./main";
 import { colorForName } from "./colors";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "./labels";
 import { projectDisplayName } from "./projects";
@@ -6,7 +8,7 @@ import { DEFAULT_SECTORS, SECTOR_TAG_PATTERN, applySectorSettings, isReservedSec
 import { FONT_OPTIONS, OVERDUE_RANGES, SORT_MODES } from "./types";
 
 export const DEFAULT_DATA_FOLDER_PATH = "_belki_files";
-export const DEFAULT_SETTINGS = {
+export const DEFAULT_SETTINGS: BelkiSettings = {
   tasksFilePath: "Tasks.md",
   dataFolderPath: DEFAULT_DATA_FOLDER_PATH,
   sectors: DEFAULT_SECTORS.map((s) => ({ ...s })),
@@ -38,13 +40,13 @@ export const DEFAULT_SETTINGS = {
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
-export const OVERDUE_RANGE_LABELS = {
+export const OVERDUE_RANGE_LABELS: Record<string, string> = {
   yesterday: "Yesterday",
   last7: "Last 7 days",
   last30: "Last 30 days",
   older: "Older"
 };
-export const FONT_OPTION_LABELS = {
+export const FONT_OPTION_LABELS: Record<string, string> = {
   system: "System Font",
   ibmPlexSans: "IBM Plex Sans",
   ibmPlexMono: "IBM Plex Mono",
@@ -57,7 +59,7 @@ export const FONT_OPTION_LABELS = {
   geistMono: "Geist Mono",
   dmSans: "DM Sans"
 };
-export const BELKI_FONT_STACKS = {
+export const BELKI_FONT_STACKS: Record<string, string> = {
   system: 'var(--font-interface), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   ibmPlexSans: '"IBM Plex Sans", var(--font-interface), system-ui, sans-serif',
   ibmPlexMono: '"IBM Plex Mono", var(--font-monospace), monospace',
@@ -70,8 +72,8 @@ export const BELKI_FONT_STACKS = {
   geistMono: '"Geist Mono", var(--font-monospace), monospace',
   dmSans: '"DM Sans", var(--font-interface), system-ui, sans-serif'
 };
-export function normalizeLabelColorMap(colors) {
-  const normalizedColors = {};
+export function normalizeLabelColorMap(colors?: Record<string, string>): Record<string, string> {
+  const normalizedColors: Record<string, string> = {};
   for (const [label, color] of Object.entries(colors || {})) {
     const normalized = normalizeLabelName(label);
     if (!normalized) {
@@ -81,11 +83,11 @@ export function normalizeLabelColorMap(colors) {
   }
   return normalizedColors;
 }
-export function normalizeLabelRegistry(labels) {
+export function normalizeLabelRegistry(labels?: string[]): string[] {
   return dedupeLabels(labels || []);
 }
 export const LUCIDE_ICON_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-export function normalizeIcons(savedIcons) {
+export function normalizeIcons(savedIcons?: Record<string, string>): Record<string, string> {
   const result = { ...DEFAULT_SETTINGS.icons };
   for (const key of Object.keys(DEFAULT_SETTINGS.icons)) {
     const value = savedIcons == null ? void 0 : savedIcons[key];
@@ -95,34 +97,34 @@ export function normalizeIcons(savedIcons) {
   }
   return result;
 }
-export function normalizeDataFolderPath(value) {
+export function normalizeDataFolderPath(value?: string): string {
   const trimmed = (value || "").trim().replace(/^\/+/, "");
   const normalized = normalizePath(trimmed || DEFAULT_DATA_FOLDER_PATH).replace(/^\/+/, "").replace(/\/+$/, "");
   return normalized || DEFAULT_DATA_FOLDER_PATH;
 }
-export function normalizeSortMode(value) {
+export function normalizeSortMode(value?: string): string {
   return SORT_MODES.includes(value) ? value : DEFAULT_SETTINGS.sortMode;
 }
-export function normalizeOverdueRange(value) {
+export function normalizeOverdueRange(value?: string): string {
   return OVERDUE_RANGES.includes(value) ? value : DEFAULT_SETTINGS.defaultOverdueRange;
 }
-export function normalizeAutoDeleteDays(value) {
+export function normalizeAutoDeleteDays(value?: number | string): number {
   const num = typeof value === "number" ? Math.floor(value) : parseInt(value, 10);
   return Number.isInteger(num) && num > 0 ? num : 0;
 }
-export function normalizeFontOption(value) {
+export function normalizeFontOption(value?: string): string {
   return FONT_OPTIONS.includes(value) ? value : "system";
 }
-export function fontOptionLabel(option) {
+export function fontOptionLabel(option: string): string {
   return FONT_OPTION_LABELS[option];
 }
-export function overdueRangeLabel(range) {
+export function overdueRangeLabel(range: string): string {
   return OVERDUE_RANGE_LABELS[range];
 }
-export function fontStackForOption(option) {
+export function fontStackForOption(option?: string): string {
   return BELKI_FONT_STACKS[option] || BELKI_FONT_STACKS.system;
 }
-export const THEME_COLOR_KEYS = [
+export const THEME_COLOR_KEYS: { key: string; cssVar: string; label: string }[] = [
   { key: "bg", cssVar: "--belki-bg", label: "Background" },
   { key: "surface", cssVar: "--belki-surface", label: "Surfaces (modals, chips)" },
   { key: "sidebarBg", cssVar: "--belki-sidebar-bg", label: "Sidebar background" },
@@ -138,7 +140,7 @@ export const THEME_COLOR_KEYS = [
   { key: "danger", cssVar: "--belki-danger", label: "Danger / delete" },
   { key: "chipBg", cssVar: "--belki-chip-bg", label: "Chip background" }
 ];
-export const THEME_PRESETS = {
+export const THEME_PRESETS: Record<string, Record<string, string>> = {
   light: {
     bg: "#ffffff",
     surface: "#ffffff",
@@ -172,47 +174,47 @@ export const THEME_PRESETS = {
     chipBg: "#2a2a2a"
   }
 };
-export const THEME_PRESET_OPTIONS = [
+export const THEME_PRESET_OPTIONS: [string, string][] = [
   ["obsidian", "Follow Obsidian theme (default)"],
   ["light", "Light"],
   ["dark", "Dark"],
   ["custom", "Custom colors"]
 ];
-export function normalizeThemePreset(value) {
+export function normalizeThemePreset(value?: string): string {
   return value === "light" || value === "dark" || value === "custom" ? value : "obsidian";
 }
-export function normalizeThemeColors(raw) {
-  const result = {};
-  const source = raw && typeof raw === "object" ? raw : {};
+export function normalizeThemeColors(raw?: Record<string, string> | null): Record<string, string> {
+  const result: Record<string, string> = {};
+  const source: Record<string, string> = raw && typeof raw === "object" ? raw : {};
   for (const entry of THEME_COLOR_KEYS) {
     const value = typeof source[entry.key] === "string" ? source[entry.key].trim() : "";
     result[entry.key] = value || THEME_PRESETS.light[entry.key];
   }
   return result;
 }
-export function resolveThemeColors(settings) {
+export function resolveThemeColors(settings: BelkiSettings): Record<string, string> | null {
   if (settings.themePreset === "custom") return normalizeThemeColors(settings.themeColors);
   if (settings.themePreset === "light" || settings.themePreset === "dark") {
     return THEME_PRESETS[settings.themePreset];
   }
   return null;
 }
-export function hexToRgba(hex, alpha) {
+export function hexToRgba(hex: string, alpha: number): string {
   const match = /^#?([0-9a-f]{6})$/i.exec((hex || "").trim());
   if (!match) return `rgba(224, 62, 62, ${alpha})`;
   const num = parseInt(match[1], 16);
   return `rgba(${num >> 16 & 255}, ${num >> 8 & 255}, ${num & 255}, ${alpha})`;
 }
-export function applyBelkiThemeSettings(element, settings) {
+export function applyBelkiThemeSettings(element: HTMLElement, settings: BelkiSettings) {
   const colors = resolveThemeColors(settings);
-  const props = {};
+  const props: Record<string, string> = {};
   for (const entry of THEME_COLOR_KEYS) {
     props[entry.cssVar] = colors ? colors[entry.key] : "";
   }
   props["--belki-danger-light"] = colors ? hexToRgba(colors.danger, 0.16) : "";
   element.setCssProps(props);
 }
-export function applyBelkiFontSettings(element, settings) {
+export function applyBelkiFontSettings(element: HTMLElement, settings: BelkiSettings) {
   element.setCssProps({
     "--belki-font-ui": fontStackForOption(settings.uiFont),
     "--belki-font-task-title": fontStackForOption(settings.taskTitleFont),
@@ -220,9 +222,10 @@ export function applyBelkiFontSettings(element, settings) {
     "--belki-font-label": fontStackForOption(settings.labelFont)
   });
 }
-export const BelkiSettingTab = class extends PluginSettingTab {
-  [key: string]: any;
-  constructor(app, plugin) {
+export class BelkiSettingTab extends PluginSettingTab {
+  plugin: BelkiPlugin;
+  appearanceOpen?: boolean;
+  constructor(app: App, plugin: BelkiPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -389,7 +392,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       this.containerEl = rootContainer;
     }
   }
-  addIconSetting(name, key) {
+  addIconSetting(name: string, key: string) {
     new Setting(this.containerEl).setName(name).addText((text) => {
       text.setValue(this.plugin.settings.icons[key]).onChange(async (value) => {
         const trimmed = value.trim();
@@ -399,7 +402,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       });
     });
   }
-  addThemeColorSetting(entry) {
+  addThemeColorSetting(entry: { key: string; cssVar: string; label: string }) {
     new Setting(this.containerEl).setName(entry.label).addColorPicker((picker) => {
       const colors = normalizeThemeColors(this.plugin.settings.themeColors);
       picker.setValue(colors[entry.key]).onChange(async (value) => {
@@ -412,7 +415,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       });
     });
   }
-  addSectorSetting(sector, index, total) {
+  addSectorSetting(sector: SectorConfig, index: number, total: number) {
     const setting = new Setting(this.containerEl).setName(`Sector ${index + 1}`);
     let tagValue = sector.tag;
     let labelValue = sector.label;
@@ -497,7 +500,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       });
     });
   }
-  async commitSectorEdit(index, rawTag, rawLabel) {
+  async commitSectorEdit(index: number, rawTag: string, rawLabel: string) {
     const sectors = this.plugin.settings.sectors;
     const current = sectors[index];
     if (!current) return;
@@ -548,7 +551,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
     new Notice(tagChanged ? `Sector renamed: #${oldTag} \u2192 #${newTag} (file updated)` : "Sector updated.");
     this.display();
   }
-  async addSector(rawTag, rawLabel) {
+  async addSector(rawTag: string, rawLabel: string) {
     const tag = normalizeSectorTag(rawTag);
     if (!tag || !SECTOR_TAG_PATTERN.test(tag)) {
       new Notice("Invalid tag: only letters, numbers, - _ / allowed.");
@@ -570,7 +573,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
     this.plugin.refreshBelkiViews();
     this.display();
   }
-  async removeSector(index) {
+  async removeSector(index: number) {
     const sectors = this.plugin.settings.sectors;
     if (sectors.length <= 1) {
       new Notice("At least one sector must remain.");
@@ -586,7 +589,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
     new Notice(`Sector "${removed.label}" removed. Existing tasks with #${removed.tag} are kept but no longer shown as their own column (the tag becomes a plain label).`);
     this.display();
   }
-  async moveSector(fromIndex, toIndex) {
+  async moveSector(fromIndex: number, toIndex: number) {
     const sectors = [...this.plugin.settings.sectors];
     if (toIndex < 0 || toIndex >= sectors.length) return;
     const [item] = sectors.splice(fromIndex, 1);
@@ -597,7 +600,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
     this.plugin.refreshBelkiViews();
     this.display();
   }
-  addFontSetting(name, description, key) {
+  addFontSetting(name: string, description: string, key: "uiFont" | "taskTitleFont" | "taskDescriptionFont" | "labelFont") {
     new Setting(this.containerEl).setName(name).setDesc(description).addDropdown((dropdown) => {
       for (const option of FONT_OPTIONS) {
         dropdown.addOption(option, fontOptionLabel(option));
@@ -610,7 +613,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       });
     });
   }
-  addProjectColorSetting(project) {
+  addProjectColorSetting(project: string) {
     const automaticColor = colorForName(project).regular;
     const override = this.plugin.settings.projectColors[project];
     new Setting(this.containerEl).setName(projectDisplayName(project)).setDesc(override ? "Custom color override" : "Automatic palette color").addColorPicker((picker) => {
@@ -654,7 +657,7 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       });
     });
   }
-  addLabelColorSetting(label) {
+  addLabelColorSetting(label: string) {
     const automaticColor = colorForName(label).regular;
     const override = this.plugin.settings.labelColors[label];
     new Setting(this.containerEl).setName(displayLabel(label)).setDesc(override ? "Custom color override" : "Automatic palette color").addColorPicker((picker) => {
@@ -674,4 +677,4 @@ export const BelkiSettingTab = class extends PluginSettingTab {
       });
     });
   }
-};
+}

@@ -3,6 +3,12 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.2.2
+
+### Internal
+- Type-safety cleanup for Obsidian's plugin review: the entire `src/` codebase now uses real TypeScript types (central `Task`/`RepeatRule`/`SectorConfig`/`BelkiSettings`/`ReviewSession` interfaces, typed class fields and method signatures, a typed minimal `TasksApiV1` interface for the Tasks plugin API). This eliminates all ~3,400 advisory `no-unsafe-*`/`no-explicit-any` warnings from the review report; the compiled `main.js` behaves identically.
+- Replaced transpiler-artifact `let _a` optional-chaining temps with native optional chaining.
+
 ## 1.2.1
 
 ### Fixed

@@ -1,4 +1,4 @@
-import { ItemView, Modal, Notice, Platform, TFile, setIcon } from "obsidian";
+import { App, ItemView, MarkdownView, Modal, Notice, Platform, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { showDueDateMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
 import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isToday, todayIso, yesterdayIso } from "../dateUtils";
@@ -9,13 +9,15 @@ import { buildReviewSteps, pruneReviewSession, reviewSectorNeighbors, reviewType
 import { applyBelkiFontSettings, applyBelkiThemeSettings, normalizeOverdueRange, overdueRangeLabel } from "../settings";
 import { E_ID, SECTOR_SET } from "../tasksFormat";
 import { OVERDUE_RANGES } from "../types";
+import type { BelkiSettings, Task } from "../types";
+import { TaskStore } from "../taskStore";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
 export const LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
-export function renderLinkedText(text, el, app) {
+export function renderLinkedText(text: string, el: HTMLElement, app?: App) {
   LINK_RE.lastIndex = 0;
   let last = 0;
-  let match;
+  let match: RegExpExecArray | null;
   while ((match = LINK_RE.exec(text)) !== null) {
     if (match.index > last) el.appendText(text.slice(last, match.index));
     if (match[1]) {
@@ -62,9 +64,34 @@ export const SORT_OPTIONS = [
   { mode: "project", label: "Sector" },
   { mode: "alphabetical", label: "Alphabetical" }
 ];
-export const TaskBoardView = class extends ItemView {
-  [key: string]: any;
-  constructor(leaf, store, settings, saveSettings) {
+export class TaskBoardView extends ItemView {
+  store: TaskStore;
+  settings: BelkiSettings;
+  saveSettings: () => Promise<void>;
+  mode: string;
+  selectedProject: string | null;
+  searchQuery: string;
+  searchOpen: boolean;
+  composerOpen: boolean;
+  highlightedTaskId: string | null;
+  activeFilter: string | null;
+  activeLabel: string | null;
+  draggedTaskId: string | null;
+  draggedTaskIds: string[] | null;
+  selectedTaskIds: Set<string>;
+  mobileNavOpen: boolean;
+  sortPopoverOpen: boolean;
+  reviewOpen: boolean;
+  reviewActionPending: boolean;
+  projectActionsOpen: string | null;
+  projectMenuEl: HTMLElement | null;
+  sidebarScrollLeft: number;
+  pendingScrollSnapshot: { top: number; left: number } | null;
+  composerCleanup: (() => void) | null;
+  renderScheduled: boolean;
+  handleRootKeyDown: (event: KeyboardEvent) => void;
+  unsubscribe?: () => void;
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, saveSettings: () => Promise<void>) {
     super(leaf);
     this.store = store;
     this.settings = settings;
@@ -168,16 +195,14 @@ export const TaskBoardView = class extends ItemView {
     this.render();
   }
   async onClose() {
-    let _a, _b;
-    (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
+    this.composerCleanup?.();
     this.composerCleanup = null;
     this.removeProjectMenu();
     this.containerEl.removeEventListener("keydown", this.handleRootKeyDown, true);
-    (_b = this.unsubscribe) == null ? void 0 : _b.call(this);
+    this.unsubscribe?.();
   }
   removeProjectMenu() {
-    let _a;
-    (_a = this.projectMenuEl) == null ? void 0 : _a.remove();
+    this.projectMenuEl?.remove();
     this.projectMenuEl = null;
   }
   refresh() {
@@ -204,12 +229,11 @@ export const TaskBoardView = class extends ItemView {
     this.render();
   }
   render() {
-    let _a, _b, _c;
-    (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
+    this.composerCleanup?.();
     this.composerCleanup = null;
     this.removeProjectMenu();
     const { containerEl } = this;
-    const sidebarScrollLeft = (_c = (_b = containerEl.querySelector(".belki-sidebar")) == null ? void 0 : _b.scrollLeft) != null ? _c : this.sidebarScrollLeft;
+    const sidebarScrollLeft = containerEl.querySelector(".belki-sidebar")?.scrollLeft ?? this.sidebarScrollLeft;
     containerEl.empty();
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
@@ -258,7 +282,7 @@ export const TaskBoardView = class extends ItemView {
       });
     });
   }
-  restoreSidebarScroll(scrollLeft) {
+  restoreSidebarScroll(scrollLeft: number) {
     window.requestAnimationFrame(() => {
       const sidebar = this.containerEl.querySelector(".belki-sidebar");
       if (!sidebar) {
@@ -268,7 +292,7 @@ export const TaskBoardView = class extends ItemView {
       this.sidebarScrollLeft = sidebar.scrollLeft;
     });
   }
-  renderSidebar(parent) {
+  renderSidebar(parent: HTMLElement) {
     const sidebar = parent.createEl("aside", { cls: "belki-sidebar" });
     sidebar.toggleClass("is-mobile-nav-open", this.mobileNavOpen);
     sidebar.scrollLeft = this.sidebarScrollLeft;
@@ -373,7 +397,7 @@ export const TaskBoardView = class extends ItemView {
       "completed"
     );
   }
-  renderReviewNavButton(parent, type) {
+  renderReviewNavButton(parent: HTMLElement, type: string) {
     const session = this.settings.reviewSession;
     const isActiveSession = session && session.type === type;
     const button = parent.createEl("button", { cls: "belki-project-button" });
@@ -405,7 +429,7 @@ export const TaskBoardView = class extends ItemView {
       void this.startReview(type);
     });
   }
-  async startReview(type) {
+  async startReview(type: string) {
     const existing = this.settings.reviewSession;
     if (existing && existing.type !== type) {
       new Notice(
@@ -429,7 +453,7 @@ export const TaskBoardView = class extends ItemView {
     this.reviewOpen = true;
     this.render();
   }
-  stampReviewCompleted(type) {
+  stampReviewCompleted(type: string) {
     if (type === "weekly") {
       this.settings.lastWeeklyReviewKey = currentIsoWeekKey();
     } else if (type === "monthly") {
@@ -437,7 +461,7 @@ export const TaskBoardView = class extends ItemView {
       this.settings.lastWeeklyReviewKey = currentIsoWeekKey();
     }
   }
-  runReviewAction(action) {
+  runReviewAction(action: () => Promise<void>) {
     if (this.reviewActionPending) return;
     this.reviewActionPending = true;
     void action().finally(() => {
@@ -477,7 +501,7 @@ export const TaskBoardView = class extends ItemView {
     await this.saveSettings();
     this.render();
   }
-  async applyReviewSectorAction(action) {
+  async applyReviewSectorAction(action: string) {
     const step = this.currentReviewStep();
     const task = this.currentReviewTask();
     if (!step || !task) {
@@ -502,7 +526,7 @@ export const TaskBoardView = class extends ItemView {
     await this.store.updateTask(task.id, { project: target.tag });
     await this.advanceReview();
   }
-  async applyReviewWaitingAction(action) {
+  async applyReviewWaitingAction(action: string) {
     const task = this.currentReviewTask();
     if (task && action === "followup") {
       const firstSector = this.settings.sectors[0];
@@ -512,14 +536,14 @@ export const TaskBoardView = class extends ItemView {
     }
     await this.advanceReview();
   }
-  async applyReviewInboxAction(action, sectorTag?) {
+  async applyReviewInboxAction(action: string, sectorTag?: string) {
     const task = this.currentReviewTask();
     if (task && action === "assign" && sectorTag) {
       await this.store.updateTask(task.id, { project: sectorTag });
     }
     await this.advanceReview();
   }
-  async applyReviewDateAssign(sectorTag) {
+  async applyReviewDateAssign(sectorTag: string) {
     const task = this.currentReviewTask();
     if (task && sectorTag) {
       await this.store.updateTask(task.id, { project: sectorTag });
@@ -527,7 +551,7 @@ export const TaskBoardView = class extends ItemView {
     }
     await this.advanceReview();
   }
-  async applyReviewDateAction(action) {
+  async applyReviewDateAction(action: string) {
     const task = this.currentReviewTask();
     if (task && action === "reschedule") {
       await this.store.updateTaskViaModal(task.id);
@@ -540,7 +564,7 @@ export const TaskBoardView = class extends ItemView {
     this.reviewOpen = false;
     this.render();
   }
-  renderNavButton(parent, label, mode, count, iconKey) {
+  renderNavButton(parent: HTMLElement, label: string, mode: string, count?: number, iconKey?: string) {
     const button = parent.createEl("button", { cls: "belki-nav-button" });
     const active = label === "Search" ? false : label === "Sectors" ? this.mode === "projects" && this.selectedProject === null : this.mode === mode;
     button.toggleClass("is-active", active);
@@ -570,7 +594,7 @@ export const TaskBoardView = class extends ItemView {
     });
     return button;
   }
-  renderMain(parent) {
+  renderMain(parent: HTMLElement) {
     const main = parent.createEl("main", { cls: "belki-main" });
     const tasks = this.store.getTasks();
     const active = tasks.filter((task) => !task.completed);
@@ -597,10 +621,10 @@ export const TaskBoardView = class extends ItemView {
       });
     }
   }
-  groupTasks(tasks) {
-    const result = /* @__PURE__ */ new Map();
+  groupTasks(tasks: Task[]) {
+    const result = new Map<string, Task[]>();
     if (this.settings.groupBy === "label") {
-      const noLabel = [];
+      const noLabel: Task[] = [];
       for (const task of tasks) {
         if (task.labels.length === 0) {
           noLabel.push(task);
@@ -613,7 +637,7 @@ export const TaskBoardView = class extends ItemView {
       if (noLabel.length > 0) result.set("No label", noLabel);
     } else if (this.settings.groupBy === "priority") {
       const order = ["P1", "P2", "P3", "P4", "none"];
-      const buckets = /* @__PURE__ */ new Map();
+      const buckets = new Map<string, Task[]>();
       for (const task of tasks) {
         const p = task.priority || "none";
         if (!buckets.has(p)) buckets.set(p, []);
@@ -628,7 +652,7 @@ export const TaskBoardView = class extends ItemView {
     }
     return result;
   }
-  renderSortingControl(parent) {
+  renderSortingControl(parent: HTMLElement) {
     const wrapper = parent.createDiv({ cls: "belki-sorting" });
     const button = wrapper.createEl("button", {
       cls: "belki-sorting-button",
@@ -707,7 +731,7 @@ export const TaskBoardView = class extends ItemView {
       }
     }
   }
-  renderTaskSections(parent, allTasks) {
+  renderTaskSections(parent: HTMLElement, allTasks: Task[]) {
     parent.empty();
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
@@ -783,7 +807,7 @@ export const TaskBoardView = class extends ItemView {
       return;
     }
     const visible = this.getVisibleTasks(allTasks);
-    const headerAction = this.mode === "inbox" ? (header) => {
+    const headerAction = this.mode === "inbox" ? (header: HTMLElement) => {
       const session = this.settings.reviewSession;
       const isActiveSession = session && session.type === "inbox-only";
       const processButton = header.createEl("button", {
@@ -803,7 +827,7 @@ export const TaskBoardView = class extends ItemView {
     const section = this.createSection(parent, this.getTitle(), visible.length, headerAction);
     this.renderTaskList(section, visible);
   }
-  renderCompletedView(parent, allTasks) {
+  renderCompletedView(parent: HTMLElement, allTasks: Task[]) {
     const archivedSet = new Set(this.settings.archivedProjects);
     const completed = allTasks.filter(
       (task) => !archivedSet.has(normalizeTaskProject(task.project) || "") && task.completed
@@ -812,8 +836,8 @@ export const TaskBoardView = class extends ItemView {
       this.renderEmptySection(parent, "No completed tasks yet.");
       return;
     }
-    const groups = /* @__PURE__ */ new Map();
-    const noDate = [];
+    const groups = new Map<string, Task[]>();
+    const noDate: Task[] = [];
     for (const task of completed) {
       const date = task.completedDate;
       if (date) {
@@ -834,7 +858,7 @@ export const TaskBoardView = class extends ItemView {
       this.renderTaskList(section, noDate);
     }
   }
-  renderFiltersAndLabels(parent, allTasks) {
+  renderFiltersAndLabels(parent: HTMLElement, allTasks: Task[]) {
     if (this.activeFilter) {
       const definition = this.getFilterDefinitions(allTasks).find(
         (filter) => filter.id === this.activeFilter
@@ -886,14 +910,14 @@ export const TaskBoardView = class extends ItemView {
       }, getLabelColor(label, this.settings.labelColors).regular);
     }
   }
-  renderBackToFilters(parent) {
+  renderBackToFilters(parent: HTMLElement) {
     parent.createEl("button", { cls: "belki-back-button", text: "Back to Filters & Labels" }).addEventListener("click", () => {
       this.activeFilter = null;
       this.activeLabel = null;
       this.render();
     });
   }
-  renderFilterRow(parent, name, count, icon, onClick, color?) {
+  renderFilterRow(parent: HTMLElement, name: string, count: number, icon: string, onClick: () => void, color?: string) {
     const row = parent.createEl("button", { cls: "belki-filter-row", attr: { type: "button" } });
     row.toggleClass("belki-label-row", Boolean(color));
     const dot = row.createSpan({ cls: "belki-filter-dot", text: icon });
@@ -906,7 +930,7 @@ export const TaskBoardView = class extends ItemView {
     row.createSpan({ cls: "belki-row-count", text: String(count) });
     row.addEventListener("click", onClick);
   }
-  createSection(parent, title, count, renderHeaderAction?) {
+  createSection(parent: HTMLElement, title: string, count: number, renderHeaderAction?: (header: HTMLElement) => void) {
     const section = parent.createDiv({ cls: "belki-section" });
     const header = section.createDiv({ cls: "belki-section-header" });
     header.createEl("h2", { text: title });
@@ -914,7 +938,7 @@ export const TaskBoardView = class extends ItemView {
     renderHeaderAction == null ? void 0 : renderHeaderAction(header);
     return section;
   }
-  renderArchivedProjectsView(parent, allTasks) {
+  renderArchivedProjectsView(parent: HTMLElement, allTasks: Task[]) {
     const archivedProjects = this.settings.archivedProjects;
     if (archivedProjects.length === 0) {
       this.renderEmptySection(parent, "No archived projects.");
@@ -941,7 +965,7 @@ export const TaskBoardView = class extends ItemView {
       this.renderTaskList(section, this.sortTasks(projectTasks));
     }
   }
-  renderOverdueRangeSelect(parent) {
+  renderOverdueRangeSelect(parent: HTMLElement) {
     const select = parent.createEl("select", {
       cls: "belki-overdue-range-select",
       attr: {
@@ -964,7 +988,7 @@ export const TaskBoardView = class extends ItemView {
       })();
     });
   }
-  enableTodayDrop(section) {
+  enableTodayDrop(section: HTMLElement) {
     section.addClass("belki-drop-zone");
     section.addEventListener("dragover", (event) => {
       const movable = this.getDraggedTasks(event).filter(
@@ -1000,7 +1024,7 @@ export const TaskBoardView = class extends ItemView {
       void this.store.updateManyTasks(ids, { due: todayIso() });
     });
   }
-  enableProjectDrop(button, project) {
+  enableProjectDrop(button: HTMLElement, project: string) {
     button.addClass("belki-project-drop-zone");
     button.dataset.project = project;
     button.addEventListener("dragover", (event) => {
@@ -1037,7 +1061,7 @@ export const TaskBoardView = class extends ItemView {
       void this.store.updateManyTasks(ids, { project });
     });
   }
-  enableInboxDrop(button) {
+  enableInboxDrop(button: HTMLElement) {
     button.addClass("belki-inbox-drop-zone");
     button.addEventListener("dragover", (event) => {
       const movable = this.getDraggedTasks(event).filter(
@@ -1073,7 +1097,7 @@ export const TaskBoardView = class extends ItemView {
       void this.store.updateManyTasks(ids, { project: void 0 });
     });
   }
-  enableDueDateDrop(section, due) {
+  enableDueDateDrop(section: HTMLElement, due: string) {
     section.addClass("belki-date-drop-zone");
     section.dataset.due = due;
     section.addEventListener("dragover", (event) => {
@@ -1112,8 +1136,7 @@ export const TaskBoardView = class extends ItemView {
       element.removeClass("is-drop-available");
     });
   }
-  showDropTargets(tasks) {
-    let _a;
+  showDropTargets(tasks: Task[]) {
     this.clearDropTargets();
     const list = (tasks || []).filter((t) => !t.completed);
     if (list.length === 0) return;
@@ -1125,10 +1148,10 @@ export const TaskBoardView = class extends ItemView {
       }
     }
     if (list.some((t) => normalizeTaskProject(t.project))) {
-      (_a = this.containerEl.querySelector(".belki-inbox-drop-zone")) == null ? void 0 : _a.addClass("is-drop-available");
+      this.containerEl.querySelector(".belki-inbox-drop-zone")?.addClass("is-drop-available");
     }
     if (list.some((t) => !isToday(t.due) && isBeforeToday(t.due))) {
-      (_a = this.containerEl.querySelector(".belki-drop-zone")) == null ? void 0 : _a.addClass("is-drop-available");
+      this.containerEl.querySelector(".belki-drop-zone")?.addClass("is-drop-available");
     }
     for (const dateTarget of Array.from(
       this.containerEl.querySelectorAll<HTMLElement>(".belki-date-drop-zone")
@@ -1138,7 +1161,7 @@ export const TaskBoardView = class extends ItemView {
       }
     }
   }
-  createDragImage(row, count) {
+  createDragImage(row: HTMLElement, count: number) {
     if (count && count > 1) {
       const badge = activeDocument.body.createDiv({ cls: ["belki-drag-preview", "belki-drag-preview-multi"] });
       badge.setText(`${count} tasks`);
@@ -1149,7 +1172,7 @@ export const TaskBoardView = class extends ItemView {
       });
       return badge;
     }
-    const dragImage = row.cloneNode(true);
+    const dragImage = row.cloneNode(true) as HTMLElement;
     dragImage.addClass("belki-drag-preview");
     dragImage.setCssStyles({
       position: "absolute",
@@ -1160,11 +1183,10 @@ export const TaskBoardView = class extends ItemView {
     activeDocument.body.appendChild(dragImage);
     return dragImage;
   }
-  getDraggedTasks(event) {
-    let _a, _b;
+  getDraggedTasks(event: DragEvent): Task[] {
     let ids = this.draggedTaskIds;
     if (!ids || ids.length === 0) {
-      const fallbackId = this.draggedTaskId || ((_a = event.dataTransfer) == null ? void 0 : _a.getData("application/x-belki-task-id")) || ((_b = event.dataTransfer) == null ? void 0 : _b.getData("text/plain"));
+      const fallbackId = this.draggedTaskId || event.dataTransfer?.getData("application/x-belki-task-id") || event.dataTransfer?.getData("text/plain");
       ids = fallbackId ? [fallbackId] : [];
     }
     if (ids.length === 0) {
@@ -1173,7 +1195,7 @@ export const TaskBoardView = class extends ItemView {
     const byId = new Map(this.store.getTasks().map((task) => [task.id, task]));
     return ids.map((id) => byId.get(id)).filter((task) => task !== void 0);
   }
-  toggleTaskSelection(id) {
+  toggleTaskSelection(id: string) {
     if (this.selectedTaskIds.has(id)) {
       this.selectedTaskIds.delete(id);
     } else {
@@ -1181,7 +1203,7 @@ export const TaskBoardView = class extends ItemView {
     }
     this.render();
   }
-  hasDragTarget(task) {
+  hasDragTarget(task: Task) {
     if (task.completed) {
       return false;
     }
@@ -1195,11 +1217,11 @@ export const TaskBoardView = class extends ItemView {
     const canMoveToInbox = Boolean(currentProject);
     return canMoveToToday || canMoveToUpcomingDate || canMoveToProject || canMoveToInbox;
   }
-  renderEmptySection(parent, text) {
+  renderEmptySection(parent: HTMLElement, text: string) {
     const section = parent.createDiv({ cls: "belki-section" });
     section.createDiv({ cls: "belki-empty", text });
   }
-  renderTaskList(parent, tasks) {
+  renderTaskList(parent: HTMLElement, tasks: Task[]) {
     const list = parent.createDiv({ cls: "belki-task-list" });
     if (tasks.length === 0) {
       list.createDiv({ cls: "belki-empty belki-empty-small", text: "Nothing here." });
@@ -1209,7 +1231,7 @@ export const TaskBoardView = class extends ItemView {
       this.renderTaskRow(list, task);
     }
   }
-  renderTaskRow(parent, task) {
+  renderTaskRow(parent: HTMLElement, task: Task) {
     const row = parent.createDiv({ cls: "belki-task-row" });
     row.toggleClass("is-completed", task.completed);
     row.toggleClass("is-highlighted", this.highlightedTaskId === task.id);
@@ -1250,7 +1272,6 @@ export const TaskBoardView = class extends ItemView {
         event.stopPropagation();
       });
       dragHandle.addEventListener("dragstart", (event) => {
-        let _a, _b;
         event.stopPropagation();
         const dragIds = this.selectedTaskIds.has(task.id) && this.selectedTaskIds.size > 1 ? Array.from(this.selectedTaskIds) : [task.id];
         this.draggedTaskIds = dragIds;
@@ -1258,8 +1279,8 @@ export const TaskBoardView = class extends ItemView {
         const draggedTasks = this.getDraggedTasks(event);
         const dragImage = this.createDragImage(row, dragIds.length);
         row.addClass("is-dragging");
-        (_a = event.dataTransfer) == null ? void 0 : _a.setData("application/x-belki-task-id", task.id);
-        (_b = event.dataTransfer) == null ? void 0 : _b.setData("text/plain", task.id);
+        event.dataTransfer?.setData("application/x-belki-task-id", task.id);
+        event.dataTransfer?.setData("text/plain", task.id);
         if (event.dataTransfer) {
           event.dataTransfer.effectAllowed = "move";
           event.dataTransfer.setDragImage(dragImage, 24, 24);
@@ -1384,7 +1405,7 @@ export const TaskBoardView = class extends ItemView {
       void this.store.deleteTask(task.id);
     });
   }
-  async openTaskInNote(task) {
+  async openTaskInNote(task: Task) {
     const path = task.sourcePath || this.store.filePath;
     if (!path) {
       new Notice("No source file for this task.");
@@ -1407,18 +1428,17 @@ export const TaskBoardView = class extends ItemView {
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.openFile(file);
     if (line >= 0) {
-      const view = leaf.view as any;
-      const editor = view && view.editor;
-      if (editor) {
+      if (leaf.view instanceof MarkdownView) {
+        const editor = leaf.view.editor;
         editor.setCursor({ line, ch: 0 });
         editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
       }
     }
   }
-  openTaskDetail(task) {
+  openTaskDetail(task: Task) {
     void this.store.updateTaskViaModal(task.id).then(() => this.renderPreservingMainScroll());
   }
-  getVisibleTasks(tasks) {
+  getVisibleTasks(tasks: Task[]): Task[] {
     const archivedSet = new Set(this.settings.archivedProjects);
     const active = tasks.filter(
       (task) => !task.completed && !archivedSet.has(normalizeTaskProject(task.project) || "") && !task.parentId
@@ -1469,12 +1489,12 @@ export const TaskBoardView = class extends ItemView {
     }
     return this.sortTasks(active);
   }
-  getInboxTasks(tasks) {
+  getInboxTasks(tasks: Task[]): Task[] {
     return this.sortTasks(
       tasks.filter((task) => !normalizeTaskProject(task.project))
     );
   }
-  getTodayTasks(tasks) {
+  getTodayTasks(tasks: Task[]): Task[] {
     const today = todayIso();
     return [
       ...tasks.filter((task) => task.due === today),
@@ -1486,10 +1506,10 @@ export const TaskBoardView = class extends ItemView {
       return this.compareTasks(a, b);
     });
   }
-  getOverdueTasks(tasks) {
+  getOverdueTasks(tasks: Task[]): Task[] {
     return tasks.filter((task) => this.isInSelectedOverdueRange(task));
   }
-  isInSelectedOverdueRange(task) {
+  isInSelectedOverdueRange(task: Task): boolean {
     if (task.completed || !task.due || task.due >= todayIso()) {
       return false;
     }
@@ -1504,7 +1524,7 @@ export const TaskBoardView = class extends ItemView {
     }
     return task.due < addDaysIso2(-30);
   }
-  getUpcomingTasks(tasks) {
+  getUpcomingTasks(tasks: Task[]): Task[] {
     return tasks.filter((task) => isAfterToday(task.due)).sort((a, b) => {
       if (a.due && b.due && a.due !== b.due) {
         return compareIsoDates(a.due, b.due);
@@ -1517,14 +1537,13 @@ export const TaskBoardView = class extends ItemView {
       this.store.getTasks().filter((task) => !task.completed && isAfterToday(task.due)).map((task) => task.due).filter((due) => Boolean(due))
     )].sort(compareIsoDates);
   }
-  sortTasks(tasks) {
+  sortTasks(tasks: Task[]): Task[] {
     return [...tasks].sort((a, b) => this.compareTasks(a, b));
   }
-  compareTasks(a, b) {
+  compareTasks(a: Task, b: Task): number {
     return compareTasksByMode(a, b, this.settings.sortMode);
   }
   getTitle() {
-    let _a;
     if (this.mode === "inbox") {
       return "Inbox";
     }
@@ -1545,9 +1564,9 @@ export const TaskBoardView = class extends ItemView {
     }
     if (this.mode === "filters") {
       if (this.activeFilter) {
-        return ((_a = this.getFilterDefinitions(this.store.getTasks()).find(
+        return this.getFilterDefinitions(this.store.getTasks()).find(
           (filter) => filter.id === this.activeFilter
-        )) == null ? void 0 : _a.name) || "Filters & Labels";
+        )?.name || "Filters & Labels";
       }
       if (this.activeLabel) {
         return displayLabel(this.activeLabel);
@@ -1556,7 +1575,7 @@ export const TaskBoardView = class extends ItemView {
     }
     return "Search";
   }
-  getFilterDefinitions(tasks) {
+  getFilterDefinitions(tasks: Task[]) {
     const active = tasks.filter((task) => !task.completed);
     const today = todayIso();
     const definitions = [
@@ -1627,7 +1646,7 @@ export const TaskBoardView = class extends ItemView {
       count: definition.tasks.length
     }));
   }
-  renderSearchOverlay(parent) {
+  renderSearchOverlay(parent: HTMLElement) {
     const backdrop = parent.createDiv({ cls: "belki-search-backdrop" });
     const modal = backdrop.createDiv({ cls: "belki-search-modal" });
     const input = modal.createEl("input", {
@@ -1640,7 +1659,7 @@ export const TaskBoardView = class extends ItemView {
       }
     });
     const results = modal.createDiv({ cls: "belki-search-results" });
-    let matches = [];
+    let matches: Task[] = [];
     let selectedIndex = 0;
     const close = () => {
       this.searchOpen = false;
@@ -1727,7 +1746,7 @@ export const TaskBoardView = class extends ItemView {
     renderResults();
     window.setTimeout(() => input.focus(), 0);
   }
-  renderReviewOverlay(parent) {
+  renderReviewOverlay(parent: HTMLElement) {
     const rawSession = this.settings.reviewSession;
     if (!rawSession) {
       this.reviewOpen = false;
@@ -1791,7 +1810,7 @@ export const TaskBoardView = class extends ItemView {
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
-    const withHotkey = (el, letter) => {
+    const withHotkey = (el: HTMLElement, letter: string) => {
       el.setAttribute("data-hotkey", letter);
       el.createSpan({ cls: "belki-hotkey-badge", text: letter.toUpperCase() });
     };
@@ -1909,7 +1928,7 @@ export const TaskBoardView = class extends ItemView {
     modal.tabIndex = -1;
     modal.focus();
   }
-  openTaskLocation(task) {
+  openTaskLocation(task: Task) {
     this.searchOpen = false;
     this.searchQuery = "";
     this.composerOpen = false;
@@ -1933,7 +1952,7 @@ export const TaskBoardView = class extends ItemView {
     this.render();
   }
   getAllLabels() {
-    const labels = [];
+    const labels: string[] = [];
     labels.push(...this.settings.labelRegistry);
     for (const task of this.store.getTasks()) {
       for (const label of task.labels) {
@@ -1945,7 +1964,7 @@ export const TaskBoardView = class extends ItemView {
     }
     return dedupeLabels(labels).sort((a, b) => a.localeCompare(b));
   }
-  ensureLabelColor(label) {
+  ensureLabelColor(label: string) {
     const normalized = normalizeLabelName(label);
     if (!normalized || this.settings.labelRegistry.includes(normalized)) {
       return;
@@ -1974,15 +1993,15 @@ export const TaskBoardView = class extends ItemView {
       })();
     }).open();
   }
-  stopEscape(event) {
+  stopEscape(event: Event) {
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
   }
 };
-export const LabelPromptModal = class extends Modal {
-  [key: string]: any;
-  constructor(app, onSubmit) {
+export class LabelPromptModal extends Modal {
+  onSubmit: (value: string) => void;
+  constructor(app: App, onSubmit: (value: string) => void) {
     super(app);
     this.onSubmit = onSubmit;
   }
@@ -2022,11 +2041,11 @@ export const LabelPromptModal = class extends Modal {
     });
     input.focus();
   }
-};
-export function byOrder(a, b) {
+}
+export function byOrder(a: Task, b: Task): number {
   return a.order - b.order;
 }
-export function compareTasksByMode(a, b, mode) {
+export function compareTasksByMode(a: Task, b: Task, mode: string): number {
   if (mode === "due") {
     return compareOptionalDateAsc(a.due, b.due) || byOrder(a, b);
   }
@@ -2047,13 +2066,13 @@ export function compareTasksByMode(a, b, mode) {
   }
   return compareSmart(a, b);
 }
-export function compareSmart(a, b) {
+export function compareSmart(a: Task, b: Task): number {
   return comparePriority(a, b) || compareOptionalDateAsc(a.deadline, b.deadline) || compareOptionalDateAsc(a.due, b.due) || compareOptionalDateAsc(a.created, b.created) || byOrder(a, b);
 }
-export function comparePriority(a, b) {
+export function comparePriority(a: Task, b: Task): number {
   return priorityRank(a.priority) - priorityRank(b.priority);
 }
-export function priorityRank(priority) {
+export function priorityRank(priority: string): number {
   if (priority === "P1") {
     return 0;
   }
@@ -2068,7 +2087,7 @@ export function priorityRank(priority) {
   }
   return 4;
 }
-export function compareOptionalDateAsc(a, b) {
+export function compareOptionalDateAsc(a?: string, b?: string): number {
   if (a && b) {
     return compareIsoDates(a, b);
   }
@@ -2080,7 +2099,7 @@ export function compareOptionalDateAsc(a, b) {
   }
   return 0;
 }
-export function compareOptionalDateDesc(a, b) {
+export function compareOptionalDateDesc(a?: string, b?: string): number {
   if (a && b) {
     return compareIsoDates(b, a);
   }
@@ -2092,7 +2111,7 @@ export function compareOptionalDateDesc(a, b) {
   }
   return 0;
 }
-export function formatDueChip(value) {
+export function formatDueChip(value: string): string {
   const today = todayIso();
   if (value === today) {
     return "Today";
@@ -2105,7 +2124,7 @@ export function formatDueChip(value) {
   }
   return formatShortDate(value);
 }
-export function formatGroupHeader(value) {
+export function formatGroupHeader(value: string): string {
   const day = formatShortDate(value);
   const weekday = formatWeekday(value);
   if (value === todayIso()) {
@@ -2116,14 +2135,14 @@ export function formatGroupHeader(value) {
   }
   return `${day} - ${weekday}`;
 }
-export function formatCompletedHeader(date) {
+export function formatCompletedHeader(date: string): string {
   if (date === todayIso()) return "Today";
   if (date === yesterdayIso()) return "Yesterday";
   const parsed = parseIsoDate(date);
   if (!parsed) return date;
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" }).format(parsed);
 }
-export function formatShortDate(value) {
+export function formatShortDate(value: string): string {
   const date = parseIsoDate(value);
   if (!date) {
     return value;
@@ -2133,7 +2152,7 @@ export function formatShortDate(value) {
     month: "short"
   }).format(date);
 }
-export function formatWeekday(value) {
+export function formatWeekday(value: string): string {
   const date = parseIsoDate(value);
   if (!date) {
     return value;
@@ -2142,14 +2161,14 @@ export function formatWeekday(value) {
     weekday: "long"
   }).format(date);
 }
-export function parseIsoDate(value) {
+export function parseIsoDate(value: string): Date | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) {
     return null;
   }
   return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
-export function addDaysIso2(offset) {
+export function addDaysIso2(offset: number): string {
   const date = /* @__PURE__ */ new Date();
   date.setDate(date.getDate() + offset);
   const year = date.getFullYear();
@@ -2157,8 +2176,8 @@ export function addDaysIso2(offset) {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
-export function groupByDueDate(tasks) {
-  const map = /* @__PURE__ */ new Map();
+export function groupByDueDate(tasks: Task[]): [string, Task[]][] {
+  const map = new Map<string, Task[]>();
   for (const task of tasks.sort((a, b) => {
     if (a.due && b.due && a.due !== b.due) {
       return compareIsoDates(a.due, b.due);
@@ -2174,7 +2193,7 @@ export function groupByDueDate(tasks) {
   }
   return [...map.entries()];
 }
-export function searchableText(task) {
+export function searchableText(task: Task): string {
   return [
     task.title,
     task.description,

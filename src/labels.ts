@@ -1,13 +1,13 @@
-export function normalizeLabelName(label) {
+export function normalizeLabelName(label: string): string {
   return label.trim().replace(/^#+\s*/, "").toLocaleLowerCase("tr").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
 }
-export function displayLabel(label) {
+export function displayLabel(label: string): string {
   const normalized = normalizeLabelName(label);
   return normalized ? `#${normalized}` : "#";
 }
-export function dedupeLabels(labels) {
-  const seen = /* @__PURE__ */ new Set();
-  const normalizedLabels = [];
+export function dedupeLabels(labels: string[]): string[] {
+  const seen = new Set<string>();
+  const normalizedLabels: string[] = [];
   for (const label of labels) {
     const normalized = normalizeLabelName(label);
     if (!normalized || seen.has(normalized)) {

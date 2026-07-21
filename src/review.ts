@@ -1,15 +1,16 @@
 import { addDaysIso, todayIso } from "./dateUtils";
+import type { ReviewSession, ReviewStep, SectorConfig, Task } from "./types";
 import { normalizeTaskProject } from "./projects";
 
-export function findWaitingSector(sectors) {
+export function findWaitingSector(sectors: SectorConfig[]): SectorConfig | null {
   return sectors.find((s) => s.isWaiting) || sectors.find((s) => s.tag.toLowerCase() === "waiting") || null;
 }
-export function normalizeReviewSession(raw) {
+export function normalizeReviewSession(raw?: ReviewSession | null): ReviewSession | null {
   if (!raw || typeof raw !== "object") return null;
   const validTypes = ["monthly", "inbox-only", "daily", "weekly"];
   const type = validTypes.includes(raw.type) ? raw.type : null;
   if (!type || !Array.isArray(raw.steps)) return null;
-  const steps = [];
+  const steps: ReviewStep[] = [];
   for (const step of raw.steps) {
     if (!step || typeof step !== "object") return null;
     if (step.kind !== "inbox" && step.kind !== "sector" && step.kind !== "waiting" && step.kind !== "date") return null;
@@ -33,14 +34,14 @@ export function normalizeReviewSession(raw) {
   const totalSteps = Number.isInteger(raw.totalSteps) && raw.totalSteps >= completedSteps + steps.length ? raw.totalSteps : completedSteps + steps.length;
   return { type, totalSteps, completedSteps, steps, stepIndex, taskIndex };
 }
-export function buildReviewSteps(type, sectors, tasks) {
+export function buildReviewSteps(type: string, sectors: SectorConfig[], tasks: Task[]): ReviewStep[] {
   const active = tasks.filter((t) => !t.completed);
-  const bySector = (tag) => active.filter((t) => {
+  const bySector = (tag: string) => active.filter((t) => {
     const project = normalizeTaskProject(t.project);
     return project && project.toLowerCase() === tag.toLowerCase();
   }).map((t) => t.id);
   const inboxIds = active.filter((t) => !normalizeTaskProject(t.project)).map((t) => t.id);
-  const steps = [];
+  const steps: ReviewStep[] = [];
   if (inboxIds.length) {
     steps.push({ kind: "inbox", label: "Inbox", taskIds: inboxIds, totalTasks: inboxIds.length, doneTasks: 0 });
   }
@@ -68,7 +69,7 @@ export function buildReviewSteps(type, sectors, tasks) {
   }
   const waitingSector = findWaitingSector(sectors);
   const nonWaiting = sectors.filter((s) => s !== waitingSector);
-  let orderedSectors;
+  let orderedSectors: SectorConfig[];
   if (type === "monthly") {
     const monthlyOnly = nonWaiting.filter((s) => s.inMonthly && !s.inWeekly);
     const monthlyAndWeekly = nonWaiting.filter((s) => s.inMonthly && s.inWeekly);
@@ -90,10 +91,10 @@ export function buildReviewSteps(type, sectors, tasks) {
   }
   return steps;
 }
-export function pruneReviewSession(session, tasks) {
+export function pruneReviewSession(session: ReviewSession | null, tasks: Task[]): ReviewSession | null {
   if (!session) return null;
   const validIds = new Set(tasks.filter((t) => !t.completed).map((t) => t.id));
-  const steps = [];
+  const steps: ReviewStep[] = [];
   for (let i = session.stepIndex; i < session.steps.length; i++) {
     const original = session.steps[i];
     const fromIndex = i === session.stepIndex ? session.taskIndex : 0;
@@ -115,10 +116,10 @@ export function pruneReviewSession(session, tasks) {
     taskIndex: 0
   };
 }
-export function reviewSectorNeighbors(tag, sectors, type) {
+export function reviewSectorNeighbors(tag: string, sectors: SectorConfig[], type: string): { prev: SectorConfig | null; next: SectorConfig | null } {
   const waitingSector = findWaitingSector(sectors);
   const nonWaiting = sectors.filter((s) => s !== waitingSector);
-  let core;
+  let core: SectorConfig[];
   if (type === "monthly") {
     const monthlyOnly = nonWaiting.filter((s) => s.inMonthly && !s.inWeekly);
     const monthlyAndWeekly = nonWaiting.filter((s) => s.inMonthly && s.inWeekly);
@@ -133,7 +134,7 @@ export function reviewSectorNeighbors(tag, sectors, type) {
     next: idx < core.length - 1 ? core[idx + 1] : null
   };
 }
-export function reviewTypeLabel(type) {
+export function reviewTypeLabel(type: string): string {
   if (type === "monthly") return "Monthly Review";
   if (type === "daily") return "Daily Review";
   if (type === "inbox-only") return "Inbox Process";

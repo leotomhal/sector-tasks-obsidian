@@ -1,4 +1,5 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, TAbstractFile } from "obsidian";
+import type { BelkiSettings } from "./types";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./views/TaskBoardView";
 import { TodaySidebarView, VIEW_TYPE_BELKI_TODAY } from "./views/TodaySidebarView";
 import { addDaysIso, isIsoDate } from "./dateUtils";
@@ -11,10 +12,9 @@ import { TaskStore } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
 export default class BelkiPlugin extends Plugin {
-  [key: string]: any;
-  settings: any;
-  store: any;
-  reloadDebounceTimer = null;
+  settings: BelkiSettings;
+  store: TaskStore;
+  reloadDebounceTimer: number | null = null;
   async onload() {
     await this.loadSettings();
     if (!getTasksApi(this.app)) {
@@ -205,13 +205,13 @@ export default class BelkiPlugin extends Plugin {
   async activateTodaySidebar() {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI_TODAY);
     if (existing.length > 0) {
-      this.app.workspace.revealLeaf(existing[0]);
+      void this.app.workspace.revealLeaf(existing[0]);
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE_BELKI_TODAY, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
   }
   getProjectNames() {
     return uniqueRealProjects([
@@ -260,7 +260,7 @@ export default class BelkiPlugin extends Plugin {
       void this.reloadTasks();
     }, 300);
   }
-  refreshIfTaskFile(file) {
+  refreshIfTaskFile(file: TAbstractFile) {
     if (!this.store.isTaskStorageFile(file.path)) return;
     if (this.store.isCurrentlyWriting(file.path)) return;
     this.scheduleReload();
@@ -278,7 +278,7 @@ export default class BelkiPlugin extends Plugin {
     }
   }
 };
-export function toSettingsData(value) {
+export function toSettingsData(value: unknown): Partial<BelkiSettings> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }

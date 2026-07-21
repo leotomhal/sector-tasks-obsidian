@@ -289,7 +289,7 @@ function parseTasksRecurrence(raw) {
   return { frequency: "yearly", interval: 1, mode, ends, raw: rawTrimmed };
 }
 function serializeTasksRecurrence(rule) {
-  let _a;
+  var _a;
   if (rule.raw && rule.raw.trim()) return rule.raw.trim();
   const i = (_a = rule.interval) != null ? _a : 1;
   const plural = (unit) => i === 1 ? unit : `${i} ${unit}s`;
@@ -416,8 +416,9 @@ function serializeTaskLine(task, indent = 0) {
   return `${pad}- ${box} ${parts.join(" ")}`;
 }
 function getTasksApi(app) {
-  let _a, _b;
-  return (_b = (_a = app.plugins) == null ? void 0 : _a.plugins["obsidian-tasks-plugin"]) == null ? void 0 : _b.apiV1;
+  var _a, _b, _c;
+  const withPlugins = app;
+  return (_c = (_b = (_a = withPlugins.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["obsidian-tasks-plugin"]) == null ? void 0 : _c.apiV1;
 }
 function ensureSectorInLine(line, sector) {
   if (!sector) return line;
@@ -523,7 +524,7 @@ var TodaySidebarView = class extends import_obsidian.ItemView {
     this.render();
   }
   async onClose() {
-    let _a;
+    var _a;
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
     this.updateTabBadge(0);
   }
@@ -1746,7 +1747,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     this.render();
   }
   async onClose() {
-    let _a, _b;
+    var _a, _b;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
     this.composerCleanup = null;
     this.removeProjectMenu();
@@ -1754,7 +1755,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     (_b = this.unsubscribe) == null ? void 0 : _b.call(this);
   }
   removeProjectMenu() {
-    let _a;
+    var _a;
     (_a = this.projectMenuEl) == null ? void 0 : _a.remove();
     this.projectMenuEl = null;
   }
@@ -1782,7 +1783,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     this.render();
   }
   render() {
-    let _a, _b, _c;
+    var _a, _b, _c;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
     this.composerCleanup = null;
     this.removeProjectMenu();
@@ -2691,7 +2692,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     });
   }
   showDropTargets(tasks) {
-    let _a;
+    var _a, _b;
     this.clearDropTargets();
     const list = (tasks || []).filter((t) => !t.completed);
     if (list.length === 0) return;
@@ -2706,7 +2707,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
       (_a = this.containerEl.querySelector(".belki-inbox-drop-zone")) == null ? void 0 : _a.addClass("is-drop-available");
     }
     if (list.some((t) => !isToday(t.due) && isBeforeToday(t.due))) {
-      (_a = this.containerEl.querySelector(".belki-drop-zone")) == null ? void 0 : _a.addClass("is-drop-available");
+      (_b = this.containerEl.querySelector(".belki-drop-zone")) == null ? void 0 : _b.addClass("is-drop-available");
     }
     for (const dateTarget of Array.from(
       this.containerEl.querySelectorAll(".belki-date-drop-zone")
@@ -2739,7 +2740,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     return dragImage;
   }
   getDraggedTasks(event) {
-    let _a, _b;
+    var _a, _b;
     let ids = this.draggedTaskIds;
     if (!ids || ids.length === 0) {
       const fallbackId = this.draggedTaskId || ((_a = event.dataTransfer) == null ? void 0 : _a.getData("application/x-belki-task-id")) || ((_b = event.dataTransfer) == null ? void 0 : _b.getData("text/plain"));
@@ -2828,7 +2829,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         event.stopPropagation();
       });
       dragHandle.addEventListener("dragstart", (event) => {
-        let _a, _b;
+        var _a, _b;
         event.stopPropagation();
         const dragIds = this.selectedTaskIds.has(task.id) && this.selectedTaskIds.size > 1 ? Array.from(this.selectedTaskIds) : [task.id];
         this.draggedTaskIds = dragIds;
@@ -2984,9 +2985,8 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.openFile(file);
     if (line >= 0) {
-      const view = leaf.view;
-      const editor = view && view.editor;
-      if (editor) {
+      if (leaf.view instanceof import_obsidian3.MarkdownView) {
+        const editor = leaf.view.editor;
         editor.setCursor({ line, ch: 0 });
         editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
       }
@@ -3101,7 +3101,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     return compareTasksByMode(a, b, this.settings.sortMode);
   }
   getTitle() {
-    let _a;
+    var _a;
     if (this.mode === "inbox") {
       return "Inbox";
     }
@@ -3761,7 +3761,7 @@ function searchableText(task) {
 
 // src/repeatUtils.ts
 function nextOccurrence(rule, fromDate) {
-  let _a;
+  var _a;
   const [year, month, day] = fromDate.split("-").map(Number);
   const date = new Date(year, month - 1, day);
   const interval = (_a = rule.interval) != null ? _a : 1;
@@ -4393,13 +4393,13 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
   async activateTodaySidebar() {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI_TODAY);
     if (existing.length > 0) {
-      this.app.workspace.revealLeaf(existing[0]);
+      void this.app.workspace.revealLeaf(existing[0]);
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE_BELKI_TODAY, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    void this.app.workspace.revealLeaf(leaf);
   }
   getProjectNames() {
     return uniqueRealProjects([
