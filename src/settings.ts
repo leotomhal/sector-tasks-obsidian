@@ -34,6 +34,7 @@ export var DEFAULT_SETTINGS = {
   themeColors: {},
   reviewSession: null,
   autoDeleteCompletedAfterDays: 0,
+  searchExcludeCompleted: false,
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -267,6 +268,13 @@ export var BelkiSettingTab = class extends PluginSettingTab {
       text.setPlaceholder("0").setValue(String(this.plugin.settings.autoDeleteCompletedAfterDays || 0)).onChange(async (value) => {
         this.plugin.settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value.trim());
         await this.plugin.saveSettings();
+      });
+    });
+    new Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
+        this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
       });
     });
     new Setting(containerEl).setName("Sectors").setHeading();

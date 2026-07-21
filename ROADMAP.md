@@ -6,7 +6,6 @@ the [changelog](./CHANGELOG.md).
 
 ## Under consideration (small)
 
-- **Refine Search** - Add Possibility to create hotkey for search; limit search to undone tasks.    
 - **"Overdue → today" bulk action** — one command to reschedule all overdue
   tasks to today, for the daily-planning "pull everything forward" move.
 - **Completed statistics** — a small line in the Completed view, e.g.

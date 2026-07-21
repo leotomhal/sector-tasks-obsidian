@@ -195,6 +195,14 @@ export var TaskBoardView = class extends ItemView {
     this.projectActionsOpen = null;
     this.render();
   }
+  openSearch() {
+    this.searchOpen = true;
+    this.searchQuery = "";
+    this.sortPopoverOpen = false;
+    this.selectedTaskIds.clear();
+    this.mobileNavOpen = false;
+    this.render();
+  }
   render() {
     var _a, _b, _c;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
@@ -546,12 +554,7 @@ export var TaskBoardView = class extends ItemView {
     }
     button.addEventListener("click", () => {
       if (label === "Search") {
-        this.searchOpen = true;
-        this.searchQuery = "";
-        this.sortPopoverOpen = false;
-        this.selectedTaskIds.clear();
-        this.mobileNavOpen = false;
-        this.render();
+        this.openSearch();
         return;
       }
       this.mode = mode;
@@ -1463,7 +1466,8 @@ export var TaskBoardView = class extends ItemView {
       if (!query) {
         return [];
       }
-      return tasks.filter((task) => searchableText(task).includes(query)).sort((a, b) => this.compareTasks(a, b));
+      const searchPool = this.settings.searchExcludeCompleted ? active : tasks;
+      return searchPool.filter((task) => searchableText(task).includes(query)).sort((a, b) => this.compareTasks(a, b));
     }
     return this.sortTasks(active);
   }
@@ -1692,7 +1696,8 @@ export var TaskBoardView = class extends ItemView {
         results.createDiv({ cls: "belki-search-empty", text: "Type to search tasks" });
         return;
       }
-      matches = this.store.getTasks().filter((task) => searchableText(task).includes(query)).slice(0, 25);
+      const searchPool = this.settings.searchExcludeCompleted ? this.store.getTasks().filter((task) => !task.completed) : this.store.getTasks();
+      matches = searchPool.filter((task) => searchableText(task).includes(query)).slice(0, 25);
       selectedIndex = Math.min(selectedIndex, Math.max(matches.length - 1, 0));
       if (matches.length === 0) {
         results.createDiv({ cls: "belki-search-empty", text: "No matching tasks." });

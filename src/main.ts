@@ -70,6 +70,13 @@ export default class BelkiPlugin extends Plugin {
       }
     });
     this.addCommand({
+      id: "open-search",
+      name: "Open search",
+      callback: () => {
+        void this.activateView("search");
+      }
+    });
+    this.addCommand({
       id: "cleanup-completed-tasks",
       name: "Clean up completed tasks now",
       callback: () => {
@@ -220,12 +227,16 @@ export default class BelkiPlugin extends Plugin {
       ...taskLabels
     ]).sort((a, b) => a.localeCompare(b));
   }
-  async activateView() {
+  async activateView(open = "today") {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
     if (leaves.length > 0) {
       const view = leaves[0].view;
       if (view instanceof TaskBoardView) {
-        view.openToday();
+        if (open === "search") {
+          view.openSearch();
+        } else {
+          view.openToday();
+        }
       }
       this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
       return;
@@ -233,6 +244,12 @@ export default class BelkiPlugin extends Plugin {
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: VIEW_TYPE_BELKI, active: true });
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
+    if (open === "search") {
+      const view = leaf.view;
+      if (view instanceof TaskBoardView) {
+        view.openSearch();
+      }
+    }
   }
   scheduleReload() {
     if (this.reloadDebounceTimer !== null) {

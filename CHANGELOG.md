@@ -3,6 +3,15 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.2.0
+
+### New
+- **"Open search"** command — opens the board (activating it if needed) and jumps straight to the search overlay. Assign it a hotkey under Obsidian's Settings → Hotkeys.
+- **"Search excludes completed tasks"** setting (off by default): when on, completed tasks are hidden from search results everywhere search runs.
+
+### Internal
+- Completed Phases 1-4 of the source-based build migration: `main.js` is now generated from real TypeScript source (`src/`) via `tsc` + esbuild, CI runs the build and fails on drift between source and the committed bundle, and releases attest build provenance for the published assets. See prior PRs (#21-24) for details.
+
 ## 1.1.1
 
 ### Fixed
