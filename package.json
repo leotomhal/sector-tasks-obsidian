@@ -1,6 +1,6 @@
 {
   "name": "sector-tasks-obsidian",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Task board over a single Tasks-plugin-format Markdown file, grouped by configurable sector tags.",
   "private": true,
   "scripts": {

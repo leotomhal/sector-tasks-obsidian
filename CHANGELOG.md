@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.1.1
+
+### Fixed
+- Folder creation no longer logs a "Could not create folder. Error: Folder already exists." warning (and no longer aborts file setup) when a parent folder already exists but Obsidian's lookup doesn't immediately see it — the "already exists" case is now treated as success.
+
 ## 1.1.0
 
 ### New

@@ -1743,10 +1743,12 @@ ${lines.join("\n")}
         await this.app.vault.createFolder(current);
       } catch (error) {
         const after = this.app.vault.getAbstractFileByPath(current);
-        if (!(after instanceof import_obsidian2.TFolder)) {
-          console.warn("[belki] Could not create folder.", error, { path: current });
-          return false;
+        const alreadyExists = /already exists/i.test(String((error == null ? void 0 : error.message) ?? error));
+        if (after instanceof import_obsidian2.TFolder || alreadyExists) {
+          continue;
         }
+        console.warn("[belki] Could not create folder.", error, { path: current });
+        return false;
       }
     }
     return true;
