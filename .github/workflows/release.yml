@@ -16,8 +16,33 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      attestations: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify build matches the committed main.js
+        run: |
+          if ! git diff --exit-code main.js; then
+            echo "::error::Building from source produced a different main.js than the tag's committed version. Refusing to release a mismatched artifact."
+            exit 1
+          fi
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "main.js, manifest.json, styles.css"
 
       - name: Create release or attach assets
         env:
