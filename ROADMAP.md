@@ -34,8 +34,9 @@ the [changelog](./CHANGELOG.md).
     hand-edited. Verified via the test suite, a clean `tsc` pass, and a
     structural diff against the prior hand-maintained bundle (identical
     commands, view types, CSS classes, sector tags, icon names).
-  - Phase 3 (next): wire `npm run build` into CI so pull requests fail if
-    the build breaks, not just the test suite.
+  - Phase 3 (done): CI now runs `npm ci` + `npm run build` on every push
+    and PR, and fails if the freshly built `main.js` differs from the
+    committed one — catching build breakage and src/-vs-main.js drift.
   - Phase 4 (next): update the release workflow to build from source and
     add `actions/attest-build-provenance` for the release assets.
 
