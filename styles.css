@@ -1200,6 +1200,23 @@ button.belki-search-result.is-selected {
   background: var(--belki-hover);
 }
 
+button.belki-search-result.is-completed {
+  font-style: italic;
+}
+
+button.belki-search-result.is-completed .belki-search-title,
+button.belki-search-result.is-completed .belki-search-description {
+  color: var(--belki-muted);
+}
+
+.belki-search-completed-badge {
+  color: var(--belki-muted);
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .belki-search-title {
   color: var(--belki-text);
   font-family: var(--belki-font-task-title);
