@@ -3,9 +3,10 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
-## Unreleased
+## 1.2.3
 
 ### Internal
+- Fixed the root cause of the type-safety warnings still reported by Obsidian's review of 1.2.2: `tsconfig.json` declared `lib: ES5/ES6/ES7`, so under the reviewer's environment `padStart`, `Object.entries`, `flatMap`, and `Promise.finally` resolved as error-typed values (locally this was masked by `@types/node` pulling in newer lib definitions). The lib is now `ES2020`, matching the compile target and Obsidian 1.7.2's runtime. No code changes; the bundle is unchanged.
 - Replaced the deprecated `builtin-modules` dev dependency with Node's built-in `builtinModules` (from `node:module`) in the esbuild config, per Obsidian's review recommendation. Build output is unchanged.
 
 ## 1.2.2
