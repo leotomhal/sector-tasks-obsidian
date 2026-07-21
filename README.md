@@ -21,7 +21,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic)
 - Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
 - Sort modes: smart, due date, priority, deadline, created, project
-- Full-text search across all tasks
+- Full-text search across all tasks; the **Open search** command jumps straight to it — assign a hotkey under Obsidian's Settings → Hotkeys — and an optional setting excludes completed tasks from results
 - Jump button per task: opens the underlying note at the matching `🆔` line
 
 ### Capturing & editing
@@ -80,7 +80,7 @@ Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stay
 
 ## Status
 
-Current version: **1.1.1** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md); ideas not yet built are in the [roadmap](./ROADMAP.md).
+Current version: **1.2.0** — see [manifest.json](./manifest.json). Full history in the [changelog](./CHANGELOG.md); ideas not yet built are in the [roadmap](./ROADMAP.md).
 
 ## Development transparency
 

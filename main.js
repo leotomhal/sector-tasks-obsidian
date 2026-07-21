@@ -947,6 +947,7 @@ var DEFAULT_SETTINGS = {
   themeColors: {},
   reviewSession: null,
   autoDeleteCompletedAfterDays: 0,
+  searchExcludeCompleted: false,
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -1179,6 +1180,13 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
       text.setPlaceholder("0").setValue(String(this.plugin.settings.autoDeleteCompletedAfterDays || 0)).onChange(async (value) => {
         this.plugin.settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value.trim());
         await this.plugin.saveSettings();
+      });
+    });
+    new import_obsidian2.Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
+        this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
       });
     });
     new import_obsidian2.Setting(containerEl).setName("Sectors").setHeading();
@@ -1765,6 +1773,14 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     this.projectActionsOpen = null;
     this.render();
   }
+  openSearch() {
+    this.searchOpen = true;
+    this.searchQuery = "";
+    this.sortPopoverOpen = false;
+    this.selectedTaskIds.clear();
+    this.mobileNavOpen = false;
+    this.render();
+  }
   render() {
     var _a, _b, _c;
     (_a = this.composerCleanup) == null ? void 0 : _a.call(this);
@@ -2116,12 +2132,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     }
     button.addEventListener("click", () => {
       if (label === "Search") {
-        this.searchOpen = true;
-        this.searchQuery = "";
-        this.sortPopoverOpen = false;
-        this.selectedTaskIds.clear();
-        this.mobileNavOpen = false;
-        this.render();
+        this.openSearch();
         return;
       }
       this.mode = mode;
@@ -3033,7 +3044,8 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
       if (!query) {
         return [];
       }
-      return tasks.filter((task) => searchableText(task).includes(query)).sort((a, b) => this.compareTasks(a, b));
+      const searchPool = this.settings.searchExcludeCompleted ? active : tasks;
+      return searchPool.filter((task) => searchableText(task).includes(query)).sort((a, b) => this.compareTasks(a, b));
     }
     return this.sortTasks(active);
   }
@@ -3262,7 +3274,8 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         results.createDiv({ cls: "belki-search-empty", text: "Type to search tasks" });
         return;
       }
-      matches = this.store.getTasks().filter((task) => searchableText(task).includes(query)).slice(0, 25);
+      const searchPool = this.settings.searchExcludeCompleted ? this.store.getTasks().filter((task) => !task.completed) : this.store.getTasks();
+      matches = searchPool.filter((task) => searchableText(task).includes(query)).slice(0, 25);
       selectedIndex = Math.min(selectedIndex, Math.max(matches.length - 1, 0));
       if (matches.length === 0) {
         results.createDiv({ cls: "belki-search-empty", text: "No matching tasks." });
@@ -4248,6 +4261,13 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       }
     });
     this.addCommand({
+      id: "open-search",
+      name: "Open search",
+      callback: () => {
+        void this.activateView("search");
+      }
+    });
+    this.addCommand({
       id: "cleanup-completed-tasks",
       name: "Clean up completed tasks now",
       callback: () => {
@@ -4398,12 +4418,16 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       ...taskLabels
     ]).sort((a, b) => a.localeCompare(b));
   }
-  async activateView() {
+  async activateView(open = "today") {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
     if (leaves.length > 0) {
       const view = leaves[0].view;
       if (view instanceof TaskBoardView) {
-        view.openToday();
+        if (open === "search") {
+          view.openSearch();
+        } else {
+          view.openToday();
+        }
       }
       this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
       return;
@@ -4411,6 +4435,12 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.setViewState({ type: VIEW_TYPE_BELKI, active: true });
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
+    if (open === "search") {
+      const view = leaf.view;
+      if (view instanceof TaskBoardView) {
+        view.openSearch();
+      }
+    }
   }
   scheduleReload() {
     if (this.reloadDebounceTimer !== null) {
