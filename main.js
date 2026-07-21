@@ -998,6 +998,9 @@ function normalizeLabelColorMap(colors) {
 function normalizeLabelRegistry(labels) {
   return dedupeLabels(labels || []);
 }
+function asString(value) {
+  return typeof value === "string" ? value : "";
+}
 var LUCIDE_ICON_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 function normalizeIcons(savedIcons) {
   const result = { ...DEFAULT_SETTINGS.icons };
@@ -1139,194 +1142,128 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
   }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    applyBelkiFontSettings(containerEl, this.plugin.settings);
-    new import_obsidian2.Setting(containerEl).setName("Tasks file").setDesc("Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin.").addText((text) => {
-      text.setPlaceholder("Tasks.md").setValue(this.plugin.settings.tasksFilePath).onChange(async (value) => {
-        this.plugin.settings.tasksFilePath = value.trim() || DEFAULT_SETTINGS.tasksFilePath;
-        await this.plugin.saveSettings();
-        await this.plugin.reloadTasks();
-        updatePathWarning();
-      });
-    });
-    const pathWarning = containerEl.createDiv({ cls: "belki-path-warning" });
-    const updatePathWarning = () => {
-      const path = (0, import_obsidian2.normalizePath)(this.plugin.settings.tasksFilePath || DEFAULT_SETTINGS.tasksFilePath);
-      const existing = this.app.vault.getAbstractFileByPath(path);
-      if (existing instanceof import_obsidian2.TFile) {
-        pathWarning.removeClass("is-visible");
-        pathWarning.setText("");
-      } else if (existing) {
-        pathWarning.addClass("is-visible");
-        pathWarning.setText(`⚠ "${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`);
-      } else {
-        pathWarning.addClass("is-visible");
-        pathWarning.setText(`⚠ No file found at "${path}". It will be created on the first write — double-check the path if you expected an existing file.`);
+  getSettingDefinitions() {
+    return [
+      {
+        name: "Tasks file",
+        desc: "Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin. If the file does not exist yet, it is created on the first write.",
+        control: {
+          type: "text",
+          key: "tasksFilePath",
+          placeholder: "Tasks.md",
+          validate: (value) => this.validateTasksFilePath(value)
+        }
+      },
+      {
+        name: "Default overdue range",
+        desc: "Default range used by the Today overdue section.",
+        control: { type: "dropdown", key: "defaultOverdueRange", options: OVERDUE_RANGE_LABELS }
+      },
+      {
+        name: "Auto-delete completed tasks",
+        desc: "Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a ✅ date are never touched.",
+        control: { type: "number", key: "autoDeleteCompletedAfterDays", min: 0, step: 1, placeholder: "0" }
+      },
+      {
+        name: "Search excludes completed tasks",
+        desc: "When on, search only matches open tasks. Completed tasks never show up in results.",
+        control: { type: "toggle", key: "searchExcludeCompleted" }
+      },
+      {
+        name: "",
+        desc: "Sectors: the tag is written 1:1 as #tag in the tasks file; changing a tag automatically renames already-tagged tasks. Drag rows to change the column order on the board.",
+        searchable: false
+      },
+      this.buildSectorList(),
+      this.buildAppearancePage()
+    ];
+  }
+  getControlValue(key) {
+    const settings = this.plugin.settings;
+    if (key.startsWith("icons.")) {
+      return settings.icons[key.slice("icons.".length)];
+    }
+    if (key.startsWith("themeColors.")) {
+      return normalizeThemeColors(settings.themeColors)[key.slice("themeColors.".length)];
+    }
+    return settings[key];
+  }
+  setControlValue(key, value) {
+    return this.applyControlValue(key, value);
+  }
+  async applyControlValue(key, value) {
+    const settings = this.plugin.settings;
+    if (key === "tasksFilePath") {
+      settings.tasksFilePath = asString(value).trim() || DEFAULT_SETTINGS.tasksFilePath;
+      await this.plugin.saveSettings();
+      await this.plugin.reloadTasks();
+      this.plugin.refreshBelkiViews();
+      return;
+    }
+    if (key === "defaultOverdueRange") {
+      settings.defaultOverdueRange = normalizeOverdueRange(asString(value));
+    } else if (key === "autoDeleteCompletedAfterDays") {
+      settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value);
+    } else if (key === "searchExcludeCompleted") {
+      settings.searchExcludeCompleted = value === true;
+    } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
+      settings[key] = normalizeFontOption(asString(value));
+    } else if (key === "themePreset") {
+      const preset = normalizeThemePreset(asString(value));
+      if (preset === "custom" && settings.themePreset !== "custom") {
+        const base = settings.themePreset === "dark" ? THEME_PRESETS.dark : THEME_PRESETS.light;
+        settings.themeColors = { ...base };
       }
+      settings.themePreset = preset;
+      await this.plugin.saveSettings();
+      this.plugin.refreshBelkiViews();
+      this.update();
+      return;
+    } else if (key.startsWith("themeColors.")) {
+      settings.themeColors = {
+        ...normalizeThemeColors(settings.themeColors),
+        [key.slice("themeColors.".length)]: asString(value)
+      };
+    } else if (key.startsWith("icons.")) {
+      const iconKey = key.slice("icons.".length);
+      const trimmed = asString(value).trim();
+      settings.icons[iconKey] = LUCIDE_ICON_NAME_PATTERN.test(trimmed) ? trimmed : DEFAULT_SETTINGS.icons[iconKey];
+    }
+    await this.plugin.saveSettings();
+    this.plugin.refreshBelkiViews();
+  }
+  validateTasksFilePath(value) {
+    const path = (0, import_obsidian2.normalizePath)((value || "").trim() || DEFAULT_SETTINGS.tasksFilePath);
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing && !(existing instanceof import_obsidian2.TFile)) {
+      return `"${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`;
+    }
+  }
+  buildSectorList() {
+    return {
+      type: "list",
+      heading: "Sectors",
+      emptyState: "No sectors configured.",
+      onReorder: (oldIndex, newIndex) => {
+        void this.moveSector(oldIndex, newIndex);
+      },
+      onDelete: (index) => {
+        void this.removeSector(index);
+      },
+      addItem: {
+        name: "Add sector",
+        action: () => {
+          void this.addSectorPlaceholder();
+        }
+      },
+      items: this.plugin.settings.sectors.map((sector, index) => ({
+        name: `#${sector.tag}`,
+        desc: sector.isWaiting === true ? 'A "waiting for" sector is always reviewed as the final step of weekly and monthly review.' : 'Toggles: include in weekly review · include in monthly review · treat as "waiting for".',
+        render: (setting) => this.renderSectorRow(setting, sector, index)
+      }))
     };
-    updatePathWarning();
-    new import_obsidian2.Setting(containerEl).setName("Default overdue range").setDesc("Default range used by the Today overdue section.").addDropdown((dropdown) => {
-      for (const range of OVERDUE_RANGES) {
-        dropdown.addOption(range, overdueRangeLabel(range));
-      }
-      dropdown.setValue(this.plugin.settings.defaultOverdueRange).onChange(async (value) => {
-        this.plugin.settings.defaultOverdueRange = normalizeOverdueRange(value);
-        await this.plugin.saveSettings();
-        this.plugin.refreshBelkiViews();
-      });
-    });
-    new import_obsidian2.Setting(containerEl).setName("Auto-delete completed tasks").setDesc("Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a ✅ date are never touched.").addText((text) => {
-      text.setPlaceholder("0").setValue(String(this.plugin.settings.autoDeleteCompletedAfterDays || 0)).onChange(async (value) => {
-        this.plugin.settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value.trim());
-        await this.plugin.saveSettings();
-      });
-    });
-    new import_obsidian2.Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
-      toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
-        this.plugin.settings.searchExcludeCompleted = value;
-        await this.plugin.saveSettings();
-        this.plugin.refreshBelkiViews();
-      });
-    });
-    new import_obsidian2.Setting(containerEl).setName("Sectors").setHeading();
-    containerEl.createDiv({
-      cls: "setting-item-description",
-      text: "Tag (written 1:1 as #tag in the file) and display name per sector column. Changing the tag automatically renames already-tagged tasks in the file. Order here determines column order."
-    });
-    this.plugin.settings.sectors.forEach((sector, index) => {
-      this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
-    });
-    this.addNewSectorSetting();
-    const appearance = containerEl.createEl("details", { cls: "belki-settings-appearance" });
-    if (this.appearanceOpen === true) {
-      appearance.setAttr("open", "");
-    }
-    appearance.addEventListener("toggle", () => {
-      this.appearanceOpen = appearance.open;
-    });
-    appearance.createEl("summary", { cls: "belki-settings-appearance-summary", text: "Appearance" });
-    appearance.createDiv({
-      cls: "setting-item-description",
-      text: "Fonts, theme colors, sidebar icons, and project/label colors. Everything here is cosmetic."
-    });
-    const rootContainer = this.containerEl;
-    this.containerEl = appearance;
-    try {
-      new import_obsidian2.Setting(appearance).setName("Fonts").setHeading();
-      this.addFontSetting(
-        "UI Font",
-        "Used for sidebar, headings, buttons, settings, and the general interface.",
-        "uiFont"
-      );
-      this.addFontSetting(
-        "Task Title Font",
-        "Used for task row titles and the task detail title input.",
-        "taskTitleFont"
-      );
-      this.addFontSetting(
-        "Label Font",
-        "Used for label chip text.",
-        "labelFont"
-      );
-      new import_obsidian2.Setting(appearance).setName("Theme").setHeading();
-      new import_obsidian2.Setting(appearance).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
-        for (const [value, label] of THEME_PRESET_OPTIONS) {
-          dropdown.addOption(value, label);
-        }
-        dropdown.setValue(this.plugin.settings.themePreset).onChange(async (value) => {
-          const preset = normalizeThemePreset(value);
-          if (preset === "custom" && this.plugin.settings.themePreset !== "custom") {
-            const base = this.plugin.settings.themePreset === "dark" ? THEME_PRESETS.dark : THEME_PRESETS.light;
-            this.plugin.settings.themeColors = { ...base };
-          }
-          this.plugin.settings.themePreset = preset;
-          await this.plugin.saveSettings();
-          this.plugin.refreshBelkiViews();
-          this.display();
-        });
-      });
-      if (this.plugin.settings.themePreset === "custom") {
-        for (const entry of THEME_COLOR_KEYS) {
-          this.addThemeColorSetting(entry);
-        }
-        new import_obsidian2.Setting(appearance).setName("Reset").setDesc("Reset custom colors to a preset.").addButton((button) => {
-          button.setButtonText("Load light").onClick(async () => {
-            this.plugin.settings.themeColors = { ...THEME_PRESETS.light };
-            await this.plugin.saveSettings();
-            this.plugin.refreshBelkiViews();
-            this.display();
-          });
-        }).addButton((button) => {
-          button.setButtonText("Load dark").onClick(async () => {
-            this.plugin.settings.themeColors = { ...THEME_PRESETS.dark };
-            await this.plugin.saveSettings();
-            this.plugin.refreshBelkiViews();
-            this.display();
-          });
-        });
-      }
-      new import_obsidian2.Setting(appearance).setName("Sidebar icons").setDesc("Lucide-Icon-Namen (siehe lucide.dev/icons), z. B. „search“, „calendar-check“.").setHeading();
-      this.addIconSetting("Search icon", "search");
-      this.addIconSetting("Inbox icon", "inbox");
-      this.addIconSetting("Today icon", "today");
-      this.addIconSetting("Upcoming icon", "upcoming");
-      this.addIconSetting("Filters icon", "filters");
-      this.addIconSetting("Projects icon", "projects");
-      this.addIconSetting("Completed icon", "completed");
-      new import_obsidian2.Setting(appearance).setName("Project colors").setHeading();
-      const projects = this.plugin.getProjectNames();
-      if (projects.length === 0) {
-        appearance.createDiv({
-          cls: "setting-item-description",
-          text: "No projects yet. Sector Tasks will generate stable colors when projects appear."
-        });
-      }
-      for (const project of projects) {
-        this.addProjectColorSetting(project);
-      }
-      new import_obsidian2.Setting(appearance).setName("Label colors").setHeading();
-      this.addLabelRegistrySetting();
-      const labels = this.plugin.getLabelNames();
-      if (labels.length === 0) {
-        appearance.createDiv({
-          cls: "setting-item-description",
-          text: "No labels yet. Add one here or create one from Filters & Labels."
-        });
-      }
-      for (const label of labels) {
-        this.addLabelColorSetting(label);
-      }
-    } finally {
-      this.containerEl = rootContainer;
-    }
   }
-  addIconSetting(name, key) {
-    new import_obsidian2.Setting(this.containerEl).setName(name).addText((text) => {
-      text.setValue(this.plugin.settings.icons[key]).onChange(async (value) => {
-        const trimmed = value.trim();
-        this.plugin.settings.icons[key] = LUCIDE_ICON_NAME_PATTERN.test(trimmed) ? trimmed : DEFAULT_SETTINGS.icons[key];
-        await this.plugin.saveSettings();
-        this.plugin.refreshBelkiViews();
-      });
-    });
-  }
-  addThemeColorSetting(entry) {
-    new import_obsidian2.Setting(this.containerEl).setName(entry.label).addColorPicker((picker) => {
-      const colors = normalizeThemeColors(this.plugin.settings.themeColors);
-      picker.setValue(colors[entry.key]).onChange(async (value) => {
-        this.plugin.settings.themeColors = {
-          ...normalizeThemeColors(this.plugin.settings.themeColors),
-          [entry.key]: value
-        };
-        await this.plugin.saveSettings();
-        this.plugin.refreshBelkiViews();
-      });
-    });
-  }
-  addSectorSetting(sector, index, total) {
-    const setting = new import_obsidian2.Setting(this.containerEl).setName(`Sector ${index + 1}`);
+  renderSectorRow(setting, sector, index) {
     let tagValue = sector.tag;
     let labelValue = sector.label;
     setting.addText((text) => {
@@ -1339,48 +1276,24 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
         labelValue = value;
       });
     });
-    setting.addExtraButton((button) => {
-      button.setIcon("arrow-up").setTooltip("Move up").setDisabled(index === 0).onClick(() => {
-        void this.moveSector(index, index - 1);
-      });
-    });
-    setting.addExtraButton((button) => {
-      button.setIcon("arrow-down").setTooltip("Move down").setDisabled(index === total - 1).onClick(() => {
-        void this.moveSector(index, index + 1);
-      });
-    });
-    setting.addExtraButton((button) => {
-      button.setIcon("trash").setTooltip("Remove sector").onClick(() => {
-        void this.removeSector(index);
-      });
-    });
-    setting.addButton((button) => {
-      button.setButtonText("Save").onClick(() => {
-        void this.commitSectorEdit(index, tagValue, labelValue);
-      });
-    });
-    const reviewRow = new import_obsidian2.Setting(this.containerEl).setName("Include in review").setDesc(sector.isWaiting === true ? 'A "Waiting for" sector is always reviewed as the final step of Weekly and Monthly Review.' : "Which review workflows should list this sector?");
     if (sector.isWaiting !== true) {
-      reviewRow.controlEl.createSpan({ text: "Weekly", cls: "belki-inline-toggle-label" });
-      reviewRow.addToggle((toggle) => {
-        toggle.setTooltip("Include in Weekly Review").setValue(sector.inWeekly === true).onChange(async (value) => {
+      setting.addToggle((toggle) => {
+        toggle.setTooltip("Include in weekly review").setValue(sector.inWeekly === true).onChange(async (value) => {
           sector.inWeekly = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
         });
       });
-      reviewRow.controlEl.createSpan({ text: "Monthly", cls: "belki-inline-toggle-label" });
-      reviewRow.addToggle((toggle) => {
-        toggle.setTooltip("Include in Monthly Review").setValue(sector.inMonthly === true).onChange(async (value) => {
+      setting.addToggle((toggle) => {
+        toggle.setTooltip("Include in monthly review").setValue(sector.inMonthly === true).onChange(async (value) => {
           sector.inMonthly = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
         });
       });
     }
-    reviewRow.controlEl.createSpan({ text: "Waiting for", cls: "belki-inline-toggle-label" });
-    reviewRow.addToggle((toggle) => {
-      toggle.setTooltip('Treat as "Waiting for" sector (own review step with follow-up/wait instead of up/down)').setValue(sector.isWaiting === true).onChange(async (value) => {
+    setting.addToggle((toggle) => {
+      toggle.setTooltip('Treat as "waiting for" sector (own review step with follow-up/wait instead of up/down)').setValue(sector.isWaiting === true).onChange(async (value) => {
         if (value) {
           for (const other of this.plugin.settings.sectors) {
             other.isWaiting = false;
@@ -1389,26 +1302,29 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
         sector.isWaiting = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
-        this.display();
+        this.update();
+      });
+    });
+    setting.addButton((button) => {
+      button.setButtonText("Save").setTooltip("Save tag and display name").onClick(() => {
+        void this.commitSectorEdit(index, tagValue, labelValue);
       });
     });
   }
-  addNewSectorSetting() {
-    let pendingTag = "";
-    let pendingLabel = "";
-    new import_obsidian2.Setting(this.containerEl).setName("Add sector").setDesc("New tag + display name for an additional column.").addText((text) => {
-      text.setPlaceholder("tag").onChange((value) => {
-        pendingTag = value;
-      });
-    }).addText((text) => {
-      text.setPlaceholder("Display name").onChange((value) => {
-        pendingLabel = value;
-      });
-    }).addButton((button) => {
-      button.setButtonText("Add").onClick(() => {
-        void this.addSector(pendingTag, pendingLabel);
-      });
-    });
+  async addSectorPlaceholder() {
+    const sectors = this.plugin.settings.sectors;
+    const base = "new-sector";
+    let tag = base;
+    let counter = 2;
+    while (isReservedSectorTag(tag) || sectors.some((s) => s.tag.toLowerCase() === tag)) {
+      tag = `${base}-${counter}`;
+      counter += 1;
+    }
+    this.plugin.settings.sectors = [...sectors, { tag, label: "New sector", isWaiting: false, inWeekly: false, inMonthly: false }];
+    applySectorSettings(this.plugin.settings.sectors);
+    await this.plugin.saveSettings();
+    this.plugin.refreshBelkiViews();
+    this.update();
   }
   async commitSectorEdit(index, rawTag, rawLabel) {
     const sectors = this.plugin.settings.sectors;
@@ -1417,18 +1333,18 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     const newTag = normalizeSectorTag(rawTag);
     if (!newTag || !SECTOR_TAG_PATTERN.test(newTag)) {
       new import_obsidian2.Notice("Invalid tag: only letters, numbers, - _ / allowed.");
-      this.display();
+      this.update();
       return;
     }
     const lower = newTag.toLowerCase();
     if (isReservedSectorTag(lower)) {
       new import_obsidian2.Notice(`"${newTag}" is reserved and can't be used as a sector tag.`);
-      this.display();
+      this.update();
       return;
     }
     if (sectors.some((s, i) => i !== index && s.tag.toLowerCase() === lower)) {
       new import_obsidian2.Notice(`The tag "${newTag}" is already used by another sector.`);
-      this.display();
+      this.update();
       return;
     }
     const newLabel = (rawLabel || "").trim() || newTag;
@@ -1459,34 +1375,13 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     }
     this.plugin.refreshBelkiViews();
     new import_obsidian2.Notice(tagChanged ? `Sector renamed: #${oldTag} → #${newTag} (file updated)` : "Sector updated.");
-    this.display();
-  }
-  async addSector(rawTag, rawLabel) {
-    const tag = normalizeSectorTag(rawTag);
-    if (!tag || !SECTOR_TAG_PATTERN.test(tag)) {
-      new import_obsidian2.Notice("Invalid tag: only letters, numbers, - _ / allowed.");
-      return;
-    }
-    const lower = tag.toLowerCase();
-    if (isReservedSectorTag(lower)) {
-      new import_obsidian2.Notice(`"${tag}" is reserved.`);
-      return;
-    }
-    if (this.plugin.settings.sectors.some((s) => s.tag.toLowerCase() === lower)) {
-      new import_obsidian2.Notice(`Sector "${tag}" already exists.`);
-      return;
-    }
-    const label = (rawLabel || "").trim() || tag;
-    this.plugin.settings.sectors = [...this.plugin.settings.sectors, { tag, label, isWaiting: false, inWeekly: false, inMonthly: false }];
-    applySectorSettings(this.plugin.settings.sectors);
-    await this.plugin.saveSettings();
-    this.plugin.refreshBelkiViews();
-    this.display();
+    this.update();
   }
   async removeSector(index) {
     const sectors = this.plugin.settings.sectors;
     if (sectors.length <= 1) {
       new import_obsidian2.Notice("At least one sector must remain.");
+      this.update();
       return;
     }
     const removed = sectors[index];
@@ -1497,7 +1392,7 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     await this.plugin.reloadTasks();
     this.plugin.refreshBelkiViews();
     new import_obsidian2.Notice(`Sector "${removed.label}" removed. Existing tasks with #${removed.tag} are kept but no longer shown as their own column (the tag becomes a plain label).`);
-    this.display();
+    this.update();
   }
   async moveSector(fromIndex, toIndex) {
     const sectors = [...this.plugin.settings.sectors];
@@ -1508,48 +1403,165 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     applySectorSettings(sectors);
     await this.plugin.saveSettings();
     this.plugin.refreshBelkiViews();
-    this.display();
+    this.update();
   }
-  addFontSetting(name, description, key) {
-    new import_obsidian2.Setting(this.containerEl).setName(name).setDesc(description).addDropdown((dropdown) => {
-      for (const option of FONT_OPTIONS) {
-        dropdown.addOption(option, fontOptionLabel(option));
-      }
-      dropdown.setValue(this.plugin.settings[key]).onChange(async (value) => {
-        this.plugin.settings[key] = normalizeFontOption(value);
-        await this.plugin.saveSettings();
-        this.plugin.refreshBelkiViews();
-        this.display();
-      });
-    });
+  buildAppearancePage() {
+    const projects = this.plugin.getProjectNames();
+    const labels = this.plugin.getLabelNames();
+    const fontOptions = {};
+    for (const option of FONT_OPTIONS) {
+      fontOptions[option] = fontOptionLabel(option);
+    }
+    const customVisible = () => this.plugin.settings.themePreset === "custom";
+    const themePresetOptions = {};
+    for (const [value, label] of THEME_PRESET_OPTIONS) {
+      themePresetOptions[value] = label;
+    }
+    const iconRows = [
+      ["Search icon", "search"],
+      ["Inbox icon", "inbox"],
+      ["Today icon", "today"],
+      ["Upcoming icon", "upcoming"],
+      ["Filters icon", "filters"],
+      ["Projects icon", "projects"],
+      ["Completed icon", "completed"]
+    ];
+    const projectItems = projects.length === 0 ? [{
+      name: "",
+      desc: "No projects yet. Sector Tasks will generate stable colors when projects appear.",
+      searchable: false
+    }] : projects.map((project) => ({
+      name: projectDisplayName(project),
+      render: (setting) => this.renderProjectColorRow(setting, project)
+    }));
+    const labelItems = [
+      {
+        name: "Add label",
+        desc: "Create a label without assigning it to a task yet.",
+        render: (setting) => this.renderAddLabelRow(setting)
+      },
+      ...labels.length === 0 ? [{
+        name: "",
+        desc: "No labels yet. Add one here or create one from Filters & Labels.",
+        searchable: false
+      }] : labels.map((label) => ({
+        name: displayLabel(label),
+        render: (setting) => this.renderLabelColorRow(setting, label)
+      }))
+    ];
+    return {
+      type: "page",
+      name: "Appearance",
+      desc: "Fonts, theme colors, sidebar icons, and project/label colors. Everything here is cosmetic.",
+      items: [
+        {
+          type: "group",
+          heading: "Fonts",
+          items: [
+            {
+              name: "UI font",
+              desc: "Used for sidebar, headings, buttons, settings, and the general interface.",
+              control: { type: "dropdown", key: "uiFont", options: fontOptions }
+            },
+            {
+              name: "Task title font",
+              desc: "Used for task row titles and the task detail title input.",
+              control: { type: "dropdown", key: "taskTitleFont", options: fontOptions }
+            },
+            {
+              name: "Label font",
+              desc: "Used for label chip text.",
+              control: { type: "dropdown", key: "labelFont", options: fontOptions }
+            }
+          ]
+        },
+        {
+          type: "group",
+          heading: "Theme",
+          items: [
+            {
+              name: "Color scheme",
+              desc: '"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.',
+              control: { type: "dropdown", key: "themePreset", options: themePresetOptions }
+            },
+            ...THEME_COLOR_KEYS.map((entry) => ({
+              name: entry.label,
+              visible: customVisible,
+              control: { type: "color", key: `themeColors.${entry.key}` }
+            })),
+            {
+              name: "Reset",
+              desc: "Reset custom colors to a preset.",
+              visible: customVisible,
+              render: (setting) => {
+                setting.addButton((button) => {
+                  button.setButtonText("Load light").onClick(() => {
+                    void this.loadThemePreset("light");
+                  });
+                });
+                setting.addButton((button) => {
+                  button.setButtonText("Load dark").onClick(() => {
+                    void this.loadThemePreset("dark");
+                  });
+                });
+              }
+            }
+          ]
+        },
+        {
+          type: "group",
+          heading: "Sidebar icons",
+          items: iconRows.map(([name, key]) => ({
+            name,
+            desc: 'Lucide icon name (see lucide.dev/icons), e.g. "calendar-check".',
+            control: {
+              type: "text",
+              key: `icons.${key}`,
+              validate: (value) => LUCIDE_ICON_NAME_PATTERN.test(value.trim()) ? void 0 : "Not a valid Lucide icon name (lowercase words separated by hyphens)."
+            }
+          }))
+        },
+        { type: "group", heading: "Project colors", items: projectItems },
+        { type: "group", heading: "Label colors", items: labelItems }
+      ]
+    };
   }
-  addProjectColorSetting(project) {
+  async loadThemePreset(preset) {
+    this.plugin.settings.themeColors = { ...THEME_PRESETS[preset] };
+    await this.plugin.saveSettings();
+    this.plugin.refreshBelkiViews();
+    this.update();
+  }
+  renderProjectColorRow(setting, project) {
     const automaticColor = colorForName(project).regular;
     const override = this.plugin.settings.projectColors[project];
-    new import_obsidian2.Setting(this.containerEl).setName(projectDisplayName(project)).setDesc(override ? "Custom color override" : "Automatic palette color").addColorPicker((picker) => {
+    setting.setDesc(override ? "Custom color override" : "Automatic palette color");
+    setting.addColorPicker((picker) => {
       picker.setValue(override || automaticColor).onChange(async (value) => {
         this.plugin.settings.projectColors[project] = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });
-    }).addButton((button) => {
+    });
+    setting.addButton((button) => {
       button.setButtonText("Reset").onClick(() => {
         void (async () => {
           delete this.plugin.settings.projectColors[project];
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
-          this.display();
+          this.update();
         })();
       });
     });
   }
-  addLabelRegistrySetting() {
+  renderAddLabelRow(setting) {
     let pendingLabel = "";
-    new import_obsidian2.Setting(this.containerEl).setName("Add label").setDesc("Create a label without assigning it to a task yet.").addText((text) => {
+    setting.addText((text) => {
       text.setPlaceholder("#label").onChange((value) => {
         pendingLabel = value;
       });
-    }).addButton((button) => {
+    });
+    setting.addButton((button) => {
       button.setButtonText("Add").onClick(() => {
         void (async () => {
           const label = normalizeLabelName(pendingLabel);
@@ -1562,27 +1574,29 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
           ]);
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
-          this.display();
+          this.update();
         })();
       });
     });
   }
-  addLabelColorSetting(label) {
+  renderLabelColorRow(setting, label) {
     const automaticColor = colorForName(label).regular;
     const override = this.plugin.settings.labelColors[label];
-    new import_obsidian2.Setting(this.containerEl).setName(displayLabel(label)).setDesc(override ? "Custom color override" : "Automatic palette color").addColorPicker((picker) => {
+    setting.setDesc(override ? "Custom color override" : "Automatic palette color");
+    setting.addColorPicker((picker) => {
       picker.setValue(override || automaticColor).onChange(async (value) => {
         this.plugin.settings.labelColors[label] = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });
-    }).addButton((button) => {
+    });
+    setting.addButton((button) => {
       button.setButtonText("Reset").onClick(() => {
         void (async () => {
           delete this.plugin.settings.labelColors[label];
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
-          this.display();
+          this.update();
         })();
       });
     });

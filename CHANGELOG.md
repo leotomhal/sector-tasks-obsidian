@@ -3,6 +3,16 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.0
+
+### New
+- Settings migrated to Obsidian's declarative settings API (`getSettingDefinitions()`): all Sector Tasks settings now appear in Obsidian's settings search (Obsidian 1.13+), sectors can be reordered by drag-and-drop and deleted directly from the list, and Appearance (fonts, theme colors, icons, project/label colors) is a proper sub-page instead of a collapsible section.
+- The tasks-file path and icon-name fields now validate input inline instead of silently falling back.
+
+### Changed
+- `minAppVersion` raised from 1.7.2 to 1.13.0 — required for the declarative settings API. Users on older Obsidian versions keep their installed plugin version but won't receive this update until they update Obsidian.
+- Adding a sector now creates a placeholder entry (`#new-sector`) to edit in place, replacing the separate add-sector form.
+
 ## 1.2.3
 
 ### Internal
