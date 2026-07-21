@@ -17,6 +17,19 @@ the [changelog](./CHANGELOG.md).
   show the current UI (Today sidebar, grouped settings). Author task, since it
   needs a real vault.
 
+## In progress
+
+- **Source-based build (fixes Obsidian's security-scan disclosures)** —
+  today the repo ships a hand-maintained `main.js` bundle with no source or
+  lockfile, so Obsidian's plugin scanner can't run build verification, malware
+  scanning, or artifact attestation on releases. Plan: reconstruct the
+  TypeScript source under `src/` from the bundle's existing module comments,
+  add an esbuild + tsc build, and switch the release workflow to build from
+  source and attest the output. Phase 1 (this entry): build tooling
+  (`package.json` devDependencies, `tsconfig.json`, `esbuild.config.mjs`,
+  `package-lock.json`) is in place; `src/` reconstruction, CI build, and
+  attestations follow in later phases before the next release.
+
 ## Parked (larger)
 
 - **Vault-wide inline tasks** — read tasks carrying the Tasks-plugin tag from
