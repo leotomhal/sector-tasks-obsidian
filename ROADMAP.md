@@ -1,0 +1,43 @@
+# Roadmap
+
+An informal backlog of ideas that have come up but aren't built yet. Nothing
+here is committed — it's a place to not lose good ideas. Shipped work lives in
+the [changelog](./CHANGELOG.md).
+
+## Under consideration (small)
+
+- **"Overdue → today" bulk action** — one command to reschedule all overdue
+  tasks to today, for the daily-planning "pull everything forward" move.
+- **Completed statistics** — a small line in the Completed view, e.g.
+  "12 done this week · 34 this month", computed from the existing `✅` dates.
+- **Tab-badge fallback** — the Today sidebar tab badge uses an internal
+  Obsidian API (`leaf.tabHeaderEl`); fall back to the tab title ("Today (3)")
+  if that ever breaks. Only worth doing if the badge misbehaves.
+- **Refresh screenshots** — the `img/*.png` in the README could be updated to
+  show the current UI (Today sidebar, grouped settings). Author task, since it
+  needs a real vault.
+
+## Parked (larger)
+
+- **Vault-wide inline tasks** — read tasks carrying the Tasks-plugin tag from
+  anywhere in the vault, not only the single configured file. Big change: the
+  whole store is built around one file (full-file rewrite on save, identity via
+  appended `🆔`). Open design decisions if revisited:
+  - read-only aggregation vs. in-place per-line editing across notes;
+  - whether to avoid writing `🆔` into other notes (identify by file + line);
+  - new tasks / Inbox likely still land in the configured file (vault is only an
+    extra *read* source);
+  - tag taken from the Tasks plugin's global filter (fallback `#task`).
+- **Time tracker** — either a lightweight focus/Pomodoro timer in the Today
+  sidebar (no persistence), or per-task time tracking. The latter needs a
+  storage decision: keep totals in the plugin's own `data.json` (task lines stay
+  Tasks-compatible) rather than writing non-standard fields into the note.
+
+## Out of scope (by design)
+
+The plugin deliberately delegates these to the Tasks plugin or the note itself,
+to stay a lean view over Tasks-compatible lines:
+
+- Task descriptions, attachments, sub-tasks, and deadlines on the board.
+- A second, parallel task data format — Sector Tasks only reads/writes
+  Tasks-compatible Markdown.
