@@ -1,6 +1,6 @@
 import { SECTOR_LABELS, SECTOR_TAGS } from "./tasksFormat";
 
-export var INBOX_VIEW_NAME = "Inbox";
+export const INBOX_VIEW_NAME = "Inbox";
 export function sectorRank(name) {
   const idx = SECTOR_TAGS.findIndex((s) => s.toLowerCase() === name.toLowerCase());
   return idx === -1 ? SECTOR_TAGS.length : idx;

@@ -4,8 +4,8 @@ import { addDaysIso, compareIsoDates, formatDueDateChip, todayIso } from "../dat
 import { getPriorityColor } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
 
-export var VIEW_TYPE_BELKI_TODAY = "sector-task-today";
-export var TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
+export const VIEW_TYPE_BELKI_TODAY = "sector-task-today";
+export const TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
 export function showDueDateMenu(store, task, event) {
   const menu = new Menu();
   const current = task.due;
@@ -35,7 +35,7 @@ export function showDueDateMenu(store, task, event) {
   });
   menu.showAtMouseEvent(event);
 }
-export var TodaySidebarView = class extends ItemView {
+export const TodaySidebarView = class extends ItemView {
   [key: string]: any;
   constructor(leaf, store, settings) {
     super(leaf);
@@ -57,7 +57,7 @@ export var TodaySidebarView = class extends ItemView {
     this.render();
   }
   async onClose() {
-    var _a;
+    let _a;
     (_a = this.unsubscribe) == null ? void 0 : _a.call(this);
     this.updateTabBadge(0);
   }

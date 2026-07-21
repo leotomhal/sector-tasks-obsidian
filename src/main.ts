@@ -205,13 +205,13 @@ export default class BelkiPlugin extends Plugin {
   async activateTodaySidebar() {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI_TODAY);
     if (existing.length > 0) {
-      await this.app.workspace.revealLeaf(existing[0]);
+      this.app.workspace.revealLeaf(existing[0]);
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: VIEW_TYPE_BELKI_TODAY, active: true });
-    await this.app.workspace.revealLeaf(leaf);
+    this.app.workspace.revealLeaf(leaf);
   }
   getProjectNames() {
     return uniqueRealProjects([

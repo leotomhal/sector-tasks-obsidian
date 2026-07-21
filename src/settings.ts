@@ -5,8 +5,8 @@ import { projectDisplayName } from "./projects";
 import { DEFAULT_SECTORS, SECTOR_TAG_PATTERN, applySectorSettings, isReservedSectorTag, normalizeSectorTag } from "./tasksFormat";
 import { FONT_OPTIONS, OVERDUE_RANGES, SORT_MODES } from "./types";
 
-export var DEFAULT_DATA_FOLDER_PATH = "_belki_files";
-export var DEFAULT_SETTINGS = {
+export const DEFAULT_DATA_FOLDER_PATH = "_belki_files";
+export const DEFAULT_SETTINGS = {
   tasksFilePath: "Tasks.md",
   dataFolderPath: DEFAULT_DATA_FOLDER_PATH,
   sectors: DEFAULT_SECTORS.map((s) => ({ ...s })),
@@ -38,13 +38,13 @@ export var DEFAULT_SETTINGS = {
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
-export var OVERDUE_RANGE_LABELS = {
+export const OVERDUE_RANGE_LABELS = {
   yesterday: "Yesterday",
   last7: "Last 7 days",
   last30: "Last 30 days",
   older: "Older"
 };
-export var FONT_OPTION_LABELS = {
+export const FONT_OPTION_LABELS = {
   system: "System Font",
   ibmPlexSans: "IBM Plex Sans",
   ibmPlexMono: "IBM Plex Mono",
@@ -57,7 +57,7 @@ export var FONT_OPTION_LABELS = {
   geistMono: "Geist Mono",
   dmSans: "DM Sans"
 };
-export var BELKI_FONT_STACKS = {
+export const BELKI_FONT_STACKS = {
   system: 'var(--font-interface), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   ibmPlexSans: '"IBM Plex Sans", var(--font-interface), system-ui, sans-serif',
   ibmPlexMono: '"IBM Plex Mono", var(--font-monospace), monospace',
@@ -84,7 +84,7 @@ export function normalizeLabelColorMap(colors) {
 export function normalizeLabelRegistry(labels) {
   return dedupeLabels(labels || []);
 }
-export var LUCIDE_ICON_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const LUCIDE_ICON_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export function normalizeIcons(savedIcons) {
   const result = { ...DEFAULT_SETTINGS.icons };
   for (const key of Object.keys(DEFAULT_SETTINGS.icons)) {
@@ -122,7 +122,7 @@ export function overdueRangeLabel(range) {
 export function fontStackForOption(option) {
   return BELKI_FONT_STACKS[option] || BELKI_FONT_STACKS.system;
 }
-export var THEME_COLOR_KEYS = [
+export const THEME_COLOR_KEYS = [
   { key: "bg", cssVar: "--belki-bg", label: "Background" },
   { key: "surface", cssVar: "--belki-surface", label: "Surfaces (modals, chips)" },
   { key: "sidebarBg", cssVar: "--belki-sidebar-bg", label: "Sidebar background" },
@@ -138,7 +138,7 @@ export var THEME_COLOR_KEYS = [
   { key: "danger", cssVar: "--belki-danger", label: "Danger / delete" },
   { key: "chipBg", cssVar: "--belki-chip-bg", label: "Chip background" }
 ];
-export var THEME_PRESETS = {
+export const THEME_PRESETS = {
   light: {
     bg: "#ffffff",
     surface: "#ffffff",
@@ -172,7 +172,7 @@ export var THEME_PRESETS = {
     chipBg: "#2a2a2a"
   }
 };
-export var THEME_PRESET_OPTIONS = [
+export const THEME_PRESET_OPTIONS = [
   ["obsidian", "Follow Obsidian theme (default)"],
   ["light", "Light"],
   ["dark", "Dark"],
@@ -220,7 +220,7 @@ export function applyBelkiFontSettings(element, settings) {
     "--belki-font-label": fontStackForOption(settings.labelFont)
   });
 }
-export var BelkiSettingTab = class extends PluginSettingTab {
+export const BelkiSettingTab = class extends PluginSettingTab {
   [key: string]: any;
   constructor(app, plugin) {
     super(app, plugin);

@@ -3,6 +3,15 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.2.1
+
+### Fixed
+- Cleared the blocking error from Obsidian's plugin review: `Workspace.revealLeaf` is only supported since Obsidian 1.7.2, so `minAppVersion` is raised from 1.6.6 to 1.7.2 (revealLeaf is used to open the Today sidebar).
+
+### Internal
+- Addressed the actionable lint findings from Obsidian's review: `document.createElement`/`createEl("span")` → `createSpan`/`createDiv` helpers, `var` → `const`/`let`, removed unnecessary regex escapes, added the `u` flag to emoji character classes, and removed an empty catch block.
+- Added ESLint (with `eslint-plugin-obsidianmd` + `typescript-eslint`) as a dev dependency and a `lint` script, and wired it into CI so genuine review-blocking issues surface before submission. The remaining type-safety warnings on the intentionally loosely-typed reconstructed code are advisory (non-blocking), matching how Obsidian's review reports them.
+
 ## 1.2.0
 
 ### New

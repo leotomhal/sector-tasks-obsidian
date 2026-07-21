@@ -1,4 +1,4 @@
-export var PRIORITY_COLORS = {
+export const PRIORITY_COLORS = {
   P1: { name: "Priority 1", color: "#E03E3E", light: "#FBE4E3" },
   P2: { name: "Priority 2", color: "#D9730D", light: "#FAEBDD" },
   P3: { name: "Priority 3", color: "#0C6E99", light: "#DDEBF1" },
