@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## Unreleased
+
+### Internal
+- Replaced the deprecated `builtin-modules` dev dependency with Node's built-in `builtinModules` (from `node:module`) in the esbuild config, per Obsidian's review recommendation. Build output is unchanged.
+
 ## 1.2.2
 
 ### Internal
