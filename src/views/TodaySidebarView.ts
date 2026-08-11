@@ -3,7 +3,7 @@ import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { addDaysIso, compareIsoDates, formatDueDateChip, todayIso } from "../dateUtils";
-import { getPriorityColor } from "../priority";
+import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
 
 export const VIEW_TYPE_BELKI_TODAY = "sector-task-today";
@@ -27,6 +27,30 @@ export function showDueDateMenu(store: TaskStore, task: Task, event: MouseEvent)
   menu.addItem((item) => {
     item.setTitle("Remove due date").setDisabled(!current).onClick(() => {
       void store.updateTask(task.id, { due: void 0 });
+    });
+  });
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle("Edit in Tasks modal…").setIcon("pencil").onClick(() => {
+      void store.updateTaskViaModal(task.id);
+    });
+  });
+  menu.showAtMouseEvent(event);
+}
+export function showPriorityMenu(store: TaskStore, task: Task, event: MouseEvent) {
+  const menu = new Menu();
+  const current = task.priority || "none";
+  for (const priority of ["P1", "P2", "P3", "P4"]) {
+    menu.addItem((item) => {
+      item.setTitle(getPriorityLabel(priority)).setChecked(current === priority).onClick(() => {
+        void store.updateTask(task.id, { priority });
+      });
+    });
+  }
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle("No priority").setDisabled(current === "none").onClick(() => {
+      void store.updateTask(task.id, { priority: "none" });
     });
   });
   menu.addSeparator();
@@ -189,6 +213,11 @@ export class TodaySidebarView extends ItemView {
     checkbox.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.store.toggleComplete(task.id);
+    });
+    checkbox.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showPriorityMenu(this.store, task, event);
     });
     const content = row.createDiv({ cls: "belki-today-content" });
     content.createDiv({ cls: "belki-today-task-title", text: task.title });

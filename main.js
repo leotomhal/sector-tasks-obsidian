@@ -503,6 +503,30 @@ function showDueDateMenu(store, task, event) {
   });
   menu.showAtMouseEvent(event);
 }
+function showPriorityMenu(store, task, event) {
+  const menu = new import_obsidian.Menu();
+  const current = task.priority || "none";
+  for (const priority of ["P1", "P2", "P3", "P4"]) {
+    menu.addItem((item) => {
+      item.setTitle(getPriorityLabel(priority)).setChecked(current === priority).onClick(() => {
+        void store.updateTask(task.id, { priority });
+      });
+    });
+  }
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle("No priority").setDisabled(current === "none").onClick(() => {
+      void store.updateTask(task.id, { priority: "none" });
+    });
+  });
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle("Edit in Tasks modal…").setIcon("pencil").onClick(() => {
+      void store.updateTaskViaModal(task.id);
+    });
+  });
+  menu.showAtMouseEvent(event);
+}
 var TodaySidebarView = class extends import_obsidian.ItemView {
   constructor(leaf, store, settings) {
     super(leaf);
@@ -654,6 +678,11 @@ var TodaySidebarView = class extends import_obsidian.ItemView {
     checkbox.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.store.toggleComplete(task.id);
+    });
+    checkbox.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showPriorityMenu(this.store, task, event);
     });
     const content = row.createDiv({ cls: "belki-today-content" });
     content.createDiv({ cls: "belki-today-task-title", text: task.title });
@@ -3264,6 +3293,11 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     checkbox.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.store.toggleComplete(task.id);
+    });
+    checkbox.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showPriorityMenu(this.store, task, event);
     });
     const content = row.createDiv({ cls: "belki-task-content" });
     renderLinkedText(task.title, content.createDiv({ cls: "belki-task-title" }), this.app);
