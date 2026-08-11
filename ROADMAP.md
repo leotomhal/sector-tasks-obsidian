@@ -6,8 +6,6 @@ the [changelog](./CHANGELOG.md).
 
 ## Under consideration (small)
 
-- **"Overdue → today" bulk action** — one command to reschedule all overdue
-  tasks to today, for the daily-planning "pull everything forward" move.
 - **Completed statistics** — a small line in the Completed view, e.g.
   "12 done this week · 34 this month", computed from the existing `✅` dates.
 - **Tab-badge fallback** — the Today sidebar tab badge uses an internal
@@ -28,10 +26,6 @@ the [changelog](./CHANGELOG.md).
   - new tasks / Inbox likely still land in the configured file (vault is only an
     extra *read* source);
   - tag taken from the Tasks plugin's global filter (fallback `#task`).
-- **Time tracker** — either a lightweight focus/Pomodoro timer in the Today
-  sidebar (no persistence), or per-task time tracking. The latter needs a
-  storage decision: keep totals in the plugin's own `data.json` (task lines stay
-  Tasks-compatible) rather than writing non-standard fields into the note.
 
 ## Out of scope (by design)
 
