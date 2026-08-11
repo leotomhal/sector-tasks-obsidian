@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.2
+
+### Changed
+- **Search results:** completed tasks (shown when the "search excludes completed tasks" setting is off) now sort after active matches, appear italic and greyed, and carry a "Completed" badge in the result meta row.
+
 ## 1.3.1
 
 ### Fixed
