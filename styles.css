@@ -607,7 +607,7 @@
 .belki-task-checkbox {
   appearance: none;
   background: transparent;
-  border: 1px solid var(--belki-faint);
+  border: 1.5px solid var(--belki-priority-text, var(--belki-faint));
   border-radius: 50%;
   box-shadow: none;
   height: 20px;

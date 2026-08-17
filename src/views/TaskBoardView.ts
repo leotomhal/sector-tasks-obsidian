@@ -1,5 +1,5 @@
 import { App, ItemView, MarkdownView, Modal, Notice, Platform, TFile, WorkspaceLeaf, setIcon } from "obsidian";
-import { showDueDateMenu, showPriorityMenu } from "./TodaySidebarView";
+import { showTaskContextMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
 import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isToday, todayIso, yesterdayIso } from "../dateUtils";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "../labels";
@@ -1239,7 +1239,7 @@ export class TaskBoardView extends ItemView {
     if (!task.completed) {
       row.addEventListener("contextmenu", (event) => {
         event.preventDefault();
-        showDueDateMenu(this.store, task, event);
+        showTaskContextMenu(this.store, task, event);
       });
     }
     row.addEventListener("click", (event) => {
@@ -1311,11 +1311,6 @@ export class TaskBoardView extends ItemView {
     checkbox.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.store.toggleComplete(task.id);
-    });
-    checkbox.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      showPriorityMenu(this.store, task, event);
     });
     const content = row.createDiv({ cls: "belki-task-content" });
     renderLinkedText(task.title, content.createDiv({ cls: "belki-task-title" }), this.app);
