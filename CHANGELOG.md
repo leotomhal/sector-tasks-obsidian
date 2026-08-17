@@ -3,6 +3,14 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.4
+
+### New
+- **Combined right-click menu:** right-clicking a task row (board or Today sidebar) now opens one menu with due date (Today/Tomorrow/Next week/Remove) and priority (P1-P4/No priority) together, instead of two separate menus split across the row and the checkbox.
+
+### Fixed
+- **Priority now visible on open board tasks:** the board's task checkbox only showed its priority color once a task was checked off; it now shows it while open too, matching the Today sidebar checkbox. Priority is visible directly in the sector columns, not only via the priority sort/group mode.
+
 ## 1.3.2
 
 ### Changed
