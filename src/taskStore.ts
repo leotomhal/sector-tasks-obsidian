@@ -15,6 +15,7 @@ export class TaskStore {
   warnedStorageIssues: Set<string>;
   writing: boolean;
   lastKnownDiskContent: string | null;
+  lastCompletion: { id: string; title: string; patch: Partial<Task> } | null;
   constructor(app: App, settings: BelkiSettings) {
     this.app = app;
     this.settings = settings;
@@ -24,6 +25,7 @@ export class TaskStore {
     this.warnedStorageIssues = /* @__PURE__ */ new Set();
     this.writing = false;
     this.lastKnownDiskContent = null;
+    this.lastCompletion = null;
   }
   get filePath() {
     return normalizePath(this.settings.tasksFilePath || "Tasks.md");
@@ -181,7 +183,13 @@ export class TaskStore {
   async toggleComplete(id: string) {
     const task = this.tasks.find((t) => t.id === id);
     if (!task) return;
-    if (task.repeat && !task.completed) {
+    if (task.completed) {
+      if (this.lastCompletion?.id === id) this.lastCompletion = null;
+      await this.updateTask(id, { completed: false, completedDate: void 0 });
+      return;
+    }
+    this.lastCompletion = { id, title: task.title, patch: completionUndoPatch(task) };
+    if (task.repeat) {
       const today = todayIso();
       const fromDate = task.repeat.mode === "completedDate" ? today : task.due || today;
       const nextDue = nextOccurrence(task.repeat, fromDate);
@@ -193,16 +201,45 @@ export class TaskStore {
           completed: true,
           completedDate: today
         });
+        this.showCompletionNotice("Task completed.");
       } else {
         await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
-        new Notice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}`);
+        this.showCompletionNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`);
       }
       return;
     }
-    await this.updateTask(id, {
-      completed: !task.completed,
-      completedDate: task.completed ? void 0 : todayIso()
+    await this.updateTask(id, { completed: true, completedDate: todayIso() });
+    this.showCompletionNotice("Task completed.");
+  }
+  /** Toast for a just-completed task, with an inline action to take it back. */
+  showCompletionNotice(message: string) {
+    let notice: Notice | null = null;
+    const fragment = createFragment((el) => {
+      el.appendText(`${message} `);
+      const undo = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
+      undo.addEventListener("click", (event) => {
+        event.preventDefault();
+        notice?.hide();
+        void this.undoLastCompletion();
+      });
     });
+    notice = new Notice(fragment, 6e3);
+  }
+  /** Restores the task state captured before the most recent completion. */
+  async undoLastCompletion(): Promise<boolean> {
+    const last = this.lastCompletion;
+    if (!last) {
+      new Notice("Nothing to undo.");
+      return false;
+    }
+    this.lastCompletion = null;
+    if (!this.tasks.some((t) => t.id === last.id)) {
+      new Notice("The completed task is no longer in the tasks file.");
+      return false;
+    }
+    await this.updateTask(last.id, last.patch);
+    new Notice(`Restored "${last.title}".`);
+    return true;
   }
   async deleteTask(id: string) {
     await this.deleteManyTasks([id]);
@@ -370,6 +407,16 @@ ${lines.join("\n")}
     new Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
+/** The fields toggleComplete may change, captured so a completion can be taken back. */
+export function completionUndoPatch(task: Task): Partial<Task> {
+  return {
+    completed: task.completed,
+    completedDate: task.completedDate,
+    due: task.due,
+    repeat: task.repeat ? { ...task.repeat } : void 0,
+    completedOccurrences: task.completedOccurrences ? [...task.completedOccurrences] : void 0
+  };
+}
 export function normalizeOptional(value?: string): string | undefined {
   const trimmed = (value || "").trim();
   return trimmed ? trimmed : void 0;

@@ -11,6 +11,15 @@ All notable changes to Sector Tasks are documented here. Versions follow the
 ### Fixed
 - **Priority now visible on open board tasks:** the board's task checkbox only showed its priority color once a task was checked off; it now shows it while open too, matching the Today sidebar checkbox. Priority is visible directly in the sector columns, not only via the priority sort/group mode.
 
+## 1.3.3
+
+### New
+- **Right-click priority menu:** right-clicking a task's checkbox (board or Today sidebar) opened a menu to set P1-P4 or clear the priority, without going through the Tasks modal. Superseded in 1.3.4, which merged it into the row's context menu.
+
+### Docs
+- Fixed the README's "Current version" line, which was still showing 1.2.1.
+- Trimmed two backlog ideas from the roadmap that are no longer wanted: the "overdue → today" bulk action and the focus-timer/Pomodoro idea.
+
 ## 1.3.2
 
 ### Changed
