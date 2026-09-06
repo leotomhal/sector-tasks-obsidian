@@ -3,6 +3,16 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.5
+
+### New
+- **Undo after checking a task off:** completing a task now shows a short notice with an inline "Undo" that restores the state from before — completed flag, completion date, due date, repeat rule and recorded occurrences. This covers recurring tasks too, where completing silently reschedules the task to its next due date. Also available as the **"Undo last completed task"** command, so it can get a hotkey; it works from the board, the Today sidebar, and the review walkthrough's `D` action.
+
+### Docs
+- The README no longer hardcodes the version number (it had gone stale twice, since release commits don't touch it) and links to the releases page instead.
+- Backfilled the missing 1.3.3 changelog entry.
+- `package-lock.json` now tracks the released version.
+
 ## 1.3.4
 
 ### New
