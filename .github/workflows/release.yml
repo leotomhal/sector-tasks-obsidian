@@ -54,9 +54,17 @@ jobs:
               main.js manifest.json styles.css
             # Fill in auto-generated notes if the release body is still empty
             # (e.g. a release drafted through the GitHub UI without notes).
+            # "gh release edit" has no --generate-notes flag, so ask the API for
+            # the notes and pass them in. Cosmetic: never fail the release for it,
+            # the assets above are what matters.
             body="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body -q .body)"
             if [ -z "$body" ]; then
-              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --generate-notes
+              if notes="$(gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+                  -f tag_name="$tag" -q .body)"; then
+                gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "$notes"
+              else
+                echo "::warning::Could not generate release notes for $tag; the release body stays empty."
+              fi
             fi
           else
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
