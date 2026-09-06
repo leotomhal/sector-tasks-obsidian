@@ -2082,3 +2082,9 @@ button.belki-review-discard:hover {
   line-height: 1.4;
   margin: -6px 0 14px;
 }
+
+.belki-notice-undo {
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+}

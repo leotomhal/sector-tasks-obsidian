@@ -41,7 +41,8 @@ const {
   parseTasksRecurrence,
   serializeTasksRecurrence,
   normalizeLabelName,
-  extractTags
+  extractTags,
+  completionUndoPatch
 } = testables;
 
 test("__testables are exported", () => {
@@ -158,4 +159,32 @@ test("normalizeLabelName lowercases and slugifies", () => {
 
 test("extractTags finds hashtags", () => {
   assert.deepEqual(extractTags("a #task #01this-week b #work"), ["task", "01this-week", "work"]);
+});
+
+// The undo patch has to cover exactly the fields toggleComplete writes, or an
+// undone completion leaves part of the change behind.
+test("completionUndoPatch captures every field a completion changes", () => {
+  const { task } = parseTaskLine("- [ ] Water plants #task 📅 2026-07-15 🔁 every week", "id1", 0);
+  const patch = completionUndoPatch(task);
+  assert.deepEqual(Object.keys(patch).sort(), [
+    "completed",
+    "completedDate",
+    "completedOccurrences",
+    "due",
+    "repeat"
+  ]);
+  assert.equal(patch.completed, false);
+  assert.equal(patch.completedDate, undefined);
+  assert.equal(patch.due, "2026-07-15");
+  assert.equal(patch.repeat.frequency, "weekly");
+});
+
+test("completionUndoPatch copies repeat and occurrences instead of sharing them", () => {
+  const { task } = parseTaskLine("- [ ] Water plants #task 🔁 every week", "id1", 0);
+  task.completedOccurrences = ["2026-07-01"];
+  const patch = completionUndoPatch(task);
+  patch.completedOccurrences.push("2026-07-08");
+  patch.repeat.frequency = "daily";
+  assert.deepEqual(task.completedOccurrences, ["2026-07-01"]);
+  assert.equal(task.repeat.frequency, "weekly");
 });

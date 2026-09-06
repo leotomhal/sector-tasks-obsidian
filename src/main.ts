@@ -8,7 +8,7 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { normalizeReviewSession } from "./review";
 import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeSortMode, normalizeThemeColors, normalizeThemePreset } from "./settings";
-import { TaskStore } from "./taskStore";
+import { TaskStore, completionUndoPatch } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
 export default class BelkiPlugin extends Plugin {
@@ -74,6 +74,13 @@ export default class BelkiPlugin extends Plugin {
       name: "Open search",
       callback: () => {
         void this.activateView("search");
+      }
+    });
+    this.addCommand({
+      id: "undo-last-completion",
+      name: "Undo last completed task",
+      callback: () => {
+        void this.store.undoLastCompletion();
       }
     });
     this.addCommand({
@@ -296,5 +303,6 @@ export const __testables = {
   serializeTasksRecurrence,
   nextOccurrence,
   normalizeLabelName,
-  extractTags
+  extractTags,
+  completionUndoPatch
 };

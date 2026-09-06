@@ -4238,6 +4238,7 @@ var TaskStore = class {
     this.warnedStorageIssues = /* @__PURE__ */ new Set();
     this.writing = false;
     this.lastKnownDiskContent = null;
+    this.lastCompletion = null;
   }
   get filePath() {
     return (0, import_obsidian4.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
@@ -4393,9 +4394,16 @@ var TaskStore = class {
     await this.save();
   }
   async toggleComplete(id) {
+    var _a;
     const task = this.tasks.find((t) => t.id === id);
     if (!task) return;
-    if (task.repeat && !task.completed) {
+    if (task.completed) {
+      if (((_a = this.lastCompletion) == null ? void 0 : _a.id) === id) this.lastCompletion = null;
+      await this.updateTask(id, { completed: false, completedDate: void 0 });
+      return;
+    }
+    this.lastCompletion = { id, title: task.title, patch: completionUndoPatch(task) };
+    if (task.repeat) {
       const today = todayIso();
       const fromDate = task.repeat.mode === "completedDate" ? today : task.due || today;
       const nextDue = nextOccurrence(task.repeat, fromDate);
@@ -4407,16 +4415,45 @@ var TaskStore = class {
           completed: true,
           completedDate: today
         });
+        this.showCompletionNotice("Task completed.");
       } else {
         await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
-        new import_obsidian4.Notice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}`);
+        this.showCompletionNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`);
       }
       return;
     }
-    await this.updateTask(id, {
-      completed: !task.completed,
-      completedDate: task.completed ? void 0 : todayIso()
+    await this.updateTask(id, { completed: true, completedDate: todayIso() });
+    this.showCompletionNotice("Task completed.");
+  }
+  /** Toast for a just-completed task, with an inline action to take it back. */
+  showCompletionNotice(message) {
+    let notice = null;
+    const fragment = createFragment((el) => {
+      el.appendText(`${message} `);
+      const undo = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
+      undo.addEventListener("click", (event) => {
+        event.preventDefault();
+        notice == null ? void 0 : notice.hide();
+        void this.undoLastCompletion();
+      });
     });
+    notice = new import_obsidian4.Notice(fragment, 6e3);
+  }
+  /** Restores the task state captured before the most recent completion. */
+  async undoLastCompletion() {
+    const last = this.lastCompletion;
+    if (!last) {
+      new import_obsidian4.Notice("Nothing to undo.");
+      return false;
+    }
+    this.lastCompletion = null;
+    if (!this.tasks.some((t) => t.id === last.id)) {
+      new import_obsidian4.Notice("The completed task is no longer in the tasks file.");
+      return false;
+    }
+    await this.updateTask(last.id, last.patch);
+    new import_obsidian4.Notice(`Restored "${last.title}".`);
+    return true;
   }
   async deleteTask(id) {
     await this.deleteManyTasks([id]);
@@ -4585,6 +4622,15 @@ ${lines.join("\n")}
     new import_obsidian4.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
+function completionUndoPatch(task) {
+  return {
+    completed: task.completed,
+    completedDate: task.completedDate,
+    due: task.due,
+    repeat: task.repeat ? { ...task.repeat } : void 0,
+    completedOccurrences: task.completedOccurrences ? [...task.completedOccurrences] : void 0
+  };
+}
 function normalizeOptional(value) {
   const trimmed = (value || "").trim();
   return trimmed ? trimmed : void 0;
@@ -4674,6 +4720,13 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       name: "Open search",
       callback: () => {
         void this.activateView("search");
+      }
+    });
+    this.addCommand({
+      id: "undo-last-completion",
+      name: "Undo last completed task",
+      callback: () => {
+        void this.store.undoLastCompletion();
       }
     });
     this.addCommand({
@@ -4893,5 +4946,6 @@ var __testables = {
   serializeTasksRecurrence,
   nextOccurrence,
   normalizeLabelName,
-  extractTags
+  extractTags,
+  completionUndoPatch
 };
