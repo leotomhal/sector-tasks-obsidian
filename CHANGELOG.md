@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.8
+
+### New
+- **Single-line task rows:** a new Appearance → Layout → Task rows setting (default "Stacked", the unchanged existing layout) offers "Single line" — title, due date, labels, and the project chip on one row instead of a title line with a meta line below it, for a noticeably shorter list. The description isn't shown in this mode (a full description doesn't fit one line without turning into unreadable fragments); the title truncates with an ellipsis instead of wrapping.
+
 ## 1.3.7
 
 ### New
