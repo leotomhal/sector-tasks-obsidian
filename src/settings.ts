@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   reviewSession: null,
   autoDeleteCompletedAfterDays: 0,
   searchExcludeCompleted: false,
+  compactList: false,
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -306,6 +307,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value as number);
     } else if (key === "searchExcludeCompleted") {
       settings.searchExcludeCompleted = value === true;
+    } else if (key === "compactList") {
+      settings.compactList = value === true;
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -577,6 +580,17 @@ export class BelkiSettingTab extends PluginSettingTab {
         },
         {
           type: "group",
+          heading: "Layout",
+          items: [
+            {
+              name: "Compact rows",
+              desc: "Tighter row padding and smaller text on the board and Today sidebar. Off by default.",
+              control: { type: "toggle", key: "compactList" }
+            }
+          ]
+        },
+        {
+          type: "group",
           heading: "Theme",
           items: [
             {
@@ -750,6 +764,13 @@ export class BelkiSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
         this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    new Setting(containerEl).setName("Compact rows").setDesc("Tighter row padding and smaller text on the board and Today sidebar. Off by default.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.compactList === true).onChange(async (value) => {
+        this.plugin.settings.compactList = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });

@@ -99,6 +99,7 @@ export class TodaySidebarView extends ItemView {
     const container = this.contentEl;
     container.empty();
     container.addClass("belki-today-panel");
+    container.toggleClass("is-compact", this.settings.compactList === true);
     const header = container.createDiv({ cls: "belki-today-header" });
     header.createSpan({ cls: "belki-today-heading", text: "Today" });
     const headerActions = header.createDiv({ cls: "belki-today-header-actions" });

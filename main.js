@@ -568,6 +568,7 @@ var TodaySidebarView = class extends import_obsidian.ItemView {
     const container = this.contentEl;
     container.empty();
     container.addClass("belki-today-panel");
+    container.toggleClass("is-compact", this.settings.compactList === true);
     const header = container.createDiv({ cls: "belki-today-header" });
     header.createSpan({ cls: "belki-today-heading", text: "Today" });
     const headerActions = header.createDiv({ cls: "belki-today-header-actions" });
@@ -968,6 +969,7 @@ var DEFAULT_SETTINGS = {
   reviewSession: null,
   autoDeleteCompletedAfterDays: 0,
   searchExcludeCompleted: false,
+  compactList: false,
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -1234,6 +1236,8 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
       settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value);
     } else if (key === "searchExcludeCompleted") {
       settings.searchExcludeCompleted = value === true;
+    } else if (key === "compactList") {
+      settings.compactList = value === true;
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -1505,6 +1509,17 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
         },
         {
           type: "group",
+          heading: "Layout",
+          items: [
+            {
+              name: "Compact rows",
+              desc: "Tighter row padding and smaller text on the board and Today sidebar. Off by default.",
+              control: { type: "toggle", key: "compactList" }
+            }
+          ]
+        },
+        {
+          type: "group",
           heading: "Theme",
           items: [
             {
@@ -1678,6 +1693,13 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     new import_obsidian2.Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
         this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    new import_obsidian2.Setting(containerEl).setName("Compact rows").setDesc("Tighter row padding and smaller text on the board and Today sidebar. Off by default.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.compactList === true).onChange(async (value) => {
+        this.plugin.settings.compactList = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });
@@ -2206,6 +2228,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     containerEl.empty();
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
+    containerEl.toggleClass("is-compact", this.settings.compactList === true);
     applyBelkiFontSettings(containerEl, this.settings);
     applyBelkiThemeSettings(containerEl, this.settings);
     containerEl.addEventListener("keydown", this.handleRootKeyDown, true);

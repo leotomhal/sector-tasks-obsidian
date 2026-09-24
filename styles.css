@@ -2111,3 +2111,77 @@ button.belki-review-discard:hover {
   font-weight: 600;
   text-decoration: underline;
 }
+
+/* Compact rows (Appearance → Layout setting): tighter vertical rhythm on the
+   board and Today sidebar. Only spacing and font sizes change here — the row
+   structure itself stays the same as the regular layout. */
+.belki-root.is-compact .belki-section {
+  margin-bottom: 20px;
+}
+
+.belki-root.is-compact .belki-task-group {
+  margin-top: 4px;
+}
+
+.belki-root.is-compact .belki-task-group-label {
+  padding: 2px 0;
+}
+
+.belki-root.is-compact .belki-task-row {
+  padding: 6px 16px 6px 0;
+}
+
+.belki-root.is-compact .belki-task-checkbox {
+  height: 17px;
+  margin-top: 0;
+  width: 17px;
+}
+
+.belki-root.is-compact .belki-task-title {
+  font-size: 13.5px;
+  line-height: 1.3;
+}
+
+.belki-root.is-compact .belki-task-description {
+  -webkit-line-clamp: 1;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.belki-root.is-compact .belki-task-meta {
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.belki-root.is-compact .belki-task-date,
+.belki-root.is-compact .belki-task-label,
+.belki-root.is-compact .belki-task-project,
+.belki-root.is-compact .belki-task-deadline,
+.belki-root.is-compact .belki-task-last-completed,
+.belki-root.is-compact .belki-task-subtask-counter,
+.belki-root.is-compact .belki-task-attachments {
+  font-size: 11.5px;
+}
+
+.belki-root.is-compact .belki-task-project {
+  margin-top: 0;
+  padding: 1px 6px;
+}
+
+.belki-today-panel.is-compact .belki-today-row {
+  gap: 7px;
+  padding: 4px 6px;
+}
+
+.belki-today-panel.is-compact button.belki-today-checkbox {
+  height: 15px;
+  width: 15px;
+}
+
+.belki-today-panel.is-compact .belki-today-task-title {
+  font-size: 13px;
+}
+
+.belki-today-panel.is-compact .belki-today-meta {
+  font-size: 11px;
+}

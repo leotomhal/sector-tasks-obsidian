@@ -114,6 +114,7 @@ export interface BelkiSettings {
   reviewSession: ReviewSession | null;
   autoDeleteCompletedAfterDays: number;
   searchExcludeCompleted: boolean;
+  compactList: boolean;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }
