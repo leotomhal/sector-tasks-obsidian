@@ -1,7 +1,7 @@
 import { App, ItemView, MarkdownView, Modal, Notice, Platform, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { showTaskContextMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
-import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isToday, todayIso, yesterdayIso } from "../dateUtils";
+import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isIsoDate, isToday, startOfIsoWeekIso, todayIso, yesterdayIso } from "../dateUtils";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "../labels";
 import { getPriorityClass, getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName, uniqueRealProjects } from "../projects";
@@ -604,6 +604,9 @@ export class TaskBoardView extends ItemView {
     titleWrap.createEl("h1", { text: this.getTitle() });
     titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
     this.renderSortingControl(header);
+    if (this.mode === "completed") {
+      this.renderCompletedStats(main, tasks);
+    }
     const sections = main.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
     const addArea = main.createDiv({ cls: "belki-add-area" });
@@ -620,6 +623,36 @@ export class TaskBoardView extends ItemView {
         text: `No tasks yet. Add one and Sector Tasks will write it to ${this.store.filePath}.`
       });
     }
+  }
+  /** All distinct completion-event dates for a task, deduped (a repeat series's
+   *  final occurrence lands in both completedOccurrences and completedDate). */
+  getCompletionDates(task: Task): string[] {
+    const dates = new Set(task.completedOccurrences || []);
+    if (task.completed && task.completedDate) dates.add(task.completedDate);
+    return [...dates].filter((date) => isIsoDate(date));
+  }
+  countCompletionsSince(tasks: Task[], sinceIso: string): number {
+    let count = 0;
+    for (const task of tasks) {
+      for (const date of this.getCompletionDates(task)) {
+        if (date >= sinceIso) count++;
+      }
+    }
+    return count;
+  }
+  renderCompletedStats(parent: HTMLElement, tasks: Task[]) {
+    const archivedSet = new Set(this.settings.archivedProjects);
+    const relevant = tasks.filter((task) => !archivedSet.has(normalizeTaskProject(task.project) || ""));
+    const today = this.countCompletionsSince(relevant, todayIso());
+    const thisWeek = this.countCompletionsSince(relevant, startOfIsoWeekIso());
+    if (today === 0 && thisWeek === 0) return;
+    const bar = parent.createDiv({ cls: "belki-completed-stats" });
+    const todayStat = bar.createDiv({ cls: "belki-completed-stat" });
+    todayStat.createSpan({ cls: "belki-completed-stat-value", text: String(today) });
+    todayStat.createSpan({ cls: "belki-completed-stat-label", text: "done today" });
+    const weekStat = bar.createDiv({ cls: "belki-completed-stat" });
+    weekStat.createSpan({ cls: "belki-completed-stat-value", text: String(thisWeek) });
+    weekStat.createSpan({ cls: "belki-completed-stat-label", text: "this week" });
   }
   groupTasks(tasks: Task[]) {
     const result = new Map<string, Task[]>();
