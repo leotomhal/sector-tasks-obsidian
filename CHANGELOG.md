@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.9
+
+### New
+- **Overview:** a new sidebar entry adds a landing dashboard — two progress rings (Today, and whichever sector tab is selected below it), Overdue/Done today/Done this week counters, a sector tab bar (Inbox first, then sectors in settings order), and a quick-add + mini task list scoped to the selected tab. Built around sectors rather than due dates, since sector is the plugin's actual organizing concept.
+
 ## 1.3.8
 
 ### New
