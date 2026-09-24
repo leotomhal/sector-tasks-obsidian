@@ -69,7 +69,10 @@ export class TaskBoardView extends ItemView {
   settings: BelkiSettings;
   saveSettings: () => Promise<void>;
   mode: string;
-  selectedProject: string | null;
+  /** Sectors currently shown in the "projects" mode. Empty = all sectors (the
+   *  "Sectors" overview); one entry = the classic single-sector view; more
+   *  than one = a combined view (toggled via Ctrl/Cmd+click on a sector). */
+  selectedProjects: Set<string>;
   searchQuery: string;
   searchOpen: boolean;
   composerOpen: boolean;
@@ -97,7 +100,7 @@ export class TaskBoardView extends ItemView {
     this.settings = settings;
     this.saveSettings = saveSettings;
     this.mode = "today";
-    this.selectedProject = null;
+    this.selectedProjects = new Set();
     this.searchQuery = "";
     this.searchOpen = false;
     this.composerOpen = false;
@@ -210,7 +213,7 @@ export class TaskBoardView extends ItemView {
   }
   openToday() {
     this.mode = "today";
-    this.selectedProject = null;
+    this.selectedProjects = new Set();
     this.activeFilter = null;
     this.activeLabel = null;
     this.searchOpen = false;
@@ -321,7 +324,7 @@ export class TaskBoardView extends ItemView {
     sidebarAdd.createSpan({ cls: "belki-add-plus", text: "+" });
     sidebarAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
     sidebarAdd.addEventListener("click", () => {
-      const sector = this.selectedProject || (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
+      const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       this.mobileNavOpen = false;
       void this.store.createTaskViaModal(sector).then(() => this.render());
     });
@@ -350,7 +353,7 @@ export class TaskBoardView extends ItemView {
       });
       button.toggleClass(
         "is-active",
-        this.mode === "projects" && this.selectedProject === cleanProject
+        this.mode === "projects" && this.selectedProjects.has(cleanProject)
       );
       const color = getProjectColor(cleanProject, this.settings.projectColors);
       button.setCssProps({
@@ -360,11 +363,20 @@ export class TaskBoardView extends ItemView {
       button.createSpan({ cls: "belki-nav-label", text: projectDisplayName(cleanProject) });
       button.createSpan({ cls: "belki-count", text: String(count) });
       this.enableProjectDrop(button, cleanProject);
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
         this.mode = "projects";
-        this.selectedProject = cleanProject;
+        if (event.ctrlKey || event.metaKey) {
+          if (this.selectedProjects.has(cleanProject)) {
+            this.selectedProjects.delete(cleanProject);
+          } else {
+            this.selectedProjects.add(cleanProject);
+          }
+        } else {
+          this.selectedProjects = new Set([cleanProject]);
+        }
         this.composerOpen = false;
         this.mobileNavOpen = false;
+        this.selectedTaskIds.clear();
         this.render();
       });
     }
@@ -378,7 +390,7 @@ export class TaskBoardView extends ItemView {
       archiveButton.createSpan({ cls: "belki-count", text: String(this.settings.archivedProjects.length) });
       archiveButton.addEventListener("click", () => {
         this.mode = "archived";
-        this.selectedProject = null;
+        this.selectedProjects = new Set();
         this.composerOpen = false;
         this.mobileNavOpen = false;
         this.render();
@@ -566,7 +578,7 @@ export class TaskBoardView extends ItemView {
   }
   renderNavButton(parent: HTMLElement, label: string, mode: string, count?: number, iconKey?: string) {
     const button = parent.createEl("button", { cls: "belki-nav-button" });
-    const active = label === "Search" ? false : label === "Sectors" ? this.mode === "projects" && this.selectedProject === null : this.mode === mode;
+    const active = label === "Search" ? false : label === "Sectors" ? this.mode === "projects" && this.selectedProjects.size === 0 : this.mode === mode;
     button.toggleClass("is-active", active);
     const iconSpan = button.createSpan({ cls: "belki-nav-icon" });
     if (iconKey && this.settings.icons[iconKey]) {
@@ -582,7 +594,7 @@ export class TaskBoardView extends ItemView {
         return;
       }
       this.mode = mode;
-      this.selectedProject = null;
+      this.selectedProjects = new Set();
       this.activeFilter = null;
       this.activeLabel = null;
       this.composerOpen = false;
@@ -614,7 +626,7 @@ export class TaskBoardView extends ItemView {
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
     inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
     inlineAdd.addEventListener("click", () => {
-      const sector = this.selectedProject || (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
+      const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       void this.store.createTaskViaModal(sector).then(() => this.render());
     });
     if (active.length === 0 && tasks.length === 0) {
@@ -798,7 +810,7 @@ export class TaskBoardView extends ItemView {
     }
     if (this.mode === "projects") {
       const archivedSet = new Set(this.settings.archivedProjects);
-      const projects = this.selectedProject ? [this.selectedProject] : uniqueRealProjects([
+      const projects = this.selectedProjects.size > 0 ? this.getOrderedSelectedProjects() : uniqueRealProjects([
         ...this.store.getProjects(),
         ...Object.keys(this.settings.projectColors)
       ]).filter((p) => !archivedSet.has(p));
@@ -1380,7 +1392,7 @@ export class TaskBoardView extends ItemView {
           this.mode = "filters";
           this.activeLabel = label;
           this.activeFilter = null;
-          this.selectedProject = null;
+          this.selectedProjects = new Set();
           this.render();
         });
       }
@@ -1492,7 +1504,9 @@ export class TaskBoardView extends ItemView {
     }
     if (this.mode === "projects") {
       return this.sortTasks(
-        this.selectedProject ? active.filter((task) => normalizeTaskProject(task.project) === this.selectedProject) : active.filter((task) => Boolean(normalizeTaskProject(task.project)))
+        this.selectedProjects.size > 0
+          ? active.filter((task) => this.selectedProjects.has(normalizeTaskProject(task.project) || ""))
+          : active.filter((task) => Boolean(normalizeTaskProject(task.project)))
       );
     }
     if (this.mode === "archived") {
@@ -1576,6 +1590,21 @@ export class TaskBoardView extends ItemView {
   compareTasks(a: Task, b: Task): number {
     return compareTasksByMode(a, b, this.settings.sortMode);
   }
+  /** Selected sectors in sidebar/settings order, not Set insertion order. */
+  getOrderedSelectedProjects(): string[] {
+    const projects: string[] = [];
+    for (const project of this.store.getProjects()) {
+      const cleanProject = normalizeTaskProject(project);
+      if (cleanProject && this.selectedProjects.has(cleanProject)) projects.push(cleanProject);
+    }
+    return projects;
+  }
+  getSectorsTitle(): string {
+    const selected = this.getOrderedSelectedProjects();
+    if (selected.length === 0) return "Sectors";
+    if (selected.length <= 3) return selected.map((p) => projectDisplayName(p)).join(" + ");
+    return `${selected.length} sectors`;
+  }
   getTitle() {
     if (this.mode === "inbox") {
       return "Inbox";
@@ -1587,7 +1616,7 @@ export class TaskBoardView extends ItemView {
       return "Upcoming";
     }
     if (this.mode === "projects") {
-      return this.selectedProject ? projectDisplayName(this.selectedProject) : "Sectors";
+      return this.getSectorsTitle();
     }
     if (this.mode === "completed") {
       return "Completed";
@@ -1975,19 +2004,19 @@ export class TaskBoardView extends ItemView {
     this.highlightedTaskId = task.id;
     if (task.completed) {
       this.mode = "completed";
-      this.selectedProject = null;
+      this.selectedProjects = new Set();
     } else if (task.due === todayIso() || this.isInSelectedOverdueRange(task)) {
       this.mode = "today";
-      this.selectedProject = null;
+      this.selectedProjects = new Set();
     } else if (task.due && isAfterToday(task.due)) {
       this.mode = "upcoming";
-      this.selectedProject = null;
+      this.selectedProjects = new Set();
     } else if (!normalizeTaskProject(task.project)) {
       this.mode = "inbox";
-      this.selectedProject = null;
+      this.selectedProjects = new Set();
     } else {
       this.mode = "projects";
-      this.selectedProject = normalizeTaskProject(task.project) || null;
+      this.selectedProjects = new Set([normalizeTaskProject(task.project)]);
     }
     this.render();
   }
