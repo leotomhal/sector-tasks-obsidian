@@ -2151,3 +2151,104 @@ button.belki-review-discard:hover {
 .belki-root.is-row-singleline .belki-task-project {
   margin-top: 0;
 }
+
+/* Overview (dashboard) mode. */
+.belki-overview-rings {
+  display: flex;
+  gap: 36px;
+  margin: 8px 0 28px;
+}
+
+.belki-overview-ring-wrap {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.belki-overview-ring {
+  --belki-ring-pct: 0;
+  background: conic-gradient(var(--belki-accent) calc(var(--belki-ring-pct) * 3.6deg), var(--belki-faint) 0deg);
+  border-radius: 50%;
+  height: 64px;
+  width: 64px;
+}
+
+.belki-overview-ring-inner {
+  align-items: center;
+  background: var(--belki-bg);
+  border-radius: 50%;
+  color: var(--belki-text);
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  height: 48px;
+  justify-content: center;
+  margin: 8px;
+  width: 48px;
+}
+
+.belki-overview-ring-label {
+  color: var(--belki-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.belki-overview-ring-sub {
+  color: var(--belki-muted);
+  font-size: 12px;
+}
+
+.belki-overview-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.belki-overview-stat {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+}
+
+.belki-overview-stat-value {
+  color: var(--belki-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.belki-overview-stat-label {
+  color: var(--belki-muted);
+  font-size: 13px;
+}
+
+.belki-overview-tabs {
+  border-bottom: 1px solid var(--belki-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+}
+
+.belki-overview-tab {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--belki-border);
+  border-radius: 999px;
+  color: var(--belki-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 12px;
+}
+
+.belki-overview-tab:hover {
+  background: var(--belki-hover);
+}
+
+.belki-overview-tab.is-active {
+  background: var(--belki-accent);
+  border-color: var(--belki-accent);
+  color: var(--belki-on-accent);
+}
