@@ -7,7 +7,7 @@ import { dedupeLabels, normalizeLabelName } from "./labels";
 import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { normalizeReviewSession } from "./review";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeSortMode, normalizeThemeColors, normalizeThemePreset } from "./settings";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeThemeColors, normalizeThemePreset } from "./settings";
 import { TaskStore, completionUndoPatch } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
@@ -152,6 +152,7 @@ export default class BelkiPlugin extends Plugin {
       labelFont: normalizeFontOption(saved == null ? void 0 : saved.labelFont),
       themePreset: normalizeThemePreset(saved == null ? void 0 : saved.themePreset),
       themeColors: normalizeThemeColors(saved == null ? void 0 : saved.themeColors),
+      rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
     applySectorSettings(this.settings.sectors);
