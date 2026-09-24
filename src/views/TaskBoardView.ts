@@ -240,6 +240,7 @@ export class TaskBoardView extends ItemView {
     containerEl.empty();
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
+    containerEl.toggleClass("is-row-singleline", this.settings.rowLayout === "singleLine");
     applyBelkiFontSettings(containerEl, this.settings);
     applyBelkiThemeSettings(containerEl, this.settings);
     containerEl.addEventListener("keydown", this.handleRootKeyDown, true);

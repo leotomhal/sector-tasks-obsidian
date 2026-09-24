@@ -968,6 +968,7 @@ var DEFAULT_SETTINGS = {
   reviewSession: null,
   autoDeleteCompletedAfterDays: 0,
   searchExcludeCompleted: false,
+  rowLayout: "stacked",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -1117,6 +1118,9 @@ var THEME_PRESET_OPTIONS = [
 function normalizeThemePreset(value) {
   return value === "light" || value === "dark" || value === "custom" ? value : "obsidian";
 }
+function normalizeRowLayout(value) {
+  return value === "singleLine" ? value : "stacked";
+}
 function normalizeThemeColors(raw) {
   const result = {};
   const source = raw && typeof raw === "object" ? raw : {};
@@ -1234,6 +1238,8 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
       settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value);
     } else if (key === "searchExcludeCompleted") {
       settings.searchExcludeCompleted = value === true;
+    } else if (key === "rowLayout") {
+      settings.rowLayout = normalizeRowLayout(asString(value));
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -1505,6 +1511,17 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
         },
         {
           type: "group",
+          heading: "Layout",
+          items: [
+            {
+              name: "Task rows",
+              desc: "Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.",
+              control: { type: "dropdown", key: "rowLayout", options: { stacked: "Stacked", singleLine: "Single line" } }
+            }
+          ]
+        },
+        {
+          type: "group",
           heading: "Theme",
           items: [
             {
@@ -1678,6 +1695,15 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
     new import_obsidian2.Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
         this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    new import_obsidian2.Setting(containerEl).setName("Task rows").setDesc("Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.").addDropdown((dropdown) => {
+      dropdown.addOption("stacked", "Stacked");
+      dropdown.addOption("singleLine", "Single line");
+      dropdown.setValue(normalizeRowLayout(this.plugin.settings.rowLayout)).onChange(async (value) => {
+        this.plugin.settings.rowLayout = normalizeRowLayout(value);
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });
@@ -2206,6 +2232,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     containerEl.empty();
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
+    containerEl.toggleClass("is-row-singleline", this.settings.rowLayout === "singleLine");
     applyBelkiFontSettings(containerEl, this.settings);
     applyBelkiThemeSettings(containerEl, this.settings);
     containerEl.addEventListener("keydown", this.handleRootKeyDown, true);
@@ -4861,6 +4888,7 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       labelFont: normalizeFontOption(saved == null ? void 0 : saved.labelFont),
       themePreset: normalizeThemePreset(saved == null ? void 0 : saved.themePreset),
       themeColors: normalizeThemeColors(saved == null ? void 0 : saved.themeColors),
+      rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
     applySectorSettings(this.settings.sectors);

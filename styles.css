@@ -2111,3 +2111,43 @@ button.belki-review-discard:hover {
   font-weight: 600;
   text-decoration: underline;
 }
+
+/* Single-line task rows (Appearance → Layout → Task rows). Title, due date,
+   labels and project chip sit on one row instead of title-then-meta-below;
+   the description doesn't fit that shape, so it's hidden here rather than
+   truncated into unreadable fragments. */
+.belki-root.is-row-singleline .belki-task-row {
+  align-items: center;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.belki-root.is-row-singleline .belki-task-content {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.belki-root.is-row-singleline .belki-task-title {
+  flex: 1 1 auto;
+  min-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.belki-root.is-row-singleline .belki-task-description {
+  display: none;
+}
+
+.belki-root.is-row-singleline .belki-task-meta {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  overflow: hidden;
+}
+
+.belki-root.is-row-singleline .belki-task-project {
+  margin-top: 0;
+}
