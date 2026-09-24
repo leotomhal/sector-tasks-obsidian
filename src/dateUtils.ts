@@ -32,6 +32,13 @@ export function currentMonthKey() {
   const now = /* @__PURE__ */ new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
+/** Monday of the current ISO week, as an ISO date string. */
+export function startOfIsoWeekIso(): string {
+  const now = /* @__PURE__ */ new Date();
+  const daysSinceMonday = (now.getDay() + 6) % 7;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday);
+  return toIsoDate(monday);
+}
 export function isIsoDate(value?: string): boolean {
   return Boolean(value && ISO_DATE_PATTERN.test(value));
 }
