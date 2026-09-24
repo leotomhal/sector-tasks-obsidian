@@ -3,6 +3,22 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.7
+
+### New
+- **Combine sectors into one view:** Ctrl/Cmd+click a sector in the sidebar to add it to the current view instead of replacing it — see everything from "This Week" and "Next Week" together, sorted and grouped as usual, each task still carrying its sector chip. A plain click still switches to just that one sector.
+
+### Fixed
+- The plugin version in `manifest.json` had drifted out of sync with the published 1.3.6 tag/release (still said 1.3.5). Corrected here.
+
+## 1.3.6
+
+### New
+- **Completed-view stats:** two numbers at the top of the Completed view show how many tasks were finished today and this ISO week, counted from the existing `✅` dates (recurring tasks included, counted once per completion event).
+
+### Internal
+- Fixed the release workflow's notes fallback (`gh release edit` has no `--generate-notes` flag) and bumped the workflow actions to their current majors.
+
 ## 1.3.5
 
 ### New
