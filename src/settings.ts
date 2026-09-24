@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   sectors: DEFAULT_SECTORS.map((s) => ({ ...s })),
   icons: {
     search: "search",
+    overview: "layout-dashboard",
     inbox: "inbox",
     today: "calendar-check",
     upcoming: "calendar-days",
@@ -525,6 +526,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     }
     const iconRows: [string, string][] = [
       ["Search icon", "search"],
+      ["Overview icon", "overview"],
       ["Inbox icon", "inbox"],
       ["Today icon", "today"],
       ["Upcoming icon", "upcoming"],
@@ -859,6 +861,7 @@ export class BelkiSettingTab extends PluginSettingTab {
       }
       new Setting(appearance).setName("Sidebar icons").setDesc("Lucide-Icon-Namen (siehe lucide.dev/icons), z. B. \u201Esearch\u201C, \u201Ecalendar-check\u201C.").setHeading();
       this.addIconSetting("Search icon", "search");
+      this.addIconSetting("Overview icon", "overview");
       this.addIconSetting("Inbox icon", "inbox");
       this.addIconSetting("Today icon", "today");
       this.addIconSetting("Upcoming icon", "upcoming");
