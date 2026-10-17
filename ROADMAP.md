@@ -6,14 +6,12 @@ the [changelog](./CHANGELOG.md).
 
 ## Under consideration (small)
 
-- **Completed statistics** — a small line in the Completed view, e.g.
-  "12 done this week · 34 this month", computed from the existing `✅` dates.
 - **Tab-badge fallback** — the Today sidebar tab badge uses an internal
   Obsidian API (`leaf.tabHeaderEl`); fall back to the tab title ("Today (3)")
   if that ever breaks. Only worth doing if the badge misbehaves.
 - **Refresh screenshots** — the `img/*.png` in the README could be updated to
-  show the current UI (Today sidebar, grouped settings). Author task, since it
-  needs a real vault.
+  show the current UI (Overview dashboard, single-line rows, Today sidebar,
+  grouped settings). Author task, since it needs a real vault.
 
 ## Parked (larger)
 
