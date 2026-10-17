@@ -3,6 +3,16 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.10
+
+### Fixed
+- **Faster board with large task files:** rendering the board no longer re-reads and copies every task once per visible row. A leftover sub-task counter did this on every row without ever showing anything (sub-tasks aren't supported), and the drag-target check did the same in the Upcoming view. With 1,000 tasks this saved roughly 290 ms on every re-render — i.e. on every check-off, drag, or edit.
+
+### Internal
+- CI and release builds run on Node 22 (Node 20 is end-of-life).
+- Resolved the three high-severity `npm audit` advisories in the lint tooling. None of them ever shipped in the plugin, which has no runtime dependencies.
+- README feature list and roadmap brought up to date with 1.3.4–1.3.9.
+
 ## 1.3.9
 
 ### New
