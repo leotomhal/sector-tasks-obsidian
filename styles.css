@@ -1006,19 +1006,6 @@ button.belki-review-tool-button {
   opacity: 0.72;
 }
 
-.belki-task-subtask-counter {
-  align-items: center;
-  color: var(--belki-muted);
-  display: inline-flex;
-  font-size: 11px;
-  gap: 3px;
-}
-
-.belki-task-subtask-counter .belki-chip-icon {
-  height: 11px;
-  width: 11px;
-}
-
 .belki-task-last-completed {
   align-items: center;
   color: var(--belki-muted);
