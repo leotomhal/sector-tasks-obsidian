@@ -16,8 +16,12 @@ Many task plugins manage their own data format. But if you already use the **Tas
 
 ## Features
 
+### Overview
+- An **Overview** dashboard in the sidebar: two progress rings (Today, plus whichever sector tab is selected), Overdue / Done today / Done this week counters, a sector tab bar (Inbox first, then your sectors), and a quick-add + compact task list scoped to the selected tab
+
 ### Board & sectors
 - Board view grouped by sectors (default: `#01this-week` → `#02next-week` → `#03this-month` → `#04next-month` → `#05longterm` → `#routines` → `#waiting`), plus an **Inbox** for tasks without a sector tag
+- **Combine sectors:** Ctrl/Cmd+click a sector in the sidebar to view several sectors together (e.g. This Week + Next Week); a plain click still shows just one
 - Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic)
 - Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
 - Sort modes: smart, due date, priority, deadline, created, project
@@ -28,7 +32,8 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - Creating & editing tasks exclusively through the native Tasks modal (`apiV1.createTaskLineModal` / `editTaskLineModal`) — full compatibility with Tasks free-text syntax, including recurrences like `every 15 july`
 - Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
 - **Quick add task (Inbox)** command: opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
-- **Right-click due dates:** right-click any task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal
+- **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear) or the priority (P1–P4 / none), without opening the Tasks modal
+- **Undo:** checking a task off shows a short notice with an **Undo** link that restores the exact previous state — including recurring tasks that were rescheduled. Also available as the **Undo last completed task** command for a hotkey
 
 ### Reviews
 - Each sector can be independently included in **Weekly** and/or **Monthly Review** — no fixed positional assumption about which sectors belong where
@@ -45,6 +50,8 @@ Many task plugins manage their own data format. But if you already use the **Tas
 ### Housekeeping & appearance
 - **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off); removed tasks are archived to a sibling `… (archive).md` note first, and deletion is skipped if that archive write fails. The **Clean up completed tasks now** command runs it on demand and reports what happened
 - **Path warning:** the settings show a note when the configured Tasks file path points to a folder or a file that doesn't exist yet
+- **Completed stats:** the Completed view shows how many tasks you finished today and this week
+- **Task rows:** choose **Stacked** (title with due date/labels below) or **Single line** (everything on one row, for a much shorter list) under Appearance → Layout
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually; all cosmetic options live in a collapsible **Appearance** settings group
 
 ## Screenshots
