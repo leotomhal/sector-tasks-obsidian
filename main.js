@@ -3318,15 +3318,15 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     if (task.completed) {
       return false;
     }
-    const canMoveToToday = !isToday(task.due) && isBeforeToday(task.due);
-    const canMoveToUpcomingDate = this.mode === "upcoming" && this.getUpcomingDropDates().some((date) => date !== task.due);
+    if (!isToday(task.due) && isBeforeToday(task.due)) return true;
     const currentProject = normalizeTaskProject(task.project);
+    if (currentProject) return true;
     const canMoveToProject = uniqueRealProjects([
       ...this.store.getProjects(),
       ...Object.keys(this.settings.projectColors)
     ]).some((project) => project !== currentProject);
-    const canMoveToInbox = Boolean(currentProject);
-    return canMoveToToday || canMoveToUpcomingDate || canMoveToProject || canMoveToInbox;
+    if (canMoveToProject) return true;
+    return this.mode === "upcoming" && this.getUpcomingDropDates().some((date) => date !== task.due);
   }
   renderEmptySection(parent, text) {
     const section = parent.createDiv({ cls: "belki-section" });
@@ -3469,14 +3469,6 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         cls: "belki-task-attachments",
         text: `📎 ${task.attachments.length}`
       });
-    }
-    const allTasks = this.store.getTasks();
-    const subTasks = allTasks.filter((t) => t.parentId === task.id);
-    if (subTasks.length > 0) {
-      const done = subTasks.filter((t) => t.completed).length;
-      const counterEl = meta.createSpan({ cls: "belki-task-subtask-counter" });
-      (0, import_obsidian3.setIcon)(counterEl.createSpan({ cls: "belki-chip-icon" }), "list-checks");
-      counterEl.createSpan({ text: `${done}/${subTasks.length}` });
     }
     if (!task.completed && task.completedOccurrences && task.completedOccurrences.length > 0) {
       const last = task.completedOccurrences[task.completedOccurrences.length - 1];
