@@ -239,12 +239,12 @@ export class BelkiSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
   // Re-render helper that works on every supported Obsidian version:
-  // update() only exists since 1.13; older versions re-run the display() fallback.
+  // update() only exists since 1.13; older versions re-run the imperative fallback.
   rerender() {
     if (requireApiVersion("1.13.0")) {
       this.update();
     } else {
-      this.display();
+      this.renderLegacyTab();
     }
   }
   getSettingDefinitions(): SettingDefinitionItem[] {
@@ -722,7 +722,12 @@ export class BelkiSettingTab extends PluginSettingTab {
   }
   // Imperative fallback for Obsidian < 1.13. On 1.13+ the tab renders
   // declaratively from getSettingDefinitions() and display() is never called.
+  // Obsidian calls display() itself on older versions; our own code calls
+  // renderLegacyTab() instead, so nothing here references the deprecated API.
   display() {
+    this.renderLegacyTab();
+  }
+  renderLegacyTab() {
     const { containerEl } = this;
     containerEl.empty();
     applyBelkiFontSettings(containerEl, this.plugin.settings);
