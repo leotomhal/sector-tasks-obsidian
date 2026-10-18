@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.11
+
+### Internal
+- Cleared the remaining finding from Obsidian's plugin review: the settings tab no longer calls the deprecated `display()` from plugin code. The fallback settings tab for Obsidian < 1.13 is unchanged and `minAppVersion` stays 1.7.2.
+
 ## 1.3.10
 
 ### Fixed
