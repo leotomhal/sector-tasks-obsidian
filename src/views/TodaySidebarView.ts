@@ -84,9 +84,10 @@ export class TodaySidebarView extends ItemView {
   async openBoard() {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
     if (leaves.length > 0) {
+      await leaves[0].loadIfDeferred();
       const view = leaves[0].view;
       if (view instanceof TaskBoardView) {
-        view.openToday();
+        view.openStartView();
       }
       this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
       return;

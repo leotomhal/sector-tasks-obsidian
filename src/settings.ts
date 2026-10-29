@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   autoDeleteCompletedAfterDays: 0,
   searchExcludeCompleted: false,
   rowLayout: "stacked",
+  startView: "today",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -192,6 +193,15 @@ export function normalizeThemePreset(value?: string): string {
 export function normalizeRowLayout(value?: string): string {
   return value === "singleLine" ? value : "stacked";
 }
+export const START_VIEW_LABELS: Record<string, string> = {
+  overview: "Overview",
+  today: "Today",
+  inbox: "Inbox",
+  upcoming: "Upcoming"
+};
+export function normalizeStartView(value?: string): string {
+  return value !== undefined && Object.prototype.hasOwnProperty.call(START_VIEW_LABELS, value) ? value : "today";
+}
 export function normalizeThemeColors(raw?: Record<string, string> | null): Record<string, string> {
   const result: Record<string, string> = {};
   const source: Record<string, string> = raw && typeof raw === "object" ? raw : {};
@@ -260,6 +270,11 @@ export class BelkiSettingTab extends PluginSettingTab {
         }
       },
       {
+        name: "Start view",
+        desc: "Which view the board opens on when you open it from the ribbon, the command palette, or the sidebar.",
+        control: { type: "dropdown", key: "startView", options: START_VIEW_LABELS }
+      },
+      {
         name: "Default overdue range",
         desc: "Default range used by the Today overdue section.",
         control: { type: "dropdown", key: "defaultOverdueRange", options: OVERDUE_RANGE_LABELS }
@@ -313,6 +328,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.searchExcludeCompleted = value === true;
     } else if (key === "rowLayout") {
       settings.rowLayout = normalizeRowLayout(asString(value));
+    } else if (key === "startView") {
+      settings.startView = normalizeStartView(asString(value));
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -755,6 +772,15 @@ export class BelkiSettingTab extends PluginSettingTab {
       }
     };
     updatePathWarning();
+    new Setting(containerEl).setName("Start view").setDesc("Which view the board opens on when you open it from the ribbon, the command palette, or the sidebar.").addDropdown((dropdown) => {
+      for (const [value, label] of Object.entries(START_VIEW_LABELS)) {
+        dropdown.addOption(value, label);
+      }
+      dropdown.setValue(normalizeStartView(this.plugin.settings.startView)).onChange(async (value) => {
+        this.plugin.settings.startView = normalizeStartView(value);
+        await this.plugin.saveSettings();
+      });
+    });
     new Setting(containerEl).setName("Default overdue range").setDesc("Default range used by the Today overdue section.").addDropdown((dropdown) => {
       for (const range of OVERDUE_RANGES) {
         dropdown.addOption(range, overdueRangeLabel(range));
