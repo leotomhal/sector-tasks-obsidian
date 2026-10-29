@@ -7,7 +7,7 @@ import { dedupeLabels, normalizeLabelName } from "./labels";
 import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { normalizeReviewSession } from "./review";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeThemeColors, normalizeThemePreset } from "./settings";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeThemePreset } from "./settings";
 import { TaskStore, completionUndoPatch } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
@@ -124,7 +124,7 @@ export default class BelkiPlugin extends Plugin {
   }
   async loadSettings() {
     const saved = toSettingsData(await this.loadData());
-    this.settings = {
+    const next: BelkiSettings = {
       ...DEFAULT_SETTINGS,
       ...saved,
       dataFolderPath: normalizeDataFolderPath(saved == null ? void 0 : saved.dataFolderPath),
@@ -153,12 +153,29 @@ export default class BelkiPlugin extends Plugin {
       themePreset: normalizeThemePreset(saved == null ? void 0 : saved.themePreset),
       themeColors: normalizeThemeColors(saved == null ? void 0 : saved.themeColors),
       rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
+      startView: normalizeStartView(saved == null ? void 0 : saved.startView),
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
+    if (this.settings) {
+      // The store, the views, and the settings tab all hold this object by
+      // reference, so a reload has to update it in place, not replace it.
+      Object.assign(this.settings, next);
+    } else {
+      this.settings = next;
+    }
     applySectorSettings(this.settings.sectors);
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  // data.json changed outside this app instance, e.g. synced from another
+  // device. Without this, the stale in-memory settings would overwrite the
+  // synced ones on the next save (a review in progress, renamed sectors, ...).
+  async onExternalSettingsChange() {
+    await this.loadSettings();
+    // Sector tags and the tasks file path both affect how tasks are read.
+    await this.reloadTasks();
+    this.refreshBelkiViews();
   }
   async reloadTasks() {
     try {
@@ -235,15 +252,19 @@ export default class BelkiPlugin extends Plugin {
       ...taskLabels
     ]).sort((a, b) => a.localeCompare(b));
   }
-  async activateView(open = "today") {
+  async activateView(open = "start") {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
     if (leaves.length > 0) {
+      // A board tab restored at startup stays deferred until it is shown, and a
+      // deferred leaf's view is a placeholder, not a TaskBoardView. Load it first,
+      // or "Open search" would land on the board without opening search.
+      await leaves[0].loadIfDeferred();
       const view = leaves[0].view;
       if (view instanceof TaskBoardView) {
         if (open === "search") {
           view.openSearch();
         } else {
-          view.openToday();
+          view.openStartView();
         }
       }
       this.app.workspace.setActiveLeaf(leaves[0], { focus: true });

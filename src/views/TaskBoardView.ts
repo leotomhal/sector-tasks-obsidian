@@ -101,7 +101,7 @@ export class TaskBoardView extends ItemView {
     this.store = store;
     this.settings = settings;
     this.saveSettings = saveSettings;
-    this.mode = "today";
+    this.mode = settings.startView;
     this.selectedProjects = new Set();
     this.overviewSector = INBOX_SECTOR;
     this.searchQuery = "";
@@ -214,8 +214,9 @@ export class TaskBoardView extends ItemView {
   refresh() {
     this.render();
   }
-  openToday() {
-    this.mode = "today";
+  /** Reset the board to the configured start view (Settings → Start view). */
+  openStartView() {
+    this.mode = this.settings.startView;
     this.selectedProjects = new Set();
     this.activeFilter = null;
     this.activeLabel = null;

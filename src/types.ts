@@ -115,6 +115,7 @@ export interface BelkiSettings {
   autoDeleteCompletedAfterDays: number;
   searchExcludeCompleted: boolean;
   rowLayout: string;
+  startView: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }

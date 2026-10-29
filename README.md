@@ -18,6 +18,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 
 ### Overview
 - An **Overview** dashboard in the sidebar: two progress rings (Today, plus whichever sector tab is selected), Overdue / Done today / Done this week counters, a sector tab bar (Inbox first, then your sectors), and a quick-add + compact task list scoped to the selected tab
+- **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today)
 
 ### Board & sectors
 - Board view grouped by sectors (default: `#01this-week` → `#02next-week` → `#03this-month` → `#04next-month` → `#05longterm` → `#routines` → `#waiting`), plus an **Inbox** for tasks without a sector tag

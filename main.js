@@ -553,9 +553,10 @@ var TodaySidebarView = class extends import_obsidian.ItemView {
   async openBoard() {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
     if (leaves.length > 0) {
+      await leaves[0].loadIfDeferred();
       const view = leaves[0].view;
       if (view instanceof TaskBoardView) {
-        view.openToday();
+        view.openStartView();
       }
       this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
       return;
@@ -970,6 +971,7 @@ var DEFAULT_SETTINGS = {
   autoDeleteCompletedAfterDays: 0,
   searchExcludeCompleted: false,
   rowLayout: "stacked",
+  startView: "today",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -1122,6 +1124,15 @@ function normalizeThemePreset(value) {
 function normalizeRowLayout(value) {
   return value === "singleLine" ? value : "stacked";
 }
+var START_VIEW_LABELS = {
+  overview: "Overview",
+  today: "Today",
+  inbox: "Inbox",
+  upcoming: "Upcoming"
+};
+function normalizeStartView(value) {
+  return value !== void 0 && Object.prototype.hasOwnProperty.call(START_VIEW_LABELS, value) ? value : "today";
+}
 function normalizeThemeColors(raw) {
   const result = {};
   const source = raw && typeof raw === "object" ? raw : {};
@@ -1188,6 +1199,11 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
         }
       },
       {
+        name: "Start view",
+        desc: "Which view the board opens on when you open it from the ribbon, the command palette, or the sidebar.",
+        control: { type: "dropdown", key: "startView", options: START_VIEW_LABELS }
+      },
+      {
         name: "Default overdue range",
         desc: "Default range used by the Today overdue section.",
         control: { type: "dropdown", key: "defaultOverdueRange", options: OVERDUE_RANGE_LABELS }
@@ -1241,6 +1257,8 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
       settings.searchExcludeCompleted = value === true;
     } else if (key === "rowLayout") {
       settings.rowLayout = normalizeRowLayout(asString(value));
+    } else if (key === "startView") {
+      settings.startView = normalizeStartView(asString(value));
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -1683,6 +1701,15 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
       }
     };
     updatePathWarning();
+    new import_obsidian2.Setting(containerEl).setName("Start view").setDesc("Which view the board opens on when you open it from the ribbon, the command palette, or the sidebar.").addDropdown((dropdown) => {
+      for (const [value, label] of Object.entries(START_VIEW_LABELS)) {
+        dropdown.addOption(value, label);
+      }
+      dropdown.setValue(normalizeStartView(this.plugin.settings.startView)).onChange(async (value) => {
+        this.plugin.settings.startView = normalizeStartView(value);
+        await this.plugin.saveSettings();
+      });
+    });
     new import_obsidian2.Setting(containerEl).setName("Default overdue range").setDesc("Default range used by the Today overdue section.").addDropdown((dropdown) => {
       for (const range of OVERDUE_RANGES) {
         dropdown.addOption(range, overdueRangeLabel(range));
@@ -2096,7 +2123,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     this.store = store;
     this.settings = settings;
     this.saveSettings = saveSettings;
-    this.mode = "today";
+    this.mode = settings.startView;
     this.selectedProjects = /* @__PURE__ */ new Set();
     this.overviewSector = INBOX_SECTOR;
     this.searchQuery = "";
@@ -2211,8 +2238,9 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
   refresh() {
     this.render();
   }
-  openToday() {
-    this.mode = "today";
+  /** Reset the board to the configured start view (Settings → Start view). */
+  openStartView() {
+    this.mode = this.settings.startView;
     this.selectedProjects = /* @__PURE__ */ new Set();
     this.activeFilter = null;
     this.activeLabel = null;
@@ -4931,7 +4959,7 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
   }
   async loadSettings() {
     const saved = toSettingsData(await this.loadData());
-    this.settings = {
+    const next = {
       ...DEFAULT_SETTINGS,
       ...saved,
       dataFolderPath: normalizeDataFolderPath(saved == null ? void 0 : saved.dataFolderPath),
@@ -4960,12 +4988,26 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       themePreset: normalizeThemePreset(saved == null ? void 0 : saved.themePreset),
       themeColors: normalizeThemeColors(saved == null ? void 0 : saved.themeColors),
       rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
+      startView: normalizeStartView(saved == null ? void 0 : saved.startView),
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
+    if (this.settings) {
+      Object.assign(this.settings, next);
+    } else {
+      this.settings = next;
+    }
     applySectorSettings(this.settings.sectors);
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  // data.json changed outside this app instance, e.g. synced from another
+  // device. Without this, the stale in-memory settings would overwrite the
+  // synced ones on the next save (a review in progress, renamed sectors, ...).
+  async onExternalSettingsChange() {
+    await this.loadSettings();
+    await this.reloadTasks();
+    this.refreshBelkiViews();
   }
   async reloadTasks() {
     try {
@@ -5042,15 +5084,16 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       ...taskLabels
     ]).sort((a, b) => a.localeCompare(b));
   }
-  async activateView(open = "today") {
+  async activateView(open = "start") {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI);
     if (leaves.length > 0) {
+      await leaves[0].loadIfDeferred();
       const view = leaves[0].view;
       if (view instanceof TaskBoardView) {
         if (open === "search") {
           view.openSearch();
         } else {
-          view.openToday();
+          view.openStartView();
         }
       }
       this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
