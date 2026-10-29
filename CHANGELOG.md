@@ -3,6 +3,18 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.12
+
+### New
+- **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today). New board tabs start there, and the ribbon icon, the Open command, and the Today sidebar's board button return to it.
+
+### Fixed
+- **"Open search" after a restart:** when the board tab had been restored at startup but not shown yet, the command focused the board without opening search. The Today sidebar's board button had the same problem.
+- **Settings synced from another device** (e.g. via Obsidian Sync) are now picked up. Previously the plugin kept its old settings in memory and the next save on this device overwrote the synced ones — a review in progress, renamed sectors, colors.
+
+### Internal
+- Type checks and lint now run against the Obsidian 1.14.4 API and the current plugin-review rules.
+
 ## 1.3.11
 
 ### Internal
