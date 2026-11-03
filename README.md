@@ -49,6 +49,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - The tab shows a badge with the count of overdue + due-today tasks; header buttons quick-add to the Inbox and jump to the full board
 
 ### Housekeeping & appearance
+- **Release notes after updates:** the first time Obsidian starts after the plugin updated, a short "What's new" dialog lists the changes since the version you last saw (skipped versions included). It never appears on a fresh install, can be turned off in the settings, and the **Show release notes** command opens it any time
 - **Auto-cleanup:** optionally delete completed tasks from the file N days after completion (settings, default off); removed tasks are archived to a sibling `… (archive).md` note first, and deletion is skipped if that archive write fails. The **Clean up completed tasks now** command runs it on demand and reports what happened
 - **Path warning:** the settings show a note when the configured Tasks file path points to a folder or a file that doesn't exist yet
 - **Completed stats:** the Completed view shows how many tasks you finished today and this week
