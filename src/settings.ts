@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   searchExcludeCompleted: false,
   rowLayout: "stacked",
   startView: "today",
+  visualStyle: "default",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -199,6 +200,13 @@ export const START_VIEW_LABELS: Record<string, string> = {
   inbox: "Inbox",
   upcoming: "Upcoming"
 };
+export const VISUAL_STYLE_LABELS: Record<string, string> = {
+  default: "Default",
+  editorial: "Editorial"
+};
+export function normalizeVisualStyle(value?: string): string {
+  return value === "editorial" ? value : "default";
+}
 export function normalizeStartView(value?: string): string {
   return value !== undefined && Object.prototype.hasOwnProperty.call(START_VIEW_LABELS, value) ? value : "today";
 }
@@ -330,6 +338,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.rowLayout = normalizeRowLayout(asString(value));
     } else if (key === "startView") {
       settings.startView = normalizeStartView(asString(value));
+    } else if (key === "visualStyle") {
+      settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -616,6 +626,11 @@ export class BelkiSettingTab extends PluginSettingTab {
           heading: "Theme",
           items: [
             {
+              name: "Style",
+              desc: "Editorial uses serif headings, cards with tinted section headers, and pill-shaped dates. Its warm palette applies when the color scheme follows Obsidian; a fixed or custom scheme keeps its own colors.",
+              control: { type: "dropdown", key: "visualStyle", options: VISUAL_STYLE_LABELS }
+            },
+            {
               name: "Color scheme",
               desc: '"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.',
               control: { type: "dropdown", key: "themePreset", options: themePresetOptions }
@@ -854,6 +869,16 @@ export class BelkiSettingTab extends PluginSettingTab {
         "labelFont"
       );
       new Setting(appearance).setName("Theme").setHeading();
+      new Setting(appearance).setName("Style").setDesc("Editorial uses serif headings, cards with tinted section headers, and pill-shaped dates. Its warm palette applies when the color scheme follows Obsidian; a fixed or custom scheme keeps its own colors.").addDropdown((dropdown) => {
+        for (const [value, label] of Object.entries(VISUAL_STYLE_LABELS)) {
+          dropdown.addOption(value, label);
+        }
+        dropdown.setValue(normalizeVisualStyle(this.plugin.settings.visualStyle)).onChange(async (value) => {
+          this.plugin.settings.visualStyle = normalizeVisualStyle(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
       new Setting(appearance).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
         for (const [value, label] of THEME_PRESET_OPTIONS) {
           dropdown.addOption(value, label);

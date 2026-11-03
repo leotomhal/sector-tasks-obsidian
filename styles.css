@@ -2256,3 +2256,349 @@ button.belki-review-discard:hover {
   font-size: var(--font-ui-small, 13px);
   margin: 0;
 }
+
+/* ------------------------------------------------------------------
+   Editorial style (Appearance → Theme → Style). Everything below is
+   scoped to .is-style-editorial, so the default look is untouched.
+   The palette applies when the color scheme follows Obsidian; a fixed
+   or custom scheme sets its colors inline and keeps them.
+   ------------------------------------------------------------------ */
+.belki-overview-tab-dot {
+  display: none;
+}
+
+.belki-root {
+  --belki-serif: "Iowan Old Style", "Charter", "Bitstream Charter", "Palatino Linotype", Palatino, Georgia, serif;
+}
+
+.belki-root.is-style-editorial {
+  --belki-bg: #fbfaf7;
+  --belki-surface: #ffffff;
+  --belki-sidebar-bg: #f4f2ec;
+  --belki-hover: #f1ede6;
+  --belki-border: #e7e2da;
+  --belki-border-soft: #ece7e0;
+  --belki-text: #2b2724;
+  --belki-muted: #7c736b;
+  --belki-faint: #b3aba2;
+  --belki-accent: #8e2c3f;
+  --belki-accent-hover: #7a2536;
+  --belki-on-accent: #ffffff;
+  --belki-danger: #b4232f;
+  --belki-danger-light: #f9e3e3;
+  --belki-chip-bg: #f3efe7;
+  --belki-todoist-red: #8e2c3f;
+  --belki-warm-soft: #f6efdd;
+  --belki-ink: #1d1a18;
+}
+
+.theme-dark .belki-root.is-style-editorial {
+  --belki-bg: #1b1918;
+  --belki-surface: #232120;
+  --belki-sidebar-bg: #201e1d;
+  --belki-hover: #2b2826;
+  --belki-border: #36322f;
+  --belki-border-soft: #312d2a;
+  --belki-text: #ece6df;
+  --belki-muted: #a69d94;
+  --belki-faint: #6f6862;
+  --belki-accent: #d77b8b;
+  --belki-accent-hover: #e08d9b;
+  --belki-on-accent: #1b1918;
+  --belki-danger: #ef7a7a;
+  --belki-danger-light: rgba(239, 122, 122, 0.16);
+  --belki-chip-bg: #2c2927;
+  --belki-todoist-red: #d77b8b;
+  --belki-warm-soft: rgba(214, 180, 120, 0.14);
+  --belki-ink: #ece6df;
+}
+
+/* Headings */
+.belki-root.is-style-editorial .belki-eyebrow {
+  color: var(--belki-muted);
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.belki-root.is-style-editorial .belki-main h1 {
+  font-family: var(--belki-serif);
+  font-size: 31px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Sidebar */
+.belki-root.is-style-editorial .belki-sidebar-heading {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.belki-root.is-style-editorial button.belki-nav-button.is-active,
+.belki-root.is-style-editorial button.belki-project-button.is-active {
+  background: var(--belki-surface);
+  box-shadow: 0 0 0 1px var(--belki-border);
+  color: var(--belki-text);
+}
+
+.belki-root.is-style-editorial .belki-nav-button.is-active .belki-nav-icon {
+  color: var(--belki-accent);
+}
+
+.belki-root.is-style-editorial .belki-nav-button.is-active .belki-count {
+  color: var(--belki-muted);
+}
+
+/* Sections become cards with a tinted header (sector color where there is one) */
+.belki-root.is-style-editorial .belki-section {
+  background: var(--belki-surface);
+  border: 1px solid var(--belki-border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.belki-root.is-style-editorial .belki-section.is-drop-available {
+  background: color-mix(in srgb, var(--belki-accent) 4%, var(--belki-surface));
+}
+
+.belki-root.is-style-editorial .belki-section.is-drop-target {
+  background: color-mix(in srgb, var(--belki-accent) 7%, var(--belki-surface));
+}
+
+.belki-root.is-style-editorial .belki-section > .belki-empty {
+  padding: 14px 16px;
+}
+
+.belki-root.is-style-editorial .belki-section-header {
+  background: color-mix(in srgb, var(--belki-section-color, var(--belki-muted)) 7%, var(--belki-surface));
+  border-bottom: 1px solid var(--belki-border);
+  min-height: 0;
+  padding: 9px 14px;
+}
+
+.belki-root.is-style-editorial .is-sector-section .belki-section-header::before {
+  background: var(--belki-section-color);
+  border-radius: 50%;
+  content: "";
+  flex: none;
+  height: 8px;
+  width: 8px;
+}
+
+.belki-root.is-style-editorial .belki-section-header h2 {
+  font-size: 13px;
+}
+
+.belki-root.is-style-editorial .belki-section-count {
+  background: var(--belki-surface);
+  border: 1px solid var(--belki-border);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 0 8px;
+}
+
+.belki-root.is-style-editorial .belki-task-group-label {
+  font-size: 11px;
+  padding: 8px 14px 2px;
+}
+
+.belki-root.is-style-editorial .belki-task-list {
+  padding: 0 8px 0 4px;
+}
+
+.belki-root.is-style-editorial .belki-task-row {
+  padding-bottom: 10px;
+  padding-top: 10px;
+}
+
+.belki-root.is-style-editorial .belki-task-list > .belki-task-row:last-child {
+  border-bottom: 0;
+}
+
+/* The sector chip says nothing new inside that sector's own section */
+.belki-root.is-style-editorial .is-sector-section .belki-task-project {
+  display: none;
+}
+
+/* Dates, deadlines and labels as pills */
+.belki-root.is-style-editorial .belki-task-date,
+.belki-root.is-style-editorial .belki-task-deadline {
+  background: var(--belki-chip-bg);
+  border-radius: 999px;
+  font-size: 11.5px;
+  padding: 2px 8px;
+}
+
+.belki-root.is-style-editorial .belki-task-date.is-overdue,
+.belki-root.is-style-editorial .belki-task-deadline.is-overdue {
+  background: var(--belki-danger-light);
+  color: var(--belki-danger);
+}
+
+.belki-root.is-style-editorial .belki-task-date.is-today {
+  background: var(--belki-warm-soft);
+  color: var(--belki-text);
+}
+
+.belki-root.is-style-editorial .belki-task-label {
+  font-size: 11.5px;
+  padding: 1px 8px;
+}
+
+/* Add button: dark, solid */
+.belki-root.is-style-editorial button.belki-add-inline {
+  background: var(--belki-ink);
+  border-radius: 9px;
+  color: var(--belki-bg);
+  font-size: 13px;
+  padding: 7px 14px;
+}
+
+.belki-root.is-style-editorial button.belki-add-inline:hover {
+  background: color-mix(in srgb, var(--belki-ink) 85%, var(--belki-bg));
+}
+
+.belki-root.is-style-editorial .belki-add-inline .belki-add-plus {
+  background: transparent;
+  color: inherit;
+}
+
+.belki-root.is-style-editorial .belki-add-inline .belki-add-text {
+  color: inherit;
+}
+
+/* In the Overview the add button sits between the tabs and the list */
+.belki-root.is-style-editorial .belki-overview-tabs + .belki-add-area {
+  margin-bottom: 14px;
+  margin-top: 0;
+}
+
+/* Overview: rings and counters as tiles, sector tabs as a segmented bar */
+.belki-root.is-style-editorial .belki-overview-rings {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  margin: 4px 0 12px;
+}
+
+.belki-root.is-style-editorial .belki-overview-ring-wrap {
+  align-items: center;
+  background: var(--belki-surface);
+  border: 1px solid var(--belki-border);
+  border-radius: 12px;
+  column-gap: 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: start;
+  padding: 12px 16px;
+}
+
+.belki-root.is-style-editorial .belki-overview-ring {
+  background: conic-gradient(var(--belki-accent) calc(var(--belki-ring-pct) * 3.6deg), var(--belki-border) 0deg);
+  grid-row: 1 / span 2;
+  height: 54px;
+  width: 54px;
+}
+
+.belki-root.is-style-editorial .belki-overview-ring-inner {
+  background: var(--belki-surface);
+  font-size: 12px;
+  font-weight: 600;
+  height: 44px;
+  margin: 5px;
+  width: 44px;
+}
+
+.belki-root.is-style-editorial .belki-overview-ring-label {
+  align-self: end;
+  font-family: var(--belki-serif);
+  font-size: 17px;
+}
+
+.belki-root.is-style-editorial .belki-overview-ring-sub {
+  align-self: start;
+}
+
+.belki-root.is-style-editorial .belki-overview-stats,
+.belki-root.is-style-editorial .belki-completed-stats {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin-bottom: 22px;
+}
+
+.belki-root.is-style-editorial .belki-overview-stat,
+.belki-root.is-style-editorial .belki-completed-stat {
+  align-items: flex-start;
+  background: var(--belki-surface);
+  border: 1px solid var(--belki-border);
+  border-radius: 12px;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 16px;
+}
+
+.belki-root.is-style-editorial .belki-overview-stat-value,
+.belki-root.is-style-editorial .belki-completed-stat-value {
+  font-family: var(--belki-serif);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.belki-root.is-style-editorial .belki-overview-stat.is-warning .belki-overview-stat-value {
+  color: var(--belki-danger);
+}
+
+.belki-root.is-style-editorial .belki-overview-stat-label,
+.belki-root.is-style-editorial .belki-completed-stat-label {
+  font-size: 12px;
+}
+
+.belki-root.is-style-editorial .belki-overview-tabs {
+  background: var(--belki-chip-bg);
+  border: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  padding: 3px;
+}
+
+.belki-root.is-style-editorial .belki-overview-tab {
+  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--belki-text);
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px 12px;
+}
+
+.belki-root.is-style-editorial .belki-overview-tab.is-active {
+  background: var(--belki-surface);
+  box-shadow: 0 0 0 1px var(--belki-border), 0 1px 2px rgba(0, 0, 0, 0.06);
+  color: var(--belki-text);
+  font-weight: 600;
+}
+
+.belki-root.is-style-editorial .belki-overview-tab-dot {
+  background: var(--belki-faint);
+  border-radius: 50%;
+  display: inline-block;
+  height: 7px;
+  width: 7px;
+}
+
+/* Today sidebar: it uses Obsidian's own colors, so only type and spacing change */
+.belki-today-panel.is-style-editorial .belki-today-heading {
+  font-family: "Iowan Old Style", "Charter", "Bitstream Charter", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 20px;
+}
+
+.belki-today-panel.is-style-editorial .belki-today-section-label {
+  font-size: 10.5px;
+  letter-spacing: 0.07em;
+}

@@ -245,6 +245,7 @@ export class TaskBoardView extends ItemView {
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
     containerEl.toggleClass("is-row-singleline", this.settings.rowLayout === "singleLine");
+    containerEl.toggleClass("is-style-editorial", this.settings.visualStyle === "editorial");
     applyBelkiFontSettings(containerEl, this.settings);
     applyBelkiThemeSettings(containerEl, this.settings);
     containerEl.addEventListener("keydown", this.handleRootKeyDown, true);
@@ -623,6 +624,7 @@ export class TaskBoardView extends ItemView {
     const visible = this.getVisibleTasks(tasks);
     const header = main.createDiv({ cls: "belki-main-header" });
     const titleWrap = header.createDiv();
+    this.renderEyebrow(titleWrap);
     titleWrap.createEl("h1", { text: this.getTitle() });
     titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
     this.renderSortingControl(header);
@@ -654,7 +656,9 @@ export class TaskBoardView extends ItemView {
     const tasks = this.store.getTasks().filter((task) => !archivedSet.has(normalizeTaskProject(task.project) || ""));
     const active = tasks.filter((task) => !task.completed);
     const header = main.createDiv({ cls: "belki-main-header" });
-    header.createEl("h1", { text: "Overview" });
+    const titleWrap = header.createDiv();
+    this.renderEyebrow(titleWrap);
+    titleWrap.createEl("h1", { text: "Overview" });
 
     const rings = main.createDiv({ cls: "belki-overview-rings" });
     const todayOpen = this.getTodayTasks(active).length;
@@ -673,7 +677,8 @@ export class TaskBoardView extends ItemView {
     this.renderOverviewRing(rings, sectorLabel, sectorDone, sectorOpen + sectorDone);
 
     const stats = main.createDiv({ cls: "belki-overview-stats" });
-    this.renderOverviewStat(stats, "Overdue", this.getOverdueTasks(active).length);
+    const overdueCount = this.getOverdueTasks(active).length;
+    this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
 
@@ -683,7 +688,10 @@ export class TaskBoardView extends ItemView {
       ...this.settings.sectors.filter((s) => !archivedSet.has(s.tag)).map((s) => ({ key: s.tag, label: s.label }))
     ];
     for (const entry of tabEntries) {
-      const tab = tabs.createEl("button", { cls: "belki-overview-tab", text: entry.label, attr: { type: "button" } });
+      const tab = tabs.createEl("button", { cls: "belki-overview-tab", attr: { type: "button" } });
+      const dot = tab.createSpan({ cls: "belki-overview-tab-dot" });
+      if (entry.key !== INBOX_SECTOR) dot.setCssStyles({ backgroundColor: getProjectColor(entry.key, this.settings.projectColors).regular });
+      tab.createSpan({ text: entry.label });
       tab.toggleClass("is-active", this.overviewSector === entry.key);
       tab.addEventListener("click", () => {
         this.overviewSector = entry.key;
@@ -704,6 +712,7 @@ export class TaskBoardView extends ItemView {
       : this.sortTasks(active.filter((task) => normalizeTaskProject(task.project) === this.overviewSector));
     const sections = main.createDiv({ cls: "belki-sections" });
     const section = this.createSection(sections, sectorLabel, sectionTasks.length);
+    if (!isInboxTab) this.markSectorSection(section, this.overviewSector);
     this.renderTaskList(section, sectionTasks);
   }
   renderOverviewRing(parent: HTMLElement, label: string, done: number, total: number) {
@@ -715,8 +724,9 @@ export class TaskBoardView extends ItemView {
     wrap.createDiv({ cls: "belki-overview-ring-label", text: label });
     wrap.createDiv({ cls: "belki-overview-ring-sub", text: `${done}/${total}` });
   }
-  renderOverviewStat(parent: HTMLElement, label: string, value: number) {
+  renderOverviewStat(parent: HTMLElement, label: string, value: number, modifier = "") {
     const stat = parent.createDiv({ cls: "belki-overview-stat" });
+    if (modifier) stat.addClass(modifier);
     stat.createSpan({ cls: "belki-overview-stat-value", text: String(value) });
     stat.createSpan({ cls: "belki-overview-stat-label", text: label });
   }
@@ -908,10 +918,12 @@ export class TaskBoardView extends ItemView {
         );
         if (this.settings.groupBy === "none") {
           const section2 = this.createSection(parent, projectDisplayName(project), projectTasks.length);
+          this.markSectorSection(section2, project);
           this.enableProjectDrop(section2, project);
           this.renderTaskList(section2, projectTasks);
         } else {
           const projectSection = this.createSection(parent, projectDisplayName(project), projectTasks.length);
+          this.markSectorSection(projectSection, project);
           this.enableProjectDrop(projectSection, project);
           const groups = this.groupTasks(projectTasks);
           for (const [groupName, groupTasks] of groups) {
@@ -1058,6 +1070,11 @@ export class TaskBoardView extends ItemView {
     row.createSpan({ cls: "belki-filter-name", text: name });
     row.createSpan({ cls: "belki-row-count", text: String(count) });
     row.addEventListener("click", onClick);
+  }
+  /** Tags a section that holds exactly one sector's tasks, with that sector's color. */
+  markSectorSection(section: HTMLElement, project: string) {
+    section.addClass("is-sector-section");
+    section.setCssProps({ "--belki-section-color": getProjectColor(project, this.settings.projectColors).regular });
   }
   createSection(parent: HTMLElement, title: string, count: number, renderHeaderAction?: (header: HTMLElement) => void) {
     const section = parent.createDiv({ cls: "belki-section" });
@@ -1452,7 +1469,7 @@ export class TaskBoardView extends ItemView {
     const meta = content.createDiv({ cls: "belki-task-meta" });
     if (task.due) {
       const dateSpan = meta.createSpan({
-        cls: `belki-task-date${isBeforeToday(task.due) ? " is-overdue" : ""}`,
+        cls: `belki-task-date${isBeforeToday(task.due) ? " is-overdue" : isToday(task.due) ? " is-today" : ""}`,
         text: formatDueChip(task.due)
       });
       if (task.repeat) {
@@ -1685,6 +1702,25 @@ export class TaskBoardView extends ItemView {
     if (selected.length === 0) return "Sectors";
     if (selected.length <= 3) return selected.map((p) => projectDisplayName(p)).join(" + ");
     return `${selected.length} sectors`;
+  }
+  /** Editorial style only: a short line above the page title saying what the view is for. */
+  renderEyebrow(parent: HTMLElement) {
+    if (this.settings.visualStyle !== "editorial") return;
+    const text = this.getEyebrow();
+    if (text) parent.createDiv({ cls: "belki-eyebrow", text });
+  }
+  getEyebrow(): string {
+    switch (this.mode) {
+      case "overview": return "What needs you today, and where your sectors stand";
+      case "inbox": return "Captured, not yet sorted into a sector";
+      case "today": return "Due today, plus anything overdue";
+      case "upcoming": return "Dated tasks ahead, day by day";
+      case "projects": return this.selectedProjects.size > 1 ? "Several sectors, side by side" : "Tasks by time sector";
+      case "completed": return "What you finished";
+      case "filters": return "Saved filters and labels";
+      case "archived": return "Sectors you have put away";
+      default: return "";
+    }
   }
   getTitle() {
     if (this.mode === "overview") {

@@ -53,6 +53,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Path warning:** the settings show a note when the configured Tasks file path points to a folder or a file that doesn't exist yet
 - **Completed stats:** the Completed view shows how many tasks you finished today and this week
 - **Task rows:** choose **Stacked** (title with due date/labels below) or **Single line** (everything on one row, for a much shorter list) under Appearance → Layout
+- **Style:** choose **Default** or **Editorial** under Appearance → Theme. Editorial uses serif headings, sections as cards with a header tinted in the sector's color, pill-shaped dates and labels, and tiles for the Overview's rings and counters. Its warm palette applies when the color scheme follows Obsidian
 - **Theme**: follow the active Obsidian theme, use a fixed light/dark palette, or customize every color individually; all cosmetic options live in a collapsible **Appearance** settings group
 
 ## Screenshots
