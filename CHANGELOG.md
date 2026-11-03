@@ -3,6 +3,14 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.13
+
+### New
+- **Editorial style:** a new Appearance → Theme → Style option (default unchanged). Serif page titles with a short line above them, sections as cards with a header tinted in the sector's color, dates and labels as pills (overdue red, today warm), and the Overview's rings and counters as tiles with the sector tabs as a segmented bar. It brings its own warm light and dark palette when the color scheme follows Obsidian; a fixed or custom scheme keeps its colors.
+
+### Fixed
+- **Deleting a task now asks first.** The × on a task row used to delete the line immediately, with no way back. It now opens a "Delete task?" dialog, and after deleting, a notice with **Undo** restores the task at the same place in the file — under the same heading even if the file changed in between. Deleting from the review walkthrough's X hotkey gets the same Undo.
+
 ## 1.3.12
 
 ### New
