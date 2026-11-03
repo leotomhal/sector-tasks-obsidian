@@ -44,7 +44,10 @@ const {
   extractTags,
   completionUndoPatch,
   snapshotDeletion,
-  reinsertDeletedTask
+  reinsertDeletedTask,
+  parseChangelog,
+  compareVersions,
+  releaseNotesSince
 } = testables;
 
 test("__testables are exported", () => {
@@ -249,4 +252,31 @@ test("undoing a delete of the first line puts it back at the top", () => {
   const after = deleteFrom(before, firstId);
   const restored = reinsertDeletedTask(after.blocks, after.tasks, snap);
   assert.equal(restored.blocks[0].taskId, firstId);
+});
+
+// Release notes after an update come from the bundled CHANGELOG.md.
+const fs = require("node:fs");
+const path = require("node:path");
+
+test("compareVersions orders numerically, not as text", () => {
+  assert.ok(compareVersions("1.3.10", "1.3.9") > 0);
+  assert.ok(compareVersions("1.4.0", "1.3.13") > 0);
+  assert.equal(compareVersions("1.3.13", "1.3.13"), 0);
+});
+
+test("parseChangelog finds every version in the real CHANGELOG.md", () => {
+  const md = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
+  const entries = parseChangelog(md);
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8"));
+  assert.equal(entries[0].version, manifest.version, "the newest changelog entry matches manifest.json");
+  assert.ok(entries.every((e) => e.body.length > 0), "no empty entries");
+  assert.ok(!/^## \d/m.test(entries[0].body), "an entry's body stops at the next version heading");
+});
+
+test("releaseNotesSince shows every skipped version, newest first", () => {
+  const entries = parseChangelog("## 1.3.13\n- c\n## 1.3.12\n- b\n## 1.3.11\n- a\n## 1.3.10\n- old");
+  assert.deepEqual(releaseNotesSince(entries, "1.3.10", "1.3.13").map((e) => e.version), ["1.3.13", "1.3.12", "1.3.11"]);
+  assert.deepEqual(releaseNotesSince(entries, "1.3.12", "1.3.13").map((e) => e.version), ["1.3.13"]);
+  assert.deepEqual(releaseNotesSince(entries, "", "1.3.13").map((e) => e.version), ["1.3.13"], "unknown previous version: only the current one");
+  assert.deepEqual(releaseNotesSince(entries, "1.3.13", "1.3.13"), [], "nothing new");
 });

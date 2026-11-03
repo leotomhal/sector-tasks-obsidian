@@ -117,6 +117,8 @@ export interface BelkiSettings {
   rowLayout: string;
   startView: string;
   visualStyle: string;
+  showReleaseNotes: boolean;
+  lastSeenVersion: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }

@@ -42,6 +42,8 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   rowLayout: "stacked",
   startView: "today",
   visualStyle: "default",
+  showReleaseNotes: true,
+  lastSeenVersion: "",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -293,6 +295,11 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "number", key: "autoDeleteCompletedAfterDays", min: 0, step: 1, placeholder: "0" }
       },
       {
+        name: "Show release notes after updates",
+        desc: "After the plugin updates, show what changed. The command palette can open them again any time.",
+        control: { type: "toggle", key: "showReleaseNotes" }
+      },
+      {
         name: "Search excludes completed tasks",
         desc: "When on, search only matches open tasks. Completed tasks never show up in results.",
         control: { type: "toggle", key: "searchExcludeCompleted" }
@@ -340,6 +347,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.startView = normalizeStartView(asString(value));
     } else if (key === "visualStyle") {
       settings.visualStyle = normalizeVisualStyle(asString(value));
+    } else if (key === "showReleaseNotes") {
+      settings.showReleaseNotes = value === true;
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -809,6 +818,12 @@ export class BelkiSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Auto-delete completed tasks").setDesc("Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a ✅ date are never touched.").addText((text) => {
       text.setPlaceholder("0").setValue(String(this.plugin.settings.autoDeleteCompletedAfterDays || 0)).onChange(async (value) => {
         this.plugin.settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value.trim());
+        await this.plugin.saveSettings();
+      });
+    });
+    new Setting(containerEl).setName("Show release notes after updates").setDesc("After the plugin updates, show what changed. The command palette can open them again any time.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.showReleaseNotes !== false).onChange(async (value) => {
+        this.plugin.settings.showReleaseNotes = value;
         await this.plugin.saveSettings();
       });
     });

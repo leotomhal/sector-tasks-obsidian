@@ -8,6 +8,8 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { normalizeReviewSession } from "./review";
 import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset } from "./settings";
+import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
+import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { TaskStore, completionUndoPatch, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
@@ -16,7 +18,7 @@ export default class BelkiPlugin extends Plugin {
   store: TaskStore;
   reloadDebounceTimer: number | null = null;
   async onload() {
-    await this.loadSettings();
+    const hadSettings = await this.loadSettings();
     if (!getTasksApi(this.app)) {
       new Notice(
         "Sector Tasks requires the community plugin \u201CTasks\u201D to be installed and enabled. Task creation and editing will not work until it is active."
@@ -33,6 +35,16 @@ export default class BelkiPlugin extends Plugin {
     );
     this.addRibbonIcon("check-circle-2", "Open Sector Tasks", () => {
       void this.activateView();
+    });
+    this.addCommand({
+      id: "show-release-notes",
+      name: "Show release notes",
+      callback: () => {
+        this.openReleaseNotes();
+      }
+    });
+    this.app.workspace.onLayoutReady(() => {
+      void this.showReleaseNotesIfUpdated(!hadSettings);
     });
     this.addCommand({
       id: "open",
@@ -122,8 +134,10 @@ export default class BelkiPlugin extends Plugin {
       window.clearTimeout(this.reloadDebounceTimer);
     }
   }
-  async loadSettings() {
-    const saved = toSettingsData(await this.loadData());
+  /** Loads settings; returns false when there was no saved data yet (a fresh install). */
+  async loadSettings(): Promise<boolean> {
+    const raw: unknown = await this.loadData();
+    const saved = toSettingsData(raw);
     const next: BelkiSettings = {
       ...DEFAULT_SETTINGS,
       ...saved,
@@ -155,6 +169,8 @@ export default class BelkiPlugin extends Plugin {
       rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
       startView: normalizeStartView(saved == null ? void 0 : saved.startView),
       visualStyle: normalizeVisualStyle(saved == null ? void 0 : saved.visualStyle),
+      showReleaseNotes: (saved == null ? void 0 : saved.showReleaseNotes) !== false,
+      lastSeenVersion: typeof (saved == null ? void 0 : saved.lastSeenVersion) === "string" ? saved.lastSeenVersion : "",
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
     if (this.settings) {
@@ -165,9 +181,37 @@ export default class BelkiPlugin extends Plugin {
       this.settings = next;
     }
     applySectorSettings(this.settings.sectors);
+    return raw != null;
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  /**
+   * Once per new version, show what changed since the version last seen in
+   * this vault. A fresh install shows nothing; it only records the version.
+   */
+  async showReleaseNotesIfUpdated(freshInstall: boolean) {
+    const current = this.manifest.version;
+    const lastSeen = this.settings.lastSeenVersion;
+    if (lastSeen === current) return;
+    // An older copy of the plugin on another synced device: leave the newer
+    // record alone, or the newer device would show the same notes again.
+    if (lastSeen && compareVersions(current, lastSeen) < 0) return;
+    if (!freshInstall && this.settings.showReleaseNotes) {
+      const entries = releaseNotesSince(bundledReleaseNotes(), lastSeen, current);
+      if (entries.length > 0) new ReleaseNotesModal(this.app, entries).open();
+    }
+    this.settings.lastSeenVersion = current;
+    await this.saveSettings();
+  }
+  openReleaseNotes() {
+    const entries = bundledReleaseNotes();
+    const entry = entries.find((e) => e.version === this.manifest.version) || entries[0];
+    if (!entry) {
+      new Notice("No release notes found.");
+      return;
+    }
+    new ReleaseNotesModal(this.app, [entry]).open();
   }
   // data.json changed outside this app instance, e.g. synced from another
   // device. Without this, the stale in-memory settings would overwrite the
@@ -329,5 +373,8 @@ export const __testables = {
   extractTags,
   completionUndoPatch,
   snapshotDeletion,
-  reinsertDeletedTask
+  reinsertDeletedTask,
+  parseChangelog,
+  compareVersions,
+  releaseNotesSince
 };

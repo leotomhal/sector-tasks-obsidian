@@ -2602,3 +2602,48 @@ button.belki-review-discard:hover {
   font-size: 10.5px;
   letter-spacing: 0.07em;
 }
+
+/* Release notes modal ("What's new"). Renders outside .belki-root, so it
+   uses Obsidian's own theme variables. */
+.belki-release-notes-entry + .belki-release-notes-entry {
+  border-top: 1px solid var(--background-modifier-border);
+  margin-top: 14px;
+  padding-top: 6px;
+}
+
+.belki-release-notes-entry h3 {
+  font-size: var(--font-ui-medium, 15px);
+  margin: 8px 0 4px;
+}
+
+.belki-release-notes-body h3 {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small, 13px);
+  letter-spacing: 0.04em;
+  margin: 12px 0 4px;
+  text-transform: uppercase;
+}
+
+.belki-release-notes-body ul {
+  margin-top: 4px;
+  padding-left: 1.2em;
+}
+
+.belki-release-notes-body li + li {
+  margin-top: 6px;
+}
+
+.belki-release-notes-footer {
+  align-items: baseline;
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-ui-small, 13px);
+  gap: 6px 14px;
+  margin-top: 16px;
+  padding-top: 10px;
+}
+
+.belki-release-notes-hint {
+  color: var(--text-muted);
+}

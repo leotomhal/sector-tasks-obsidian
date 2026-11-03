@@ -29,6 +29,8 @@ const context = await esbuild.context({
     ...builtinModules,
     ...builtinModules.map((m) => `node:${m}`)
   ],
+  // CHANGELOG.md is bundled as text for the in-app release notes.
+  loader: { ".md": "text" },
   format: "cjs",
   target: "es2018",
   charset: "utf8",
