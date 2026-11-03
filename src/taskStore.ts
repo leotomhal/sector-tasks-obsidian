@@ -16,6 +16,7 @@ export class TaskStore {
   writing: boolean;
   lastKnownDiskContent: string | null;
   lastCompletion: { id: string; title: string; patch: Partial<Task> } | null;
+  lastDeletion: DeletedTaskSnapshot | null;
   constructor(app: App, settings: BelkiSettings) {
     this.app = app;
     this.settings = settings;
@@ -26,6 +27,7 @@ export class TaskStore {
     this.writing = false;
     this.lastKnownDiskContent = null;
     this.lastCompletion = null;
+    this.lastDeletion = null;
   }
   get filePath() {
     return normalizePath(this.settings.tasksFilePath || "Tasks.md");
@@ -201,26 +203,26 @@ export class TaskStore {
           completed: true,
           completedDate: today
         });
-        this.showCompletionNotice("Task completed.");
+        this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
         await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
-        this.showCompletionNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`);
+        this.showUndoNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`, () => this.undoLastCompletion());
       }
       return;
     }
     await this.updateTask(id, { completed: true, completedDate: todayIso() });
-    this.showCompletionNotice("Task completed.");
+    this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
   }
-  /** Toast for a just-completed task, with an inline action to take it back. */
-  showCompletionNotice(message: string) {
+  /** Toast after a completion or deletion, with an inline action to take it back. */
+  showUndoNotice(message: string, undo: () => Promise<unknown>) {
     let notice: Notice | null = null;
     const fragment = createFragment((el) => {
       el.appendText(`${message} `);
-      const undo = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
-      undo.addEventListener("click", (event) => {
+      const link = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
+      link.addEventListener("click", (event) => {
         event.preventDefault();
         notice?.hide();
-        void this.undoLastCompletion();
+        void undo();
       });
     });
     notice = new Notice(fragment, 6e3);
@@ -241,8 +243,29 @@ export class TaskStore {
     new Notice(`Restored "${last.title}".`);
     return true;
   }
+  /** Deletes one task the user chose to delete, with a notice that can undo it. */
   async deleteTask(id: string) {
+    const snapshot = snapshotDeletion(this.fileModel.blocks, this.tasks, id);
     await this.deleteManyTasks([id]);
+    if (!snapshot) return;
+    this.lastDeletion = snapshot;
+    this.showUndoNotice(`Deleted "${snapshot.task.title}".`, () => this.undoLastDeletion());
+  }
+  /** Puts the most recently deleted task back where it was in the file. */
+  async undoLastDeletion(): Promise<boolean> {
+    const snapshot = this.lastDeletion;
+    if (!snapshot) {
+      new Notice("Nothing to undo.");
+      return false;
+    }
+    this.lastDeletion = null;
+    if (this.tasks.some((t) => t.id === snapshot.task.id)) return false;
+    const restored = reinsertDeletedTask(this.fileModel.blocks, this.tasks, snapshot);
+    this.fileModel.blocks = restored.blocks;
+    this.tasks = restored.tasks;
+    await this.save();
+    new Notice(`Restored "${snapshot.task.title}".`);
+    return true;
   }
   get archiveFilePath() {
     const p = this.filePath;
@@ -407,6 +430,52 @@ ${lines.join("\n")}
     new Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
+/** A deleted task plus where its line sat in the file, so undo can put it back. */
+export interface DeletedTaskSnapshot {
+  task: Task;
+  blockIndex: number;
+  /** The block just above the task's line (null when it was the first line). */
+  prevBlock: FileBlock | null;
+  taskIndex: number;
+}
+function sameBlock(a: FileBlock, b: FileBlock): boolean {
+  return a.type === b.type && (a.type === "task" ? a.taskId === b.taskId : a.line === b.line);
+}
+export function snapshotDeletion(blocks: FileBlock[], tasks: Task[], id: string): DeletedTaskSnapshot | null {
+  const taskIndex = tasks.findIndex((t) => t.id === id);
+  const blockIndex = blocks.findIndex((b) => b.type === "task" && b.taskId === id);
+  if (taskIndex < 0 || blockIndex < 0) return null;
+  return {
+    task: cloneTask(tasks[taskIndex]),
+    blockIndex,
+    prevBlock: blockIndex > 0 ? { ...blocks[blockIndex - 1] } : null,
+    taskIndex
+  };
+}
+/**
+ * Re-inserts a deleted task. If the file is unchanged since the delete, the
+ * line goes back to its exact index. If lines were added or removed in the
+ * meantime, it goes right below the line that used to precede it (nearest
+ * match to the old position), so it stays under the same heading.
+ */
+export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot: DeletedTaskSnapshot): { blocks: FileBlock[]; tasks: Task[] } {
+  let at = Math.min(snapshot.blockIndex, blocks.length);
+  const prev = snapshot.prevBlock;
+  if (!prev) {
+    at = 0;
+  } else if (!(at > 0 && sameBlock(blocks[at - 1], prev))) {
+    let best = -1;
+    blocks.forEach((block, i) => {
+      if (sameBlock(block, prev) && (best < 0 || Math.abs(i + 1 - at) < Math.abs(best + 1 - at))) best = i;
+    });
+    if (best >= 0) at = best + 1;
+  }
+  const taskBlock: FileBlock = { type: "task", taskId: snapshot.task.id };
+  const nextBlocks = [...blocks.slice(0, at), taskBlock, ...blocks.slice(at)];
+  const ti = Math.min(snapshot.taskIndex, tasks.length);
+  const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
+  return { blocks: nextBlocks, tasks: nextTasks };
+}
 /** The fields toggleComplete may change, captured so a completion can be taken back. */
 export function completionUndoPatch(task: Task): Partial<Task> {
   return {

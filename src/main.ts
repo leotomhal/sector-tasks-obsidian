@@ -7,8 +7,8 @@ import { dedupeLabels, normalizeLabelName } from "./labels";
 import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { normalizeReviewSession } from "./review";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeThemePreset } from "./settings";
-import { TaskStore, completionUndoPatch } from "./taskStore";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset } from "./settings";
+import { TaskStore, completionUndoPatch, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
 export default class BelkiPlugin extends Plugin {
@@ -154,6 +154,7 @@ export default class BelkiPlugin extends Plugin {
       themeColors: normalizeThemeColors(saved == null ? void 0 : saved.themeColors),
       rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
       startView: normalizeStartView(saved == null ? void 0 : saved.startView),
+      visualStyle: normalizeVisualStyle(saved == null ? void 0 : saved.visualStyle),
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
     if (this.settings) {
@@ -326,5 +327,7 @@ export const __testables = {
   nextOccurrence,
   normalizeLabelName,
   extractTags,
-  completionUndoPatch
+  completionUndoPatch,
+  snapshotDeletion,
+  reinsertDeletedTask
 };

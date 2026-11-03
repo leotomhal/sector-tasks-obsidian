@@ -569,6 +569,7 @@ var TodaySidebarView = class extends import_obsidian.ItemView {
     const container = this.contentEl;
     container.empty();
     container.addClass("belki-today-panel");
+    container.toggleClass("is-style-editorial", this.settings.visualStyle === "editorial");
     const header = container.createDiv({ cls: "belki-today-header" });
     header.createSpan({ cls: "belki-today-heading", text: "Today" });
     const headerActions = header.createDiv({ cls: "belki-today-header-actions" });
@@ -972,6 +973,7 @@ var DEFAULT_SETTINGS = {
   searchExcludeCompleted: false,
   rowLayout: "stacked",
   startView: "today",
+  visualStyle: "default",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -1130,6 +1132,13 @@ var START_VIEW_LABELS = {
   inbox: "Inbox",
   upcoming: "Upcoming"
 };
+var VISUAL_STYLE_LABELS = {
+  default: "Default",
+  editorial: "Editorial"
+};
+function normalizeVisualStyle(value) {
+  return value === "editorial" ? value : "default";
+}
 function normalizeStartView(value) {
   return value !== void 0 && Object.prototype.hasOwnProperty.call(START_VIEW_LABELS, value) ? value : "today";
 }
@@ -1259,6 +1268,8 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
       settings.rowLayout = normalizeRowLayout(asString(value));
     } else if (key === "startView") {
       settings.startView = normalizeStartView(asString(value));
+    } else if (key === "visualStyle") {
+      settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -1545,6 +1556,11 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
           heading: "Theme",
           items: [
             {
+              name: "Style",
+              desc: "Editorial uses serif headings, cards with tinted section headers, and pill-shaped dates. Its warm palette applies when the color scheme follows Obsidian; a fixed or custom scheme keeps its own colors.",
+              control: { type: "dropdown", key: "visualStyle", options: VISUAL_STYLE_LABELS }
+            },
+            {
               name: "Color scheme",
               desc: '"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.',
               control: { type: "dropdown", key: "themePreset", options: themePresetOptions }
@@ -1783,6 +1799,16 @@ var BelkiSettingTab = class extends import_obsidian2.PluginSettingTab {
         "labelFont"
       );
       new import_obsidian2.Setting(appearance).setName("Theme").setHeading();
+      new import_obsidian2.Setting(appearance).setName("Style").setDesc("Editorial uses serif headings, cards with tinted section headers, and pill-shaped dates. Its warm palette applies when the color scheme follows Obsidian; a fixed or custom scheme keeps its own colors.").addDropdown((dropdown) => {
+        for (const [value, label] of Object.entries(VISUAL_STYLE_LABELS)) {
+          dropdown.addOption(value, label);
+        }
+        dropdown.setValue(normalizeVisualStyle(this.plugin.settings.visualStyle)).onChange(async (value) => {
+          this.plugin.settings.visualStyle = normalizeVisualStyle(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
       new import_obsidian2.Setting(appearance).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
         for (const [value, label] of THEME_PRESET_OPTIONS) {
           dropdown.addOption(value, label);
@@ -2270,6 +2296,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
     containerEl.toggleClass("is-row-singleline", this.settings.rowLayout === "singleLine");
+    containerEl.toggleClass("is-style-editorial", this.settings.visualStyle === "editorial");
     applyBelkiFontSettings(containerEl, this.settings);
     applyBelkiThemeSettings(containerEl, this.settings);
     containerEl.addEventListener("keydown", this.handleRootKeyDown, true);
@@ -2648,6 +2675,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const visible = this.getVisibleTasks(tasks);
     const header = main.createDiv({ cls: "belki-main-header" });
     const titleWrap = header.createDiv();
+    this.renderEyebrow(titleWrap);
     titleWrap.createEl("h1", { text: this.getTitle() });
     titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
     this.renderSortingControl(header);
@@ -2679,7 +2707,9 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const tasks = this.store.getTasks().filter((task) => !archivedSet.has(normalizeTaskProject(task.project) || ""));
     const active = tasks.filter((task) => !task.completed);
     const header = main.createDiv({ cls: "belki-main-header" });
-    header.createEl("h1", { text: "Overview" });
+    const titleWrap = header.createDiv();
+    this.renderEyebrow(titleWrap);
+    titleWrap.createEl("h1", { text: "Overview" });
     const rings = main.createDiv({ cls: "belki-overview-rings" });
     const todayOpen = this.getTodayTasks(active).length;
     const todayDone = this.countCompletionsSince(tasks, todayIso());
@@ -2691,7 +2721,8 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const sectorDone = tasks.filter((task) => task.completed && (isInboxTab ? !normalizeTaskProject(task.project) : normalizeTaskProject(task.project) === this.overviewSector)).length;
     this.renderOverviewRing(rings, sectorLabel, sectorDone, sectorOpen + sectorDone);
     const stats = main.createDiv({ cls: "belki-overview-stats" });
-    this.renderOverviewStat(stats, "Overdue", this.getOverdueTasks(active).length);
+    const overdueCount = this.getOverdueTasks(active).length;
+    this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
@@ -2700,7 +2731,10 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
       ...this.settings.sectors.filter((s) => !archivedSet.has(s.tag)).map((s) => ({ key: s.tag, label: s.label }))
     ];
     for (const entry of tabEntries) {
-      const tab = tabs.createEl("button", { cls: "belki-overview-tab", text: entry.label, attr: { type: "button" } });
+      const tab = tabs.createEl("button", { cls: "belki-overview-tab", attr: { type: "button" } });
+      const dot = tab.createSpan({ cls: "belki-overview-tab-dot" });
+      if (entry.key !== INBOX_SECTOR) dot.setCssStyles({ backgroundColor: getProjectColor(entry.key, this.settings.projectColors).regular });
+      tab.createSpan({ text: entry.label });
       tab.toggleClass("is-active", this.overviewSector === entry.key);
       tab.addEventListener("click", () => {
         this.overviewSector = entry.key;
@@ -2717,6 +2751,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const sectionTasks = isInboxTab ? this.getInboxTasks(active) : this.sortTasks(active.filter((task) => normalizeTaskProject(task.project) === this.overviewSector));
     const sections = main.createDiv({ cls: "belki-sections" });
     const section = this.createSection(sections, sectorLabel, sectionTasks.length);
+    if (!isInboxTab) this.markSectorSection(section, this.overviewSector);
     this.renderTaskList(section, sectionTasks);
   }
   renderOverviewRing(parent, label, done, total) {
@@ -2728,8 +2763,9 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     wrap.createDiv({ cls: "belki-overview-ring-label", text: label });
     wrap.createDiv({ cls: "belki-overview-ring-sub", text: `${done}/${total}` });
   }
-  renderOverviewStat(parent, label, value) {
+  renderOverviewStat(parent, label, value, modifier = "") {
     const stat = parent.createDiv({ cls: "belki-overview-stat" });
+    if (modifier) stat.addClass(modifier);
     stat.createSpan({ cls: "belki-overview-stat-value", text: String(value) });
     stat.createSpan({ cls: "belki-overview-stat-label", text: label });
   }
@@ -2921,10 +2957,12 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
         );
         if (this.settings.groupBy === "none") {
           const section2 = this.createSection(parent, projectDisplayName(project), projectTasks.length);
+          this.markSectorSection(section2, project);
           this.enableProjectDrop(section2, project);
           this.renderTaskList(section2, projectTasks);
         } else {
           const projectSection = this.createSection(parent, projectDisplayName(project), projectTasks.length);
+          this.markSectorSection(projectSection, project);
           this.enableProjectDrop(projectSection, project);
           const groups = this.groupTasks(projectTasks);
           for (const [groupName, groupTasks] of groups) {
@@ -3071,6 +3109,11 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     row.createSpan({ cls: "belki-filter-name", text: name });
     row.createSpan({ cls: "belki-row-count", text: String(count) });
     row.addEventListener("click", onClick);
+  }
+  /** Tags a section that holds exactly one sector's tasks, with that sector's color. */
+  markSectorSection(section, project) {
+    section.addClass("is-sector-section");
+    section.setCssProps({ "--belki-section-color": getProjectColor(project, this.settings.projectColors).regular });
   }
   createSection(parent, title, count, renderHeaderAction) {
     const section = parent.createDiv({ cls: "belki-section" });
@@ -3465,7 +3508,7 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     const meta = content.createDiv({ cls: "belki-task-meta" });
     if (task.due) {
       const dateSpan = meta.createSpan({
-        cls: `belki-task-date${isBeforeToday(task.due) ? " is-overdue" : ""}`,
+        cls: `belki-task-date${isBeforeToday(task.due) ? " is-overdue" : isToday(task.due) ? " is-today" : ""}`,
         text: formatDueChip(task.due)
       });
       if (task.repeat) {
@@ -3539,7 +3582,9 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
       }
     }).addEventListener("click", (event) => {
       event.stopPropagation();
-      void this.store.deleteTask(task.id);
+      new ConfirmDeleteModal(this.app, task.title, () => {
+        void this.store.deleteTask(task.id);
+      }).open();
     });
   }
   async openTaskInNote(task) {
@@ -3693,6 +3738,34 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     if (selected.length === 0) return "Sectors";
     if (selected.length <= 3) return selected.map((p) => projectDisplayName(p)).join(" + ");
     return `${selected.length} sectors`;
+  }
+  /** Editorial style only: a short line above the page title saying what the view is for. */
+  renderEyebrow(parent) {
+    if (this.settings.visualStyle !== "editorial") return;
+    const text = this.getEyebrow();
+    if (text) parent.createDiv({ cls: "belki-eyebrow", text });
+  }
+  getEyebrow() {
+    switch (this.mode) {
+      case "overview":
+        return "What needs you today, and where your sectors stand";
+      case "inbox":
+        return "Captured, not yet sorted into a sector";
+      case "today":
+        return "Due today, plus anything overdue";
+      case "upcoming":
+        return "Dated tasks ahead, day by day";
+      case "projects":
+        return this.selectedProjects.size > 1 ? "Several sectors, side by side" : "Tasks by time sector";
+      case "completed":
+        return "What you finished";
+      case "filters":
+        return "Saved filters and labels";
+      case "archived":
+        return "Sectors you have put away";
+      default:
+        return "";
+    }
   }
   getTitle() {
     var _a;
@@ -4158,6 +4231,34 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     event.stopImmediatePropagation();
   }
 };
+var ConfirmDeleteModal = class extends import_obsidian3.Modal {
+  constructor(app, taskTitle, onConfirm) {
+    super(app);
+    this.taskTitle = taskTitle;
+    this.onConfirm = onConfirm;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.setTitle("Delete task?");
+    contentEl.createEl("p", { cls: "belki-confirm-delete-title", text: this.taskTitle });
+    contentEl.createEl("p", {
+      cls: "belki-confirm-delete-hint",
+      text: "This removes the line from your tasks file. You can still undo it right after."
+    });
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => this.close());
+    const deleteButton = actions.createEl("button", { cls: "mod-warning", text: "Delete", attr: { type: "button" } });
+    deleteButton.addEventListener("click", () => {
+      this.close();
+      this.onConfirm();
+    });
+    deleteButton.focus();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
 var LabelPromptModal = class extends import_obsidian3.Modal {
   constructor(app, onSubmit) {
     super(app);
@@ -4428,6 +4529,7 @@ var TaskStore = class {
     this.writing = false;
     this.lastKnownDiskContent = null;
     this.lastCompletion = null;
+    this.lastDeletion = null;
   }
   get filePath() {
     return (0, import_obsidian4.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
@@ -4604,26 +4706,26 @@ var TaskStore = class {
           completed: true,
           completedDate: today
         });
-        this.showCompletionNotice("Task completed.");
+        this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
         await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
-        this.showCompletionNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`);
+        this.showUndoNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`, () => this.undoLastCompletion());
       }
       return;
     }
     await this.updateTask(id, { completed: true, completedDate: todayIso() });
-    this.showCompletionNotice("Task completed.");
+    this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
   }
-  /** Toast for a just-completed task, with an inline action to take it back. */
-  showCompletionNotice(message) {
+  /** Toast after a completion or deletion, with an inline action to take it back. */
+  showUndoNotice(message, undo) {
     let notice = null;
     const fragment = createFragment((el) => {
       el.appendText(`${message} `);
-      const undo = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
-      undo.addEventListener("click", (event) => {
+      const link = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
+      link.addEventListener("click", (event) => {
         event.preventDefault();
         notice == null ? void 0 : notice.hide();
-        void this.undoLastCompletion();
+        void undo();
       });
     });
     notice = new import_obsidian4.Notice(fragment, 6e3);
@@ -4644,8 +4746,29 @@ var TaskStore = class {
     new import_obsidian4.Notice(`Restored "${last.title}".`);
     return true;
   }
+  /** Deletes one task the user chose to delete, with a notice that can undo it. */
   async deleteTask(id) {
+    const snapshot = snapshotDeletion(this.fileModel.blocks, this.tasks, id);
     await this.deleteManyTasks([id]);
+    if (!snapshot) return;
+    this.lastDeletion = snapshot;
+    this.showUndoNotice(`Deleted "${snapshot.task.title}".`, () => this.undoLastDeletion());
+  }
+  /** Puts the most recently deleted task back where it was in the file. */
+  async undoLastDeletion() {
+    const snapshot = this.lastDeletion;
+    if (!snapshot) {
+      new import_obsidian4.Notice("Nothing to undo.");
+      return false;
+    }
+    this.lastDeletion = null;
+    if (this.tasks.some((t) => t.id === snapshot.task.id)) return false;
+    const restored = reinsertDeletedTask(this.fileModel.blocks, this.tasks, snapshot);
+    this.fileModel.blocks = restored.blocks;
+    this.tasks = restored.tasks;
+    await this.save();
+    new import_obsidian4.Notice(`Restored "${snapshot.task.title}".`);
+    return true;
   }
   get archiveFilePath() {
     const p = this.filePath;
@@ -4811,6 +4934,38 @@ ${lines.join("\n")}
     new import_obsidian4.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
+function sameBlock(a, b) {
+  return a.type === b.type && (a.type === "task" ? a.taskId === b.taskId : a.line === b.line);
+}
+function snapshotDeletion(blocks, tasks, id) {
+  const taskIndex = tasks.findIndex((t) => t.id === id);
+  const blockIndex = blocks.findIndex((b) => b.type === "task" && b.taskId === id);
+  if (taskIndex < 0 || blockIndex < 0) return null;
+  return {
+    task: cloneTask(tasks[taskIndex]),
+    blockIndex,
+    prevBlock: blockIndex > 0 ? { ...blocks[blockIndex - 1] } : null,
+    taskIndex
+  };
+}
+function reinsertDeletedTask(blocks, tasks, snapshot) {
+  let at = Math.min(snapshot.blockIndex, blocks.length);
+  const prev = snapshot.prevBlock;
+  if (!prev) {
+    at = 0;
+  } else if (!(at > 0 && sameBlock(blocks[at - 1], prev))) {
+    let best = -1;
+    blocks.forEach((block, i) => {
+      if (sameBlock(block, prev) && (best < 0 || Math.abs(i + 1 - at) < Math.abs(best + 1 - at))) best = i;
+    });
+    if (best >= 0) at = best + 1;
+  }
+  const taskBlock = { type: "task", taskId: snapshot.task.id };
+  const nextBlocks = [...blocks.slice(0, at), taskBlock, ...blocks.slice(at)];
+  const ti = Math.min(snapshot.taskIndex, tasks.length);
+  const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
+  return { blocks: nextBlocks, tasks: nextTasks };
+}
 function completionUndoPatch(task) {
   return {
     completed: task.completed,
@@ -4989,6 +5144,7 @@ var BelkiPlugin = class extends import_obsidian5.Plugin {
       themeColors: normalizeThemeColors(saved == null ? void 0 : saved.themeColors),
       rowLayout: normalizeRowLayout(saved == null ? void 0 : saved.rowLayout),
       startView: normalizeStartView(saved == null ? void 0 : saved.startView),
+      visualStyle: normalizeVisualStyle(saved == null ? void 0 : saved.visualStyle),
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
     };
     if (this.settings) {
@@ -5152,5 +5308,7 @@ var __testables = {
   nextOccurrence,
   normalizeLabelName,
   extractTags,
-  completionUndoPatch
+  completionUndoPatch,
+  snapshotDeletion,
+  reinsertDeletedTask
 };

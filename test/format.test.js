@@ -42,7 +42,9 @@ const {
   serializeTasksRecurrence,
   normalizeLabelName,
   extractTags,
-  completionUndoPatch
+  completionUndoPatch,
+  snapshotDeletion,
+  reinsertDeletedTask
 } = testables;
 
 test("__testables are exported", () => {
@@ -187,4 +189,64 @@ test("completionUndoPatch copies repeat and occurrences instead of sharing them"
   patch.repeat.frequency = "daily";
   assert.deepEqual(task.completedOccurrences, ["2026-07-01"]);
   assert.equal(task.repeat.frequency, "weekly");
+});
+
+// Undo for a deleted task has to put the line back where it was, or the task
+// silently moves under a different heading in the user's file.
+function deletionFixture() {
+  const lines = [
+    "# Tasks",
+    "## Work",
+    "- [ ] A #task",
+    "- [ ] B #task",
+    "## Home",
+    "- [ ] C #task"
+  ];
+  const tasks = [];
+  const blocks = lines.map((line, i) => {
+    const parsed = parseTaskLine(line, "id" + i, tasks.length);
+    if (!parsed) return { type: "raw", line };
+    tasks.push(parsed.task);
+    return { type: "task", taskId: parsed.task.id };
+  });
+  return { blocks, tasks };
+}
+function deleteFrom(state, id) {
+  return {
+    blocks: state.blocks.filter((b) => b.taskId !== id),
+    tasks: state.tasks.filter((t) => t.id !== id)
+  };
+}
+const ids = (blocks) => blocks.map((b) => b.taskId || b.line);
+
+test("undoing a delete restores the exact position when the file is unchanged", () => {
+  const before = deletionFixture();
+  const snap = snapshotDeletion(before.blocks, before.tasks, "id3"); // B
+  const restored = reinsertDeletedTask(deleteFrom(before, "id3").blocks, deleteFrom(before, "id3").tasks, snap);
+  assert.deepEqual(ids(restored.blocks), ids(before.blocks));
+  assert.deepEqual(restored.tasks.map((t) => t.id), before.tasks.map((t) => t.id));
+  assert.deepEqual(restored.tasks.map((t) => t.order), [0, 1, 2]);
+});
+
+test("undoing a delete keeps the task under its heading after lines were added above", () => {
+  const before = deletionFixture();
+  const snap = snapshotDeletion(before.blocks, before.tasks, "id5"); // C, under "## Home"
+  const after = deleteFrom(before, "id5");
+  after.blocks.unshift({ type: "raw", line: "" }, { type: "raw", line: "Notes" });
+  const restored = reinsertDeletedTask(after.blocks, after.tasks, snap);
+  const order = ids(restored.blocks);
+  assert.equal(order[order.indexOf("## Home") + 1], "id5");
+});
+
+test("undoing a delete of the first line puts it back at the top", () => {
+  const before = deletionFixture();
+  before.blocks.shift(); // make the task list start with "## Work"
+  before.blocks.unshift({ type: "task", taskId: before.tasks[0].id });
+  before.blocks.splice(before.blocks.findIndex((b, i) => i > 0 && b.taskId === before.tasks[0].id), 1);
+  const firstId = before.blocks[0].taskId;
+  const snap = snapshotDeletion(before.blocks, before.tasks, firstId);
+  assert.equal(snap.prevBlock, null);
+  const after = deleteFrom(before, firstId);
+  const restored = reinsertDeletedTask(after.blocks, after.tasks, snap);
+  assert.equal(restored.blocks[0].taskId, firstId);
 });

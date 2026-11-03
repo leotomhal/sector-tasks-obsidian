@@ -116,6 +116,7 @@ export interface BelkiSettings {
   searchExcludeCompleted: boolean;
   rowLayout: string;
   startView: string;
+  visualStyle: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }
