@@ -8,7 +8,7 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { normalizeReviewSession } from "./review";
 import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeThemePreset } from "./settings";
-import { TaskStore, completionUndoPatch } from "./taskStore";
+import { TaskStore, completionUndoPatch, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
 export default class BelkiPlugin extends Plugin {
@@ -326,5 +326,7 @@ export const __testables = {
   nextOccurrence,
   normalizeLabelName,
   extractTags,
-  completionUndoPatch
+  completionUndoPatch,
+  snapshotDeletion,
+  reinsertDeletedTask
 };

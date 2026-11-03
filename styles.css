@@ -2239,3 +2239,20 @@ button.belki-review-discard:hover {
   border-color: var(--belki-accent);
   color: var(--belki-on-accent);
 }
+
+/* Delete confirmation modal: renders outside .belki-root, so it uses
+   Obsidian's own theme variables rather than the board's --belki-* ones. */
+.belki-confirm-delete-title {
+  border-left: 3px solid var(--text-error, #e03e3e);
+  color: var(--text-normal);
+  font-weight: 600;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+  padding-left: 10px;
+}
+
+.belki-confirm-delete-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small, 13px);
+  margin: 0;
+}

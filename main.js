@@ -3539,7 +3539,9 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
       }
     }).addEventListener("click", (event) => {
       event.stopPropagation();
-      void this.store.deleteTask(task.id);
+      new ConfirmDeleteModal(this.app, task.title, () => {
+        void this.store.deleteTask(task.id);
+      }).open();
     });
   }
   async openTaskInNote(task) {
@@ -4158,6 +4160,34 @@ var TaskBoardView = class extends import_obsidian3.ItemView {
     event.stopImmediatePropagation();
   }
 };
+var ConfirmDeleteModal = class extends import_obsidian3.Modal {
+  constructor(app, taskTitle, onConfirm) {
+    super(app);
+    this.taskTitle = taskTitle;
+    this.onConfirm = onConfirm;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.setTitle("Delete task?");
+    contentEl.createEl("p", { cls: "belki-confirm-delete-title", text: this.taskTitle });
+    contentEl.createEl("p", {
+      cls: "belki-confirm-delete-hint",
+      text: "This removes the line from your tasks file. You can still undo it right after."
+    });
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => this.close());
+    const deleteButton = actions.createEl("button", { cls: "mod-warning", text: "Delete", attr: { type: "button" } });
+    deleteButton.addEventListener("click", () => {
+      this.close();
+      this.onConfirm();
+    });
+    deleteButton.focus();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
 var LabelPromptModal = class extends import_obsidian3.Modal {
   constructor(app, onSubmit) {
     super(app);
@@ -4428,6 +4458,7 @@ var TaskStore = class {
     this.writing = false;
     this.lastKnownDiskContent = null;
     this.lastCompletion = null;
+    this.lastDeletion = null;
   }
   get filePath() {
     return (0, import_obsidian4.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
@@ -4604,26 +4635,26 @@ var TaskStore = class {
           completed: true,
           completedDate: today
         });
-        this.showCompletionNotice("Task completed.");
+        this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
         await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
-        this.showCompletionNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`);
+        this.showUndoNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`, () => this.undoLastCompletion());
       }
       return;
     }
     await this.updateTask(id, { completed: true, completedDate: todayIso() });
-    this.showCompletionNotice("Task completed.");
+    this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
   }
-  /** Toast for a just-completed task, with an inline action to take it back. */
-  showCompletionNotice(message) {
+  /** Toast after a completion or deletion, with an inline action to take it back. */
+  showUndoNotice(message, undo) {
     let notice = null;
     const fragment = createFragment((el) => {
       el.appendText(`${message} `);
-      const undo = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
-      undo.addEventListener("click", (event) => {
+      const link = el.createEl("a", { cls: "belki-notice-undo", text: "Undo" });
+      link.addEventListener("click", (event) => {
         event.preventDefault();
         notice == null ? void 0 : notice.hide();
-        void this.undoLastCompletion();
+        void undo();
       });
     });
     notice = new import_obsidian4.Notice(fragment, 6e3);
@@ -4644,8 +4675,29 @@ var TaskStore = class {
     new import_obsidian4.Notice(`Restored "${last.title}".`);
     return true;
   }
+  /** Deletes one task the user chose to delete, with a notice that can undo it. */
   async deleteTask(id) {
+    const snapshot = snapshotDeletion(this.fileModel.blocks, this.tasks, id);
     await this.deleteManyTasks([id]);
+    if (!snapshot) return;
+    this.lastDeletion = snapshot;
+    this.showUndoNotice(`Deleted "${snapshot.task.title}".`, () => this.undoLastDeletion());
+  }
+  /** Puts the most recently deleted task back where it was in the file. */
+  async undoLastDeletion() {
+    const snapshot = this.lastDeletion;
+    if (!snapshot) {
+      new import_obsidian4.Notice("Nothing to undo.");
+      return false;
+    }
+    this.lastDeletion = null;
+    if (this.tasks.some((t) => t.id === snapshot.task.id)) return false;
+    const restored = reinsertDeletedTask(this.fileModel.blocks, this.tasks, snapshot);
+    this.fileModel.blocks = restored.blocks;
+    this.tasks = restored.tasks;
+    await this.save();
+    new import_obsidian4.Notice(`Restored "${snapshot.task.title}".`);
+    return true;
   }
   get archiveFilePath() {
     const p = this.filePath;
@@ -4811,6 +4863,38 @@ ${lines.join("\n")}
     new import_obsidian4.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
+function sameBlock(a, b) {
+  return a.type === b.type && (a.type === "task" ? a.taskId === b.taskId : a.line === b.line);
+}
+function snapshotDeletion(blocks, tasks, id) {
+  const taskIndex = tasks.findIndex((t) => t.id === id);
+  const blockIndex = blocks.findIndex((b) => b.type === "task" && b.taskId === id);
+  if (taskIndex < 0 || blockIndex < 0) return null;
+  return {
+    task: cloneTask(tasks[taskIndex]),
+    blockIndex,
+    prevBlock: blockIndex > 0 ? { ...blocks[blockIndex - 1] } : null,
+    taskIndex
+  };
+}
+function reinsertDeletedTask(blocks, tasks, snapshot) {
+  let at = Math.min(snapshot.blockIndex, blocks.length);
+  const prev = snapshot.prevBlock;
+  if (!prev) {
+    at = 0;
+  } else if (!(at > 0 && sameBlock(blocks[at - 1], prev))) {
+    let best = -1;
+    blocks.forEach((block, i) => {
+      if (sameBlock(block, prev) && (best < 0 || Math.abs(i + 1 - at) < Math.abs(best + 1 - at))) best = i;
+    });
+    if (best >= 0) at = best + 1;
+  }
+  const taskBlock = { type: "task", taskId: snapshot.task.id };
+  const nextBlocks = [...blocks.slice(0, at), taskBlock, ...blocks.slice(at)];
+  const ti = Math.min(snapshot.taskIndex, tasks.length);
+  const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
+  return { blocks: nextBlocks, tasks: nextTasks };
+}
 function completionUndoPatch(task) {
   return {
     completed: task.completed,
@@ -5152,5 +5236,7 @@ var __testables = {
   nextOccurrence,
   normalizeLabelName,
   extractTags,
-  completionUndoPatch
+  completionUndoPatch,
+  snapshotDeletion,
+  reinsertDeletedTask
 };

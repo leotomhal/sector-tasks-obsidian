@@ -1526,7 +1526,9 @@ export class TaskBoardView extends ItemView {
       }
     }).addEventListener("click", (event) => {
       event.stopPropagation();
-      void this.store.deleteTask(task.id);
+      new ConfirmDeleteModal(this.app, task.title, () => {
+        void this.store.deleteTask(task.id);
+      }).open();
     });
   }
   async openTaskInNote(task: Task) {
@@ -2150,6 +2152,41 @@ export class TaskBoardView extends ItemView {
     event.stopImmediatePropagation();
   }
 };
+/**
+ * Asks before a task is deleted from the row's × button. Uses Obsidian's own
+ * modal and button styles (mod-warning), since modals render outside the
+ * board and don't inherit its colors.
+ */
+export class ConfirmDeleteModal extends Modal {
+  taskTitle: string;
+  onConfirm: () => void;
+  constructor(app: App, taskTitle: string, onConfirm: () => void) {
+    super(app);
+    this.taskTitle = taskTitle;
+    this.onConfirm = onConfirm;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.setTitle("Delete task?");
+    contentEl.createEl("p", { cls: "belki-confirm-delete-title", text: this.taskTitle });
+    contentEl.createEl("p", {
+      cls: "belki-confirm-delete-hint",
+      text: "This removes the line from your tasks file. You can still undo it right after."
+    });
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => this.close());
+    const deleteButton = actions.createEl("button", { cls: "mod-warning", text: "Delete", attr: { type: "button" } });
+    deleteButton.addEventListener("click", () => {
+      this.close();
+      this.onConfirm();
+    });
+    deleteButton.focus();
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+}
 export class LabelPromptModal extends Modal {
   onSubmit: (value: string) => void;
   constructor(app: App, onSubmit: (value: string) => void) {
