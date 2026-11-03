@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.3.14
+
+### New
+- **Release notes in Obsidian:** after the plugin updates, this "What's new" dialog shows what changed — including every version you skipped. It doesn't appear on a fresh install, you can turn it off under Settings → Show release notes after updates, and the **Show release notes** command opens it again any time.
+
 ## 1.3.13
 
 ### New
