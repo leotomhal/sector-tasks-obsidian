@@ -7,6 +7,7 @@ import { dedupeLabels, displayLabel, normalizeLabelName } from "./labels";
 import { projectDisplayName } from "./projects";
 import { DEFAULT_SECTORS, SECTOR_TAG_PATTERN, applySectorSettings, isReservedSectorTag, normalizeSectorTag } from "./tasksFormat";
 import { FONT_OPTIONS, OVERDUE_RANGES, SORT_MODES } from "./types";
+import { confirmAction } from "./views/ConfirmModal";
 
 export const DEFAULT_DATA_FOLDER_PATH = "_belki_files";
 export const DEFAULT_SETTINGS: BelkiSettings = {
@@ -251,9 +252,13 @@ export function applyBelkiFontSettings(element: HTMLElement, settings: BelkiSett
     "--belki-font-label": fontStackForOption(settings.labelFont)
   });
 }
+function taskCount(n: number): string {
+  return n === 1 ? "1 task" : `${n} tasks`;
+}
 export class BelkiSettingTab extends PluginSettingTab {
   plugin: BelkiPlugin;
   appearanceOpen?: boolean;
+  sectorsOpen?: boolean;
   constructor(app: App, plugin: BelkiPlugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -304,12 +309,7 @@ export class BelkiSettingTab extends PluginSettingTab {
         desc: "When on, search only matches open tasks. Completed tasks never show up in results.",
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
-      {
-        name: "",
-        desc: "Sectors: the tag is written 1:1 as #tag in the tasks file; changing a tag automatically renames already-tagged tasks. Drag rows to change the column order on the board.",
-        searchable: false
-      },
-      this.buildSectorList(),
+      this.buildSectorsPage(),
       this.buildAppearancePage()
     ];
   }
@@ -381,6 +381,26 @@ export class BelkiSettingTab extends PluginSettingTab {
     if (existing && !(existing instanceof TFile)) {
       return `"${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`;
     }
+  }
+  buildSectorsPage(): SettingDefinitionItem {
+    const count = () => {
+      const n = this.plugin.settings.sectors.length;
+      return n === 1 ? "1 sector" : `${n} sectors`;
+    };
+    return {
+      type: "page",
+      name: "Sectors",
+      desc: "The columns of the board: their tags, names, order, and review steps. Set up once; changing a tag rewrites your tasks file.",
+      displayValue: count,
+      items: [
+        {
+          name: "",
+          desc: "The tag is written 1:1 as #tag in the tasks file; changing a tag automatically renames already-tagged tasks. Drag rows to change the column order on the board.",
+          searchable: false
+        },
+        this.buildSectorList()
+      ]
+    };
   }
   buildSectorList(): SettingDefinitionItem {
     return {
@@ -493,6 +513,22 @@ export class BelkiSettingTab extends PluginSettingTab {
     const newLabel = (rawLabel || "").trim() || newTag;
     const oldTag = current.tag;
     const tagChanged = oldTag.toLowerCase() !== lower;
+    if (tagChanged) {
+      const affected = this.plugin.store.countTasksInSector(oldTag);
+      if (affected > 0) {
+        const confirmed = await confirmAction(this.app, {
+          title: "Rename sector tag?",
+          subject: `#${oldTag} \u2192 #${newTag}`,
+          body: `This changes ${taskCount(affected)} in your tasks file.`,
+          confirmText: "Rename",
+          destructive: true
+        });
+        if (!confirmed) {
+          this.rerender();
+          return;
+        }
+      }
+    }
     sectors[index] = {
       tag: newTag,
       label: newLabel,
@@ -529,6 +565,20 @@ export class BelkiSettingTab extends PluginSettingTab {
     }
     const removed = sectors[index];
     if (!removed) return;
+    const affected = this.plugin.store.countTasksInSector(removed.tag);
+    const confirmed = await confirmAction(this.app, {
+      title: "Remove sector?",
+      subject: `${removed.label} (#${removed.tag})`,
+      body: affected > 0
+        ? `Its ${taskCount(affected)} keep #${removed.tag} as a label but won't appear in any sector. Nothing is deleted from your tasks file.`
+        : "No tasks use this sector yet. Nothing changes in your tasks file.",
+      confirmText: "Remove",
+      destructive: true
+    });
+    if (!confirmed) {
+      this.rerender();
+      return;
+    }
     this.plugin.settings.sectors = sectors.filter((_, i) => i !== index);
     applySectorSettings(this.plugin.settings.sectors);
     await this.plugin.saveSettings();
@@ -843,15 +893,28 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
-    new Setting(containerEl).setName("Sectors").setHeading();
-    containerEl.createDiv({
+    const sectorsSection = containerEl.createEl("details", { cls: "belki-settings-appearance" });
+    if (this.sectorsOpen === true) {
+      sectorsSection.setAttr("open", "");
+    }
+    sectorsSection.addEventListener("toggle", () => {
+      this.sectorsOpen = sectorsSection.open;
+    });
+    sectorsSection.createEl("summary", { cls: "belki-settings-appearance-summary", text: "Sectors" });
+    sectorsSection.createDiv({
       cls: "setting-item-description",
       text: "Tag (written 1:1 as #tag in the file) and display name per sector column. Changing the tag automatically renames already-tagged tasks in the file. Order here determines column order."
     });
-    this.plugin.settings.sectors.forEach((sector, index) => {
-      this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
-    });
-    this.addNewSectorSetting();
+    const sectorsRoot = this.containerEl;
+    this.containerEl = sectorsSection;
+    try {
+      this.plugin.settings.sectors.forEach((sector, index) => {
+        this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
+      });
+      this.addNewSectorSetting();
+    } finally {
+      this.containerEl = sectorsRoot;
+    }
     const appearance = containerEl.createEl("details", { cls: "belki-settings-appearance" });
     if (this.appearanceOpen === true) {
       appearance.setAttr("open", "");

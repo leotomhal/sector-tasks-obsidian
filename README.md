@@ -23,7 +23,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 ### Board & sectors
 - Board view grouped by sectors (default: `#01this-week` → `#02next-week` → `#03this-month` → `#04next-month` → `#05longterm` → `#routines` → `#waiting`), plus an **Inbox** for tasks without a sector tag
 - **Combine sectors:** Ctrl/Cmd+click a sector in the sidebar to view several sectors together (e.g. This Week + Next Week); a plain click still shows just one
-- Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic)
+- Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic). They live on their own **Sectors** settings page (a collapsible group on Obsidian before 1.13), and renaming a tag or removing a sector first asks for confirmation and tells you how many tasks are affected
 - Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
 - Sort modes: smart, due date, priority, deadline, created, project
 - Full-text search across all tasks; the **Open search** command jumps straight to it — assign a hotkey under Obsidian's Settings → Hotkeys — and an optional setting excludes completed tasks from results

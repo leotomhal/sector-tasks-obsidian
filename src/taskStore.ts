@@ -299,6 +299,14 @@ ${lines.join("\n")}
     await this.save();
   }
   /** Move all tasks of one sector to another (UI "rename project"). */
+  /** How many tasks (open and completed) carry this sector tag — the ones a rename rewrites. */
+  countTasksInSector(tag: string): number {
+    const lower = (tag || "").trim().toLowerCase();
+    return this.tasks.filter((task) => {
+      const current = normalizeTaskProject(task.project);
+      return Boolean(current) && current.toLowerCase() === lower;
+    }).length;
+  }
   async renameProject(oldName: string, newName: string) {
     const oldLower = (oldName || "").trim().toLowerCase();
     const newTag = (newName || "").trim();
