@@ -419,10 +419,12 @@ export class TaskBoardView extends ItemView {
         this.render();
       });
     }
-    const planningSection = content.createDiv({ cls: "belki-sidebar-section" });
-    planningSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Planning" });
-    const upcomingPlanning = this.store.getPlanningEntries().filter((e) => (e.due || "") >= todayIso()).length;
-    this.renderNavButton(planningSection, "Year plan", "year", upcomingPlanning, "year");
+    if (this.settings.planningEnabled) {
+      const planningSection = content.createDiv({ cls: "belki-sidebar-section" });
+      planningSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Planning" });
+      const upcomingPlanning = this.store.getPlanningEntries().filter((e) => (e.due || "") >= todayIso()).length;
+      this.renderNavButton(planningSection, "Year plan", "year", upcomingPlanning, "year");
+    }
     const reviewSection = content.createDiv({ cls: "belki-sidebar-section" });
     reviewSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Review" });
     this.renderReviewNavButton(reviewSection, "daily");
@@ -646,6 +648,8 @@ export class TaskBoardView extends ItemView {
       this.renderOverview(main);
       return;
     }
+    // The year plan was switched off while open: fall back to the start view.
+    if (this.mode === "year" && !this.settings.planningEnabled) this.mode = this.settings.startView;
     if (this.mode === "year") {
       main.addClass("is-year-plan");
       renderYearPlan(this, this.yearPlan, main);
@@ -663,7 +667,9 @@ export class TaskBoardView extends ItemView {
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
-    if (this.mode === "today") {
+    if (!this.settings.planningEnabled) {
+      // No planning strips.
+    } else if (this.mode === "today") {
       renderPlanningStrip(this, main, "Planning \u00b7 today and the next 7 days", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 7), () => this.openYearPlan());
     } else if (this.mode === "upcoming") {
       renderPlanningStrip(this, main, "Planning \u00b7 next 2 weeks", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 14), () => this.openYearPlan());
@@ -720,7 +726,7 @@ export class TaskBoardView extends ItemView {
     this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
-    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366, true).slice(0, 4), () => this.openYearPlan());
+    if (this.settings.planningEnabled) renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366, true).slice(0, 4), () => this.openYearPlan());
 
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
     const tabEntries = [

@@ -1,6 +1,12 @@
 # Sector Tasks
 
-An Obsidian task dashboard in the style of [belki](https://github.com/aribuga/obsidian-belki-tasks), but reading and writing **a single Markdown file** in the emoji syntax of the [Tasks plugin](https://publish.obsidian.md/tasks/Introduction). The Tasks plugin itself is not needed (since 1.5.0). Grouping follows **configurable sector tags** — designed for [Carl Pullein](https://www.carlpullein.com/)'s Time Sector System, but usable with any tag scheme.
+A task board and year planner for Obsidian that keeps everything in **one Markdown file** — plain, readable lines you can edit by hand. Tasks are grouped by **when** you'll do them, using configurable sector tags: designed for [Carl Pullein](https://www.carlpullein.com/)'s Time Sector System, usable with any tag scheme.
+
+- **Board** with Overview, Inbox, Today, Upcoming and your sectors; quick capture, snooze, drag and drop, search
+- **Guided reviews** — daily, weekly, monthly — that walk you through each sector, with an optional summary note
+- **Year plan**: appointments and milestones by quarter, right in the same file, and alongside your tasks
+- **Its own editor** for title, sector, priority, due date, labels and repeat; no other plugin needed
+- The file uses the emoji syntax of the [Tasks plugin](https://publish.obsidian.md/tasks/Introduction) (`📅`, `⏫`, `🔁`, …), so it stays compatible if you also use Tasks — but Tasks isn't required
 
 ![Screenshot today view showing entire plugin.](/img/overview.png)
 *Overview.*
@@ -44,6 +50,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. Click a quarter's header to fold it; past quarters start folded, the current and upcoming ones open. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it, jump to its line, or delete it
 - Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**
 - **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), and the **Overview** lists the next events
+- **Turn it off** under Settings → Year plan if you don't use it: the view, the strips and the Overview list disappear, and any `#planning` lines stay in the file untouched
 - **Past years** move to the archive note on startup once they're over (Settings → Archive past years' planning, on by default), so the tasks file only holds this year and the years ahead. The year plan still shows archived years, read-only
 
 ### Reviews
@@ -98,7 +105,7 @@ See [INSTALL.md](./INSTALL.md) for step-by-step setup, the field-mapping table, 
 
 ## Not supported (by design)
 
-Descriptions, attachments, sub-tasks, deadlines on the board — the plugin stays lean and delegates anything beyond sector, due date, priority, and recurrence to Tasks itself or to the note.
+Descriptions, attachments, sub-tasks and deadlines. A task is one line: title, sector, labels, priority, due date and repeat. Anything longer belongs in a note you link from the title (`[[…]]`). Dates the board doesn't use (`⏳` scheduled, `❌` cancelled) and the `[/]`/`[-]` states are kept as they are when a line is rewritten.
 
 ## Status
 
@@ -110,7 +117,7 @@ This plugin was developed in close collaboration with an AI assistant (Claude). 
 
 ## License
 
-MIT, see [LICENSE](./LICENSE). Based on [belki](https://github.com/aribuga/obsidian-belki-tasks) by Yasin Aribuga (also MIT).
+MIT, see [LICENSE](./LICENSE). The board started from [belki](https://github.com/aribuga/obsidian-belki-tasks) by Yasin Aribuga (also MIT).
 
 ## Contact
 

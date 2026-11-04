@@ -148,6 +148,8 @@ export interface BelkiSettings {
   /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
   waitingHighlightDays: number;
   reviewNotes: boolean;
+  /** Show the year plan (view, strips, Overview list). Off hides it; #planning lines stay in the file untouched. */
+  planningEnabled: boolean;
   /** Move year-plan entries of past years to the archive note on startup. */
   archivePastPlanning: boolean;
   reviewNotesFolder: string;
