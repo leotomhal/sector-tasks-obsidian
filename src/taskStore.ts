@@ -5,7 +5,7 @@ import { dedupeLabels } from "./labels";
 import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
-import { INBOX_SECTOR, PLANNING_HEADING, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
+import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
 export class TaskStore {
   app: App;
@@ -83,16 +83,18 @@ export class TaskStore {
     blocks.splice(at, 0, block);
   }
   /** New year-plan entry; `start` makes it span several days (🛫 start … 📅 end). */
-  async createPlanningEntry(input: { title: string; date: string; start?: string; milestone?: boolean }): Promise<boolean> {
+  async createPlanningEntry(input: { title: string; date: string; start?: string; milestone?: boolean; precision?: string }): Promise<boolean> {
     const title = input.title.replace(/\s+/g, " ").trim();
     if (!title || !isIsoDate(input.date)) return false;
-    const start = isIsoDate(input.start) && input.start < input.date ? input.start : void 0;
+    const precision = PLANNING_PRECISIONS.includes(input.precision || "") ? input.precision : void 0;
+    const start = !precision && isIsoDate(input.start) && input.start < input.date ? input.start : void 0;
     const task: Task = {
       id: createId(),
       title,
       completed: false,
-      due: input.date,
+      due: precision ? periodStart(input.date, precision) : input.date,
       start,
+      precision,
       priority: "none",
       labels: [],
       attachments: [],
@@ -242,7 +244,7 @@ export class TaskStore {
     });
     if (!edit) return;
     if (current.planning) {
-      await this.updateTask(id, { title: edit.title, due: edit.due, start: edit.start, milestone: edit.milestone === true });
+      await this.updateTask(id, { title: edit.title, due: edit.due, start: edit.start, milestone: edit.milestone === true, precision: edit.precision || void 0 });
     } else {
       await this.updateTask(id, { title: edit.title, project: edit.project, due: edit.due, priority: edit.priority, labels: edit.labels, repeat: edit.repeat });
     }
@@ -586,14 +588,15 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
   const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
   return { blocks: nextBlocks, tasks: nextTasks };
 }
-/** The fields toggleComplete may change, captured so a completion can be taken back. */
 export function isPlanningHeading(line?: string): boolean {
   return /^##\s+planning\s*$/i.test((line || "").trim());
 }
-/** Sort key for the Planning section: first day, then last day. */
+/** Sort key for the Planning section: first day; quarter and month entries before day entries; then last day. */
 export function planningSortKey(task: Task): string {
-  return `${task.start || task.due || ""}|${task.due || ""}`;
+  const rank = task.precision === "quarter" ? 0 : task.precision === "month" ? 1 : 2;
+  return `${task.start || task.due || ""}|${rank}|${task.due || ""}`;
 }
+/** The fields toggleComplete may change, captured so a completion can be taken back. */
 export function completionUndoPatch(task: Task): Partial<Task> {
   return {
     completed: task.completed,

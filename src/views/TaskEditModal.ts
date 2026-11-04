@@ -17,6 +17,8 @@ export interface TaskEdit {
   repeat?: RepeatRule;
   start?: string;
   milestone?: boolean;
+  /** Planning only: "month" or "quarter" when there's no exact day. */
+  precision?: string;
 }
 
 export interface TaskEditorOptions {
@@ -301,22 +303,56 @@ export class TaskEditModal extends Modal {
 
   renderPlanningFields(form: HTMLFormElement, field: (label: string, cls?: string) => { wrap: HTMLElement; id: string }, title: HTMLInputElement): () => TaskEdit | string {
     const task = this.options.task;
-    const row = form.createDiv({ cls: "belki-editor-row" });
-    const inRow = (label: string) => {
+    const whenField = field("When");
+    const kind = whenField.wrap.createEl("select", { cls: "dropdown", attr: { id: whenField.id } });
+    for (const [value, text] of [["day", "On a day"], ["month", "Sometime in a month"], ["quarter", "Sometime in a quarter"]]) {
+      kind.createEl("option", { text, value });
+    }
+    kind.value = task?.precision || "day";
+    const today = todayIso();
+    const baseDate = task?.due || today;
+
+    // Exact day: date + optional end.
+    const dayRow = form.createDiv({ cls: "belki-editor-row" });
+    const inRow = (parent: HTMLElement, label: string) => {
       const id = `belki-editor-${++fieldCounter}`;
-      const wrap = row.createDiv({ cls: "belki-editor-field" });
+      const wrap = parent.createDiv({ cls: "belki-editor-field" });
       wrap.createEl("label", { text: label, attr: { for: id } });
       return { wrap, id };
     };
-    const dateField = inRow("Date");
+    const dateField = inRow(dayRow, "Date");
     const date = dateField.wrap.createEl("input", { attr: { id: dateField.id, type: "date" } });
-    date.value = task ? task.start || task.due || "" : "";
-    const untilField = inRow("Until (optional)");
+    date.value = task && !task.precision ? task.start || task.due || "" : "";
+    const untilField = inRow(dayRow, "Until (optional)");
     const until = untilField.wrap.createEl("input", { attr: { id: untilField.id, type: "date" } });
-    until.value = task?.start ? task.due || "" : "";
+    until.value = task?.start && !task.precision ? task.due || "" : "";
+
+    // Month: a month picker.
+    const monthRow = form.createDiv({ cls: "belki-editor-row" });
+    const monthField = inRow(monthRow, "Month");
+    const month = monthField.wrap.createEl("input", { attr: { id: monthField.id, type: "month" } });
+    month.value = baseDate.slice(0, 7);
+
+    // Quarter: quarter + year.
+    const quarterRow = form.createDiv({ cls: "belki-editor-row" });
+    const quarterField = inRow(quarterRow, "Quarter");
+    const quarter = quarterField.wrap.createEl("select", { cls: "dropdown", attr: { id: quarterField.id } });
+    for (const q of [1, 2, 3, 4]) quarter.createEl("option", { text: `Q${q}`, value: String(q) });
+    quarter.value = String(Math.floor((Number(baseDate.slice(5, 7)) - 1) / 3) + 1);
+    const yearField = inRow(quarterRow, "Year");
+    const year = yearField.wrap.createEl("input", { attr: { id: yearField.id, type: "number", min: "2000", max: "2100", step: "1" } });
+    year.value = baseDate.slice(0, 4);
+
+    const sync = () => {
+      dayRow.toggle(kind.value === "day");
+      monthRow.toggle(kind.value === "month");
+      quarterRow.toggle(kind.value === "quarter");
+    };
+    kind.addEventListener("change", sync);
+    sync();
+
     const msField = field("", "belki-editor-check");
-    const msLabel = msField.wrap.querySelector("label");
-    msLabel?.remove();
+    msField.wrap.querySelector("label")?.remove();
     const label = msField.wrap.createEl("label");
     const milestone = label.createEl("input", { attr: { type: "checkbox" } });
     milestone.checked = task?.milestone === true;
@@ -324,16 +360,25 @@ export class TaskEditModal extends Modal {
     return () => {
       const text = title.value.replace(/\s+/g, " ").trim();
       if (!text) return "Enter a title.";
+      const base = { title: text, priority: "none", labels: [] as string[], milestone: milestone.checked };
+      if (kind.value === "month") {
+        if (!/^\d{4}-\d{2}$/.test(month.value)) return "Pick a month.";
+        return { ...base, due: `${month.value}-01`, start: void 0, precision: "month" };
+      }
+      if (kind.value === "quarter") {
+        const y = Math.floor(Number(year.value));
+        if (!(y >= 2000 && y <= 2100)) return "Enter a year.";
+        const firstMonth = (Number(quarter.value) - 1) * 3 + 1;
+        return { ...base, due: `${y}-${String(firstMonth).padStart(2, "0")}-01`, start: void 0, precision: "quarter" };
+      }
       if (!isIsoDate(date.value)) return "Enter a date.";
-      if (until.value && until.value < date.value) return "“Until” must be on or after the date.";
+      if (until.value && until.value < date.value) return "\u201CUntil\u201D must be on or after the date.";
       const multiDay = isIsoDate(until.value) && until.value > date.value;
       return {
-        title: text,
-        priority: "none",
-        labels: [],
+        ...base,
         due: multiDay ? until.value : date.value,
         start: multiDay ? date.value : void 0,
-        milestone: milestone.checked
+        precision: void 0
       };
     };
   }

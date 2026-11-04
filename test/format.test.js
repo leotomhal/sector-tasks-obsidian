@@ -452,3 +452,34 @@ test("editor recurrence: form ↔ rule round-trips through the Tasks text", () =
   assert.equal(fresh.dayOfMonth, 4);
   assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 31].map(ordinal), ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "31st"]);
 });
+
+test("month and quarter planning entries: tag, period start, and no day", () => {
+  const month = parseTaskLine("- [ ] CCE startet #task #planning/month 📅 2026-01-20 🆔 c", "x", 0).task;
+  assert.equal(month.planning, true);
+  assert.equal(month.precision, "month");
+  assert.equal(month.due, "2026-01-01", "the date snaps to the month's first day");
+  assert.deepEqual(month.labels, [], "#planning/month is not a label");
+  assert.equal(serializeTaskLine(month), "- [ ] CCE startet #task #planning/month 📅 2026-01-01 🆔 c");
+  const quarter = parseTaskLine("- [ ] Strategy #task #planning/quarter #milestone 🛫 2026-04-02 📅 2026-05-20 🆔 q", "x", 0).task;
+  assert.equal(quarter.precision, "quarter");
+  assert.equal(quarter.due, "2026-04-01");
+  assert.equal(quarter.start, undefined, "a period entry has no start day");
+  assert.equal(serializeTaskLine(quarter), "- [ ] Strategy #task #planning/quarter #milestone 📅 2026-04-01 🆔 q");
+  const other = parseTaskLine("- [ ] Note #task #planning/notes 🆔 n", "x", 0).task;
+  assert.equal(other.planning, undefined, "only month and quarter are planning precisions");
+  assert.deepEqual(other.labels, ["planning/notes"]);
+});
+
+test("period entries are past only after their period, and stay out of day strips", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const entries = [
+    t("- [ ] Spring push #task #planning/quarter #milestone 📅 2026-04-01 🆔 q"),
+    t("- [ ] November thing #task #planning/month 📅 2026-11-01 🆔 m"),
+    t("- [ ] Senat #task #planning 📅 2026-11-06 🆔 d")
+  ];
+  assert.equal(isMissedMilestone(entries[0], "2026-06-30"), false, "Q2 isn't over on 30 June");
+  assert.equal(isMissedMilestone(entries[0], "2026-07-01"), true);
+  assert.deepEqual(upcomingEntries(entries, "2026-11-04", 7).map((e) => e.id), ["d"], "Today/Upcoming strips skip month/quarter entries");
+  assert.deepEqual(upcomingEntries(entries, "2026-11-04", 366, true).map((e) => e.id), ["m", "d"], "the Overview list includes a running month");
+  assert.deepEqual(entriesForYear(entries, 2026).map((e) => e.id), ["q", "m", "d"], "a month entry sorts before the days of its month");
+});

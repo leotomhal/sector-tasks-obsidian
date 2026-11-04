@@ -69,6 +69,11 @@ export interface Task {
   planning?: boolean;
   /** A #planning entry that is also tagged #milestone; only these can be checked off. */
   milestone?: boolean;
+  /**
+   * A planning entry without an exact day: "month" or "quarter". Written as
+   * #planning/month or #planning/quarter; 📅 holds the period's first day.
+   */
+  precision?: string;
 }
 
 export interface SectorConfig {

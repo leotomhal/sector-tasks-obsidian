@@ -39,6 +39,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 
 ### Year plan
 - **Planning entries** are ordinary lines in your tasks file tagged `#planning` — appointments, deadlines, events. Add `#milestone` for milestones. A multi-day entry uses the Tasks start date: `- [ ] Senat und Hauptausschuss #task #planning 🛫 2026-09-16 📅 2026-09-17`
+- **Month or quarter only:** when there's no exact day yet, use `#planning/month` or `#planning/quarter` (the editor and the year plan's **+ Add** offer "Sometime in April" / "Sometime in Q2"); the 📅 date is the period's first day. These show at the top of their month or quarter, count as past only once the period is over, and stay out of the day-based strips on Today and Upcoming
 - They never show up as tasks: not in the Inbox, sectors, reviews, search or counts. The plugin files new ones under a `## Planning` heading at the end of the tasks file, sorted by date
 - **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it, jump to its line, or delete it
 - Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**

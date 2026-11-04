@@ -36,6 +36,11 @@ function fmt(iso: string, options: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat("en-GB", options).format(parseIso(iso));
 }
 export function formatEntryWhen(entry: Task): string {
+  if (entry.precision === "month") return `Sometime in ${fmt(entry.due, { month: "long", year: "numeric" })}`;
+  if (entry.precision === "quarter") {
+    const q = quarterOf(entry.due);
+    return `Sometime in Q${q} ${entry.due.slice(0, 4)} (${MONTHS[(q - 1) * 3]} \u2013 ${MONTHS[(q - 1) * 3 + 2]})`;
+  }
   const long: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long", year: "numeric" };
   if (!entry.start || entry.start === entry.due) return fmt(entry.due, long);
   return `${fmt(entry.start, { weekday: "long", day: "numeric", month: "long" })} to ${fmt(entry.due, long)}`;
@@ -110,8 +115,13 @@ export function renderYearPlan(host: PlanningHost, state: YearPlanState, main: H
     head.createSpan({ cls: "belki-section-count", text: String(inQuarter.length) });
     const body = column.createDiv({ cls: "belki-year-quarter-body" });
     if (!inQuarter.length) body.createDiv({ cls: "belki-year-empty", text: "Nothing planned yet." });
+    const anyTime = inQuarter.filter((e) => e.precision === "quarter");
+    if (anyTime.length) {
+      body.createDiv({ cls: "belki-year-month", text: `Any time in Q${q}` });
+      for (const entry of anyTime) renderEntryCard(host, body, entry, today, archivedIds.has(entry.id));
+    }
     for (let m = (q - 1) * 3; m < q * 3; m++) {
-      const inMonth = inQuarter.filter((e) => Number(entryFirstDay(e).slice(5, 7)) - 1 === m);
+      const inMonth = inQuarter.filter((e) => e.precision !== "quarter" && Number(entryFirstDay(e).slice(5, 7)) - 1 === m);
       if (!inMonth.length) continue;
       body.createDiv({ cls: "belki-year-month", text: MONTHS[m] });
       for (const entry of inMonth) renderEntryCard(host, body, entry, today, archivedIds.has(entry.id));
@@ -139,14 +149,21 @@ function renderEntryCard(host: PlanningHost, parent: HTMLElement, entry: Task, t
   const first = entryFirstDay(entry);
   const date = card.createSpan({ cls: "belki-year-date" });
   const days = entryDays(entry);
-  date.createEl("b", { text: days > 1 ? `${fmt(first, { day: "numeric" })}–${fmt(entry.due, { day: "numeric" })}` : fmt(first, { day: "numeric" }) });
-  date.toggleClass("is-range", days > 1);
-  date.createEl("small", { text: fmt(first, { weekday: "short" }) });
+  if (entry.precision) {
+    // No day to show: the month or quarter itself, marked as a period.
+    date.addClass("is-period");
+    date.createEl("b", { text: entry.precision === "quarter" ? `Q${quarterOf(first)}` : fmt(first, { month: "short" }) });
+    date.createEl("small", { text: entry.precision === "quarter" ? "quarter" : "month" });
+  } else {
+    date.createEl("b", { text: days > 1 ? `${fmt(first, { day: "numeric" })}\u2013${fmt(entry.due, { day: "numeric" })}` : fmt(first, { day: "numeric" }) });
+    date.toggleClass("is-range", days > 1);
+    date.createEl("small", { text: fmt(first, { weekday: "short" }) });
+  }
   const content = card.createSpan({ cls: "belki-year-entry-content" });
   host.renderLinkedTitle(entry.title, content.createSpan({ cls: "belki-year-entry-title" }));
   const pills: [string, string][] = [];
   if (entry.milestone) pills.push(["is-milestone", "Milestone"]);
-  if (days > 1) pills.push(["", `${days} days`]);
+  if (days > 1 && !entry.precision) pills.push(["", `${days} days`]);
   if (isEntryOn(entry, today)) pills.push(["is-today", "Today"]);
   if (missed) pills.push(["is-missed", "Not reached"]);
   if (entry.milestone && entry.completed) pills.push(["", "✓ Reached"]);
@@ -167,13 +184,20 @@ function renderAddForm(host: PlanningHost, state: YearPlanState, parent: HTMLEle
   const form = parent.createEl("form", { cls: "belki-year-form" });
   const titleLabel = form.createEl("label", { text: "Title" });
   const title = titleLabel.createEl("input", { attr: { type: "text", required: "", autocomplete: "off" } });
+  const whenLabel = form.createEl("label", { text: "When" });
+  const when = whenLabel.createEl("select", { cls: "dropdown" });
+  when.createEl("option", { text: "On a day", value: "day" });
+  const firstMonth = (quarter - 1) * 3;
+  for (let m = firstMonth; m < firstMonth + 3; m++) when.createEl("option", { text: `Sometime in ${MONTHS[m]}`, value: `month-${m + 1}` });
+  when.createEl("option", { text: `Sometime in Q${quarter}`, value: "quarter" });
   const row = form.createDiv({ cls: "belki-year-form-row" });
   const dateLabel = row.createEl("label", { text: "Date" });
-  const month = String((quarter - 1) * 3 + 1).padStart(2, "0");
-  const date = dateLabel.createEl("input", { attr: { type: "date", required: "" } });
+  const month = String(firstMonth + 1).padStart(2, "0");
+  const date = dateLabel.createEl("input", { attr: { type: "date" } });
   date.value = `${state.year}-${month}-01`;
   const untilLabel = row.createEl("label", { text: "Until (optional)" });
   const until = untilLabel.createEl("input", { attr: { type: "date" } });
+  when.addEventListener("change", () => row.toggle(when.value === "day"));
   const msLabel = form.createEl("label", { cls: "belki-year-form-check" });
   const milestone = msLabel.createEl("input", { attr: { type: "checkbox" } });
   msLabel.appendText("Milestone");
@@ -192,7 +216,22 @@ function renderAddForm(host: PlanningHost, state: YearPlanState, parent: HTMLEle
       error.setText(message);
       error.show();
     };
-    if (!title.value.trim() || !isIsoDate(date.value)) return fail("Enter a title and a date.");
+    if (!title.value.trim()) return fail("Enter a title.");
+    if (when.value !== "day") {
+      const m = when.value === "quarter" ? firstMonth + 1 : Number(when.value.slice(6));
+      void host.store.createPlanningEntry({
+        title: title.value,
+        date: `${state.year}-${String(m).padStart(2, "0")}-01`,
+        precision: when.value === "quarter" ? "quarter" : "month",
+        milestone: milestone.checked
+      }).then((saved) => {
+        if (!saved) return;
+        state.addQuarter = null;
+        host.render();
+      });
+      return;
+    }
+    if (!isIsoDate(date.value)) return fail("Enter a date.");
     if (until.value && until.value < date.value) return fail("“Until” must be on or after the date.");
     const multiDay = isIsoDate(until.value) && until.value > date.value;
     void host.store.createPlanningEntry({
@@ -222,7 +261,9 @@ export function renderPlanningStrip(host: PlanningHost, parent: HTMLElement, hea
   for (const entry of entries) {
     const row = strip.createEl("button", { cls: "belki-planning-strip-row", attr: { type: "button" } });
     const first = entryFirstDay(entry);
-    const when = isEntryOn(entry, today)
+    const when = entry.precision === "quarter" ? `Q${quarterOf(first)} ${first.slice(0, 4)}`
+      : entry.precision === "month" ? fmt(first, { month: "long" })
+      : isEntryOn(entry, today)
       ? (entryDays(entry) > 1 ? `Today · day ${Math.round((parseIso(today).getTime() - parseIso(first).getTime()) / 864e5) + 1}/${entryDays(entry)}` : "Today")
       : fmt(first, { weekday: "short", day: "numeric", month: "short" });
     row.createSpan({ cls: "belki-planning-strip-when", text: when });

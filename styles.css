@@ -2946,6 +2946,16 @@ button.belki-review-discard:hover {
   font-size: 13px;
 }
 
+/* Month/quarter entries: the period instead of a day */
+.belki-year-date.is-period {
+  background: transparent;
+  border: 1px dashed var(--belki-border);
+}
+
+.belki-year-date.is-period b {
+  font-size: 13px;
+}
+
 .belki-root.is-style-editorial .belki-year-date b {
   font-family: var(--belki-serif);
 }
