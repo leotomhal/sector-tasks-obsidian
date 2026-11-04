@@ -3,6 +3,11 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.5.1
+
+### New
+- **Planning entries with only a month or a quarter.** When there's no exact day yet, choose "Sometime in April" or "Sometime in Q2" in the editor or in the year plan's **+ Add** form. In the file these are tagged `#planning/month` or `#planning/quarter`, with the period's first day as the 📅 date. The year plan shows them at the top of their month (with the month instead of a day number) or in an "Any time in Q2" group at the top of the quarter. They count as past only once the whole month or quarter is over, and they stay out of the day-based strips on Today and Upcoming.
+
 ## 1.5.0
 
 ### New
