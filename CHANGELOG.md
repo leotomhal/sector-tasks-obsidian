@@ -3,6 +3,14 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.5.3
+
+### New
+- **Turn the year plan off** if you don't use it: Settings → Year plan. The year plan view, the planning strips on Today and Upcoming, and the Overview's next events disappear. Any `#planning` lines stay in your file untouched and don't show up as tasks.
+
+### Changed
+- Refreshed plugin description and README: what Sector Tasks does today (board, guided reviews, year plan, its own editor) and that the Tasks plugin isn't needed.
+
 ## 1.5.2
 
 ### New
