@@ -86,9 +86,9 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 
 ### Mobile
 <p style="align: center">
-<img style="height: 300px; max-width: 32%" src="/img/today.png" />
-<img style="height: 300px; max-width: 32%" src="/img/addtask.png" />
-<img style="height: 300px; max-width: 32%" src="/img/planning.png" />
+<img style="height: 300px; max-width: 32%" src="/img/today.jpg" />
+<img style="height: 300px; max-width: 32%" src="/img/addtask.jpg" />
+<img style="height: 300px; max-width: 32%" src="/img/planning.jpg" />
 </p>
 
 ## Requirements
