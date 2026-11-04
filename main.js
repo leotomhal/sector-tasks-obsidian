@@ -219,6 +219,19 @@ var TASK_MARKER_TAG = "task";
 var PLANNING_TAG = "planning";
 var MILESTONE_TAG = "milestone";
 var PLANNING_HEADING = "## Planning";
+var PLANNING_PRECISIONS = ["month", "quarter"];
+function planningTagPrecision(tag) {
+  const lower = tag.toLowerCase();
+  if (lower === PLANNING_TAG) return "";
+  const sub = lower.startsWith(`${PLANNING_TAG}/`) ? lower.slice(PLANNING_TAG.length + 1) : null;
+  return sub !== null && PLANNING_PRECISIONS.includes(sub) ? sub : null;
+}
+function periodStart(iso, precision) {
+  const year = iso.slice(0, 4);
+  const month = Number(iso.slice(5, 7));
+  const first = precision === "quarter" ? Math.floor((month - 1) / 3) * 3 + 1 : month;
+  return `${year}-${String(first).padStart(2, "0")}-01`;
+}
 var SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
 var SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
 var SECTOR_LABELS = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.label]));
@@ -437,12 +450,14 @@ function parseTaskLine(line, id, order) {
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);
-  const planning = tags.some((t) => t.toLowerCase() === PLANNING_TAG);
+  const planningTag = tags.find((t) => planningTagPrecision(t) !== null);
+  const planning = planningTag !== void 0;
+  const precision = planningTag ? planningTagPrecision(planningTag) : "";
   const milestone = planning && tags.some((t) => t.toLowerCase() === MILESTONE_TAG);
   const sectorTag = planning ? void 0 : tags.find((t) => SECTOR_SET.has(t.toLowerCase()));
   const labelTags = tags.filter((t) => {
     const lower = t.toLowerCase();
-    if (lower === TASK_MARKER_TAG || lower === PLANNING_TAG || milestone && lower === MILESTONE_TAG) return false;
+    if (lower === TASK_MARKER_TAG || planningTagPrecision(t) !== null || milestone && lower === MILESTONE_TAG) return false;
     return planning || !SECTOR_SET.has(lower);
   });
   body = stripTags(body, tags);
@@ -472,6 +487,11 @@ function parseTaskLine(line, id, order) {
     order
   };
   if (planning) task.planning = true;
+  if (planning && precision) {
+    task.precision = precision;
+    task.start = void 0;
+    if (task.due) task.due = periodStart(task.due, precision);
+  }
   if (milestone) task.milestone = true;
   return { task, indent };
 }
@@ -481,7 +501,7 @@ function serializeTaskLine(task, indent = 0) {
   const parts = [task.title.trim()];
   parts.push(`#${TASK_MARKER_TAG}`);
   if (task.planning) {
-    parts.push(`#${PLANNING_TAG}`);
+    parts.push(task.precision ? `#${PLANNING_TAG}/${task.precision}` : `#${PLANNING_TAG}`);
     if (task.milestone) parts.push(`#${MILESTONE_TAG}`);
   } else if (task.project && SECTOR_SET.has(task.project.toLowerCase())) {
     parts.push(`#${task.project}`);
@@ -2394,10 +2414,20 @@ function entryDays(entry) {
   if (!entry.start || !entry.due) return 1;
   return Math.max(1, daysBetweenIso(entry.start, entry.due) + 1);
 }
+function entryLastDay(entry) {
+  const due = entry.due || "";
+  if (!entry.precision || !isIsoDate(due)) return due;
+  const y = Number(due.slice(0, 4));
+  const m = Number(due.slice(5, 7));
+  const lastMonth = entry.precision === "quarter" ? Math.floor((m - 1) / 3) * 3 + 3 : m;
+  const lastDay = new Date(y, lastMonth, 0).getDate();
+  return `${y}-${String(lastMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+}
 function isPastEntry(entry, today) {
-  return Boolean(entry.due) && entry.due < today;
+  return Boolean(entry.due) && entryLastDay(entry) < today;
 }
 function isEntryOn(entry, day) {
+  if (entry.precision) return false;
   return entryFirstDay(entry) <= day && (entry.due || "") >= day;
 }
 function isMissedMilestone(entry, today) {
@@ -2407,12 +2437,15 @@ function entriesForYear(entries, year) {
   const y = String(year);
   return entries.filter((e) => isIsoDate(e.due) && (e.due.startsWith(y) || entryFirstDay(e).startsWith(y))).sort(compareEntries);
 }
-function upcomingEntries(entries, today, days) {
+function upcomingEntries(entries, today, days, includePeriods = false) {
   const until = shiftIsoDate(today, days);
-  return entries.filter((e) => isIsoDate(e.due) && e.due >= today && entryFirstDay(e) <= until).sort(compareEntries);
+  return entries.filter((e) => (includePeriods || !e.precision) && isIsoDate(e.due) && entryLastDay(e) >= today && entryFirstDay(e) <= until).sort(compareEntries);
+}
+function precisionRank(entry) {
+  return entry.precision === "quarter" ? 0 : entry.precision === "month" ? 1 : 2;
 }
 function compareEntries(a, b) {
-  return entryFirstDay(a).localeCompare(entryFirstDay(b)) || (a.due || "").localeCompare(b.due || "") || a.title.localeCompare(b.title);
+  return entryFirstDay(a).localeCompare(entryFirstDay(b)) || precisionRank(a) - precisionRank(b) || (a.due || "").localeCompare(b.due || "") || a.title.localeCompare(b.title);
 }
 
 // src/views/yearPlan.ts
@@ -2436,6 +2469,11 @@ function fmt(iso, options) {
   return new Intl.DateTimeFormat("en-GB", options).format(parseIso(iso));
 }
 function formatEntryWhen(entry) {
+  if (entry.precision === "month") return `Sometime in ${fmt(entry.due, { month: "long", year: "numeric" })}`;
+  if (entry.precision === "quarter") {
+    const q = quarterOf(entry.due);
+    return `Sometime in Q${q} ${entry.due.slice(0, 4)} (${MONTHS[(q - 1) * 3]} – ${MONTHS[(q - 1) * 3 + 2]})`;
+  }
   const long = { weekday: "long", day: "numeric", month: "long", year: "numeric" };
   if (!entry.start || entry.start === entry.due) return fmt(entry.due, long);
   return `${fmt(entry.start, { weekday: "long", day: "numeric", month: "long" })} to ${fmt(entry.due, long)}`;
@@ -2504,8 +2542,13 @@ function renderYearPlan(host, state, main) {
     head.createSpan({ cls: "belki-section-count", text: String(inQuarter.length) });
     const body = column.createDiv({ cls: "belki-year-quarter-body" });
     if (!inQuarter.length) body.createDiv({ cls: "belki-year-empty", text: "Nothing planned yet." });
+    const anyTime = inQuarter.filter((e) => e.precision === "quarter");
+    if (anyTime.length) {
+      body.createDiv({ cls: "belki-year-month", text: `Any time in Q${q}` });
+      for (const entry of anyTime) renderEntryCard(host, body, entry, today, archivedIds.has(entry.id));
+    }
     for (let m = (q - 1) * 3; m < q * 3; m++) {
-      const inMonth = inQuarter.filter((e) => Number(entryFirstDay(e).slice(5, 7)) - 1 === m);
+      const inMonth = inQuarter.filter((e) => e.precision !== "quarter" && Number(entryFirstDay(e).slice(5, 7)) - 1 === m);
       if (!inMonth.length) continue;
       body.createDiv({ cls: "belki-year-month", text: MONTHS[m] });
       for (const entry of inMonth) renderEntryCard(host, body, entry, today, archivedIds.has(entry.id));
@@ -2532,14 +2575,20 @@ function renderEntryCard(host, parent, entry, today, readOnly) {
   const first = entryFirstDay(entry);
   const date = card.createSpan({ cls: "belki-year-date" });
   const days = entryDays(entry);
-  date.createEl("b", { text: days > 1 ? `${fmt(first, { day: "numeric" })}–${fmt(entry.due, { day: "numeric" })}` : fmt(first, { day: "numeric" }) });
-  date.toggleClass("is-range", days > 1);
-  date.createEl("small", { text: fmt(first, { weekday: "short" }) });
+  if (entry.precision) {
+    date.addClass("is-period");
+    date.createEl("b", { text: entry.precision === "quarter" ? `Q${quarterOf(first)}` : fmt(first, { month: "short" }) });
+    date.createEl("small", { text: entry.precision === "quarter" ? "quarter" : "month" });
+  } else {
+    date.createEl("b", { text: days > 1 ? `${fmt(first, { day: "numeric" })}–${fmt(entry.due, { day: "numeric" })}` : fmt(first, { day: "numeric" }) });
+    date.toggleClass("is-range", days > 1);
+    date.createEl("small", { text: fmt(first, { weekday: "short" }) });
+  }
   const content = card.createSpan({ cls: "belki-year-entry-content" });
   host.renderLinkedTitle(entry.title, content.createSpan({ cls: "belki-year-entry-title" }));
   const pills = [];
   if (entry.milestone) pills.push(["is-milestone", "Milestone"]);
-  if (days > 1) pills.push(["", `${days} days`]);
+  if (days > 1 && !entry.precision) pills.push(["", `${days} days`]);
   if (isEntryOn(entry, today)) pills.push(["is-today", "Today"]);
   if (missed) pills.push(["is-missed", "Not reached"]);
   if (entry.milestone && entry.completed) pills.push(["", "✓ Reached"]);
@@ -2559,13 +2608,20 @@ function renderAddForm(host, state, parent, quarter) {
   const form = parent.createEl("form", { cls: "belki-year-form" });
   const titleLabel = form.createEl("label", { text: "Title" });
   const title = titleLabel.createEl("input", { attr: { type: "text", required: "", autocomplete: "off" } });
+  const whenLabel = form.createEl("label", { text: "When" });
+  const when = whenLabel.createEl("select", { cls: "dropdown" });
+  when.createEl("option", { text: "On a day", value: "day" });
+  const firstMonth = (quarter - 1) * 3;
+  for (let m = firstMonth; m < firstMonth + 3; m++) when.createEl("option", { text: `Sometime in ${MONTHS[m]}`, value: `month-${m + 1}` });
+  when.createEl("option", { text: `Sometime in Q${quarter}`, value: "quarter" });
   const row = form.createDiv({ cls: "belki-year-form-row" });
   const dateLabel = row.createEl("label", { text: "Date" });
-  const month = String((quarter - 1) * 3 + 1).padStart(2, "0");
-  const date = dateLabel.createEl("input", { attr: { type: "date", required: "" } });
+  const month = String(firstMonth + 1).padStart(2, "0");
+  const date = dateLabel.createEl("input", { attr: { type: "date" } });
   date.value = `${state.year}-${month}-01`;
   const untilLabel = row.createEl("label", { text: "Until (optional)" });
   const until = untilLabel.createEl("input", { attr: { type: "date" } });
+  when.addEventListener("change", () => row.toggle(when.value === "day"));
   const msLabel = form.createEl("label", { cls: "belki-year-form-check" });
   const milestone = msLabel.createEl("input", { attr: { type: "checkbox" } });
   msLabel.appendText("Milestone");
@@ -2584,7 +2640,22 @@ function renderAddForm(host, state, parent, quarter) {
       error.setText(message);
       error.show();
     };
-    if (!title.value.trim() || !isIsoDate(date.value)) return fail("Enter a title and a date.");
+    if (!title.value.trim()) return fail("Enter a title.");
+    if (when.value !== "day") {
+      const m = when.value === "quarter" ? firstMonth + 1 : Number(when.value.slice(6));
+      void host.store.createPlanningEntry({
+        title: title.value,
+        date: `${state.year}-${String(m).padStart(2, "0")}-01`,
+        precision: when.value === "quarter" ? "quarter" : "month",
+        milestone: milestone.checked
+      }).then((saved) => {
+        if (!saved) return;
+        state.addQuarter = null;
+        host.render();
+      });
+      return;
+    }
+    if (!isIsoDate(date.value)) return fail("Enter a date.");
     if (until.value && until.value < date.value) return fail("“Until” must be on or after the date.");
     const multiDay = isIsoDate(until.value) && until.value > date.value;
     void host.store.createPlanningEntry({
@@ -2612,7 +2683,7 @@ function renderPlanningStrip(host, parent, heading, entries, openYearPlan) {
   for (const entry of entries) {
     const row = strip.createEl("button", { cls: "belki-planning-strip-row", attr: { type: "button" } });
     const first = entryFirstDay(entry);
-    const when = isEntryOn(entry, today) ? entryDays(entry) > 1 ? `Today · day ${Math.round((parseIso(today).getTime() - parseIso(first).getTime()) / 864e5) + 1}/${entryDays(entry)}` : "Today" : fmt(first, { weekday: "short", day: "numeric", month: "short" });
+    const when = entry.precision === "quarter" ? `Q${quarterOf(first)} ${first.slice(0, 4)}` : entry.precision === "month" ? fmt(first, { month: "long" }) : isEntryOn(entry, today) ? entryDays(entry) > 1 ? `Today · day ${Math.round((parseIso(today).getTime() - parseIso(first).getTime()) / 864e5) + 1}/${entryDays(entry)}` : "Today" : fmt(first, { weekday: "short", day: "numeric", month: "short" });
     row.createSpan({ cls: "belki-planning-strip-when", text: when });
     if (entry.milestone) row.createSpan({ cls: "belki-year-diamond", attr: { "aria-label": "Milestone" } });
     host.renderLinkedTitle(entry.title, row.createSpan({ cls: "belki-planning-strip-title" }));
@@ -3467,7 +3538,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
-    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366).slice(0, 4), () => this.openYearPlan());
+    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366, true).slice(0, 4), () => this.openYearPlan());
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
     const tabEntries = [
       { key: INBOX_SECTOR, label: "Inbox" },
@@ -5661,23 +5732,50 @@ var TaskEditModal = class extends import_obsidian8.Modal {
     };
   }
   renderPlanningFields(form, field, title) {
+    var _a;
     const task = this.options.task;
-    const row = form.createDiv({ cls: "belki-editor-row" });
-    const inRow = (label2) => {
+    const whenField = field("When");
+    const kind = whenField.wrap.createEl("select", { cls: "dropdown", attr: { id: whenField.id } });
+    for (const [value, text] of [["day", "On a day"], ["month", "Sometime in a month"], ["quarter", "Sometime in a quarter"]]) {
+      kind.createEl("option", { text, value });
+    }
+    kind.value = (task == null ? void 0 : task.precision) || "day";
+    const today = todayIso();
+    const baseDate = (task == null ? void 0 : task.due) || today;
+    const dayRow = form.createDiv({ cls: "belki-editor-row" });
+    const inRow = (parent, label2) => {
       const id = `belki-editor-${++fieldCounter}`;
-      const wrap = row.createDiv({ cls: "belki-editor-field" });
+      const wrap = parent.createDiv({ cls: "belki-editor-field" });
       wrap.createEl("label", { text: label2, attr: { for: id } });
       return { wrap, id };
     };
-    const dateField = inRow("Date");
+    const dateField = inRow(dayRow, "Date");
     const date = dateField.wrap.createEl("input", { attr: { id: dateField.id, type: "date" } });
-    date.value = task ? task.start || task.due || "" : "";
-    const untilField = inRow("Until (optional)");
+    date.value = task && !task.precision ? task.start || task.due || "" : "";
+    const untilField = inRow(dayRow, "Until (optional)");
     const until = untilField.wrap.createEl("input", { attr: { id: untilField.id, type: "date" } });
-    until.value = (task == null ? void 0 : task.start) ? task.due || "" : "";
+    until.value = (task == null ? void 0 : task.start) && !task.precision ? task.due || "" : "";
+    const monthRow = form.createDiv({ cls: "belki-editor-row" });
+    const monthField = inRow(monthRow, "Month");
+    const month = monthField.wrap.createEl("input", { attr: { id: monthField.id, type: "month" } });
+    month.value = baseDate.slice(0, 7);
+    const quarterRow = form.createDiv({ cls: "belki-editor-row" });
+    const quarterField = inRow(quarterRow, "Quarter");
+    const quarter = quarterField.wrap.createEl("select", { cls: "dropdown", attr: { id: quarterField.id } });
+    for (const q of [1, 2, 3, 4]) quarter.createEl("option", { text: `Q${q}`, value: String(q) });
+    quarter.value = String(Math.floor((Number(baseDate.slice(5, 7)) - 1) / 3) + 1);
+    const yearField = inRow(quarterRow, "Year");
+    const year = yearField.wrap.createEl("input", { attr: { id: yearField.id, type: "number", min: "2000", max: "2100", step: "1" } });
+    year.value = baseDate.slice(0, 4);
+    const sync = () => {
+      dayRow.toggle(kind.value === "day");
+      monthRow.toggle(kind.value === "month");
+      quarterRow.toggle(kind.value === "quarter");
+    };
+    kind.addEventListener("change", sync);
+    sync();
     const msField = field("", "belki-editor-check");
-    const msLabel = msField.wrap.querySelector("label");
-    msLabel == null ? void 0 : msLabel.remove();
+    (_a = msField.wrap.querySelector("label")) == null ? void 0 : _a.remove();
     const label = msField.wrap.createEl("label");
     const milestone = label.createEl("input", { attr: { type: "checkbox" } });
     milestone.checked = (task == null ? void 0 : task.milestone) === true;
@@ -5685,16 +5783,25 @@ var TaskEditModal = class extends import_obsidian8.Modal {
     return () => {
       const text = title.value.replace(/\s+/g, " ").trim();
       if (!text) return "Enter a title.";
+      const base = { title: text, priority: "none", labels: [], milestone: milestone.checked };
+      if (kind.value === "month") {
+        if (!/^\d{4}-\d{2}$/.test(month.value)) return "Pick a month.";
+        return { ...base, due: `${month.value}-01`, start: void 0, precision: "month" };
+      }
+      if (kind.value === "quarter") {
+        const y = Math.floor(Number(year.value));
+        if (!(y >= 2e3 && y <= 2100)) return "Enter a year.";
+        const firstMonth = (Number(quarter.value) - 1) * 3 + 1;
+        return { ...base, due: `${y}-${String(firstMonth).padStart(2, "0")}-01`, start: void 0, precision: "quarter" };
+      }
       if (!isIsoDate(date.value)) return "Enter a date.";
       if (until.value && until.value < date.value) return "“Until” must be on or after the date.";
       const multiDay = isIsoDate(until.value) && until.value > date.value;
       return {
-        title: text,
-        priority: "none",
-        labels: [],
+        ...base,
         due: multiDay ? until.value : date.value,
         start: multiDay ? date.value : void 0,
-        milestone: milestone.checked
+        precision: void 0
       };
     };
   }
@@ -5774,13 +5881,15 @@ var TaskStore = class {
   async createPlanningEntry(input) {
     const title = input.title.replace(/\s+/g, " ").trim();
     if (!title || !isIsoDate(input.date)) return false;
-    const start = isIsoDate(input.start) && input.start < input.date ? input.start : void 0;
+    const precision = PLANNING_PRECISIONS.includes(input.precision || "") ? input.precision : void 0;
+    const start = !precision && isIsoDate(input.start) && input.start < input.date ? input.start : void 0;
     const task = {
       id: createId(),
       title,
       completed: false,
-      due: input.date,
+      due: precision ? periodStart(input.date, precision) : input.date,
       start,
+      precision,
       priority: "none",
       labels: [],
       attachments: [],
@@ -5930,7 +6039,7 @@ var TaskStore = class {
     });
     if (!edit) return;
     if (current.planning) {
-      await this.updateTask(id, { title: edit.title, due: edit.due, start: edit.start, milestone: edit.milestone === true });
+      await this.updateTask(id, { title: edit.title, due: edit.due, start: edit.start, milestone: edit.milestone === true, precision: edit.precision || void 0 });
     } else {
       await this.updateTask(id, { title: edit.title, project: edit.project, due: edit.due, priority: edit.priority, labels: edit.labels, repeat: edit.repeat });
     }
@@ -6265,7 +6374,8 @@ function isPlanningHeading(line) {
   return /^##\s+planning\s*$/i.test((line || "").trim());
 }
 function planningSortKey(task) {
-  return `${task.start || task.due || ""}|${task.due || ""}`;
+  const rank = task.precision === "quarter" ? 0 : task.precision === "month" ? 1 : 2;
+  return `${task.start || task.due || ""}|${rank}|${task.due || ""}`;
 }
 function completionUndoPatch(task) {
   return {

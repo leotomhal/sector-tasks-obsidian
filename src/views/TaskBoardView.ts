@@ -720,7 +720,7 @@ export class TaskBoardView extends ItemView {
     this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
-    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366).slice(0, 4), () => this.openYearPlan());
+    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366, true).slice(0, 4), () => this.openYearPlan());
 
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
     const tabEntries = [

@@ -17,6 +17,22 @@ export const PLANNING_TAG = "planning";
 export const MILESTONE_TAG = "milestone";
 /** Heading the plugin files year-plan entries under, at the end of the tasks file. */
 export const PLANNING_HEADING = "## Planning";
+/** #planning/month and #planning/quarter mark entries known only to the month or quarter. */
+export const PLANNING_PRECISIONS = ["month", "quarter"];
+/** "month"/"quarter" for #planning/month and #planning/quarter, "" for #planning, null for any other tag. */
+export function planningTagPrecision(tag: string): string | null {
+  const lower = tag.toLowerCase();
+  if (lower === PLANNING_TAG) return "";
+  const sub = lower.startsWith(`${PLANNING_TAG}/`) ? lower.slice(PLANNING_TAG.length + 1) : null;
+  return sub !== null && PLANNING_PRECISIONS.includes(sub) ? sub : null;
+}
+/** First day of the month or quarter that contains the date. */
+export function periodStart(iso: string, precision: string): string {
+  const year = iso.slice(0, 4);
+  const month = Number(iso.slice(5, 7));
+  const first = precision === "quarter" ? Math.floor((month - 1) / 3) * 3 + 1 : month;
+  return `${year}-${String(first).padStart(2, "0")}-01`;
+}
 export let SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
 export let SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
 export let SECTOR_LABELS = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.label]));
@@ -234,13 +250,15 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);
-  const planning = tags.some((t) => t.toLowerCase() === PLANNING_TAG);
+  const planningTag = tags.find((t) => planningTagPrecision(t) !== null);
+  const planning = planningTag !== void 0;
+  const precision = planningTag ? planningTagPrecision(planningTag) : "";
   // #milestone only means something on a planning entry; elsewhere it stays a label.
   const milestone = planning && tags.some((t) => t.toLowerCase() === MILESTONE_TAG);
   const sectorTag = planning ? void 0 : tags.find((t) => SECTOR_SET.has(t.toLowerCase()));
   const labelTags = tags.filter((t) => {
     const lower = t.toLowerCase();
-    if (lower === TASK_MARKER_TAG || lower === PLANNING_TAG || (milestone && lower === MILESTONE_TAG)) return false;
+    if (lower === TASK_MARKER_TAG || planningTagPrecision(t) !== null || (milestone && lower === MILESTONE_TAG)) return false;
     return planning || !SECTOR_SET.has(lower);
   });
   body = stripTags(body, tags);
@@ -270,6 +288,12 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
     order
   };
   if (planning) task.planning = true;
+  if (planning && precision) {
+    task.precision = precision;
+    // A month/quarter entry spans its whole period; a 🛫 start would contradict that.
+    task.start = void 0;
+    if (task.due) task.due = periodStart(task.due, precision);
+  }
   if (milestone) task.milestone = true;
   return { task, indent };
 }
@@ -279,7 +303,7 @@ export function serializeTaskLine(task: Task, indent = 0): string {
   const parts = [task.title.trim()];
   parts.push(`#${TASK_MARKER_TAG}`);
   if (task.planning) {
-    parts.push(`#${PLANNING_TAG}`);
+    parts.push(task.precision ? `#${PLANNING_TAG}/${task.precision}` : `#${PLANNING_TAG}`);
     if (task.milestone) parts.push(`#${MILESTONE_TAG}`);
   } else if (task.project && SECTOR_SET.has(task.project.toLowerCase())) {
     parts.push(`#${task.project}`);
