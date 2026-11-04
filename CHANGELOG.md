@@ -3,6 +3,14 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.5.2
+
+### New
+- **Fold quarters in the year plan.** Click a quarter's header to fold or unfold it. Past quarters start folded, so the current quarter and the ones ahead are what you see first.
+
+### Fixed
+- **Pasted lines were sometimes ignored.** Text copied on a phone can carry non-breaking spaces instead of normal ones. Obsidian still shows such a line as a checkbox, but Sector Tasks didn't read it, so it never appeared on the board. Those lines are read now and written back with normal spaces.
+
 ## 1.5.1
 
 ### New
