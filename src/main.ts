@@ -177,6 +177,7 @@ export default class BelkiPlugin extends Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
     };
@@ -367,7 +368,7 @@ export default class BelkiPlugin extends Plugin {
     try {
       await this.store.load();
       await this.pruneCompletedTasks();
-      if (this.settings.archivePastPlanning) {
+      if (this.settings.planningEnabled && this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning(new Date().getFullYear());
         if (moved > 0) new Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }

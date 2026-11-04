@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   waitingSince: {},
   waitingHighlightDays: 7,
   reviewNotes: false,
+  planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
   lastWeeklyReviewKey: "",
@@ -332,8 +333,14 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
+        name: "Year plan",
+        desc: "Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.",
+        control: { type: "toggle", key: "planningEnabled" }
+      },
+      {
         name: "Archive past years' planning",
         desc: "Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.",
+        visible: () => this.plugin.settings.planningEnabled !== false,
         control: { type: "toggle", key: "archivePastPlanning" }
       },
       {
@@ -387,6 +394,12 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "planningEnabled") {
+      settings.planningEnabled = value === true;
+      await this.plugin.saveSettings();
+      this.plugin.refreshBelkiViews();
+      this.rerender();
+      return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
     } else if (key === "waitingHighlightDays") {
@@ -938,12 +951,22 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
-    new Setting(containerEl).setName("Archive past years' planning").setDesc("Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.").addToggle((toggle) => {
-      toggle.setValue(this.plugin.settings.archivePastPlanning !== false).onChange(async (value) => {
-        this.plugin.settings.archivePastPlanning = value;
+    new Setting(containerEl).setName("Year plan").setDesc("Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.planningEnabled !== false).onChange(async (value) => {
+        this.plugin.settings.planningEnabled = value;
         await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+        this.renderLegacyTab();
       });
     });
+    if (this.plugin.settings.planningEnabled !== false) {
+      new Setting(containerEl).setName("Archive past years' planning").setDesc("Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.").addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.archivePastPlanning !== false).onChange(async (value) => {
+          this.plugin.settings.archivePastPlanning = value;
+          await this.plugin.saveSettings();
+        });
+      });
+    }
     new Setting(containerEl).setName("Write a review summary note").setDesc("After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.reviewNotes === true).onChange(async (value) => {
         this.plugin.settings.reviewNotes = value;

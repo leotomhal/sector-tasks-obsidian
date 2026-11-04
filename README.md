@@ -44,6 +44,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. Click a quarter's header to fold it; past quarters start folded, the current and upcoming ones open. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it, jump to its line, or delete it
 - Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**
 - **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), and the **Overview** lists the next events
+- **Turn it off** under Settings → Year plan if you don't use it: the view, the strips and the Overview list disappear, and any `#planning` lines stay in the file untouched
 - **Past years** move to the archive note on startup once they're over (Settings → Archive past years' planning, on by default), so the tasks file only holds this year and the years ahead. The year plan still shows archived years, read-only
 
 ### Reviews

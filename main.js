@@ -1104,6 +1104,7 @@ var DEFAULT_SETTINGS = {
   waitingSince: {},
   waitingHighlightDays: 7,
   reviewNotes: false,
+  planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
   lastWeeklyReviewKey: "",
@@ -1384,8 +1385,14 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
+        name: "Year plan",
+        desc: "Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.",
+        control: { type: "toggle", key: "planningEnabled" }
+      },
+      {
         name: "Archive past years' planning",
         desc: "Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.",
+        visible: () => this.plugin.settings.planningEnabled !== false,
         control: { type: "toggle", key: "archivePastPlanning" }
       },
       {
@@ -1439,6 +1446,12 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "planningEnabled") {
+      settings.planningEnabled = value === true;
+      await this.plugin.saveSettings();
+      this.plugin.refreshBelkiViews();
+      this.rerender();
+      return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
     } else if (key === "waitingHighlightDays") {
@@ -1988,12 +2001,22 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
-    new import_obsidian3.Setting(containerEl).setName("Archive past years' planning").setDesc("Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.").addToggle((toggle) => {
-      toggle.setValue(this.plugin.settings.archivePastPlanning !== false).onChange(async (value) => {
-        this.plugin.settings.archivePastPlanning = value;
+    new import_obsidian3.Setting(containerEl).setName("Year plan").setDesc("Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.planningEnabled !== false).onChange(async (value) => {
+        this.plugin.settings.planningEnabled = value;
         await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+        this.renderLegacyTab();
       });
     });
+    if (this.plugin.settings.planningEnabled !== false) {
+      new import_obsidian3.Setting(containerEl).setName("Archive past years' planning").setDesc("Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.").addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.archivePastPlanning !== false).onChange(async (value) => {
+          this.plugin.settings.archivePastPlanning = value;
+          await this.plugin.saveSettings();
+        });
+      });
+    }
     new import_obsidian3.Setting(containerEl).setName("Write a review summary note").setDesc("After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.reviewNotes === true).onChange(async (value) => {
         this.plugin.settings.reviewNotes = value;
@@ -3272,10 +3295,12 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
         this.render();
       });
     }
-    const planningSection = content.createDiv({ cls: "belki-sidebar-section" });
-    planningSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Planning" });
-    const upcomingPlanning = this.store.getPlanningEntries().filter((e) => (e.due || "") >= todayIso()).length;
-    this.renderNavButton(planningSection, "Year plan", "year", upcomingPlanning, "year");
+    if (this.settings.planningEnabled) {
+      const planningSection = content.createDiv({ cls: "belki-sidebar-section" });
+      planningSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Planning" });
+      const upcomingPlanning = this.store.getPlanningEntries().filter((e) => (e.due || "") >= todayIso()).length;
+      this.renderNavButton(planningSection, "Year plan", "year", upcomingPlanning, "year");
+    }
     const reviewSection = content.createDiv({ cls: "belki-sidebar-section" });
     reviewSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Review" });
     this.renderReviewNavButton(reviewSection, "daily");
@@ -3499,6 +3524,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
       this.renderOverview(main);
       return;
     }
+    if (this.mode === "year" && !this.settings.planningEnabled) this.mode = this.settings.startView;
     if (this.mode === "year") {
       main.addClass("is-year-plan");
       renderYearPlan(this, this.yearPlan, main);
@@ -3516,7 +3542,8 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
-    if (this.mode === "today") {
+    if (!this.settings.planningEnabled) {
+    } else if (this.mode === "today") {
       renderPlanningStrip(this, main, "Planning · today and the next 7 days", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 7), () => this.openYearPlan());
     } else if (this.mode === "upcoming") {
       renderPlanningStrip(this, main, "Planning · next 2 weeks", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 14), () => this.openYearPlan());
@@ -3565,7 +3592,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
-    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366, true).slice(0, 4), () => this.openYearPlan());
+    if (this.settings.planningEnabled) renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366, true).slice(0, 4), () => this.openYearPlan());
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
     const tabEntries = [
       { key: INBOX_SECTOR, label: "Inbox" },
@@ -6601,6 +6628,7 @@ var BelkiPlugin = class extends import_obsidian10.Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
     };
@@ -6781,7 +6809,7 @@ var BelkiPlugin = class extends import_obsidian10.Plugin {
     try {
       await this.store.load();
       await this.pruneCompletedTasks();
-      if (this.settings.archivePastPlanning) {
+      if (this.settings.planningEnabled && this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning((/* @__PURE__ */ new Date()).getFullYear());
         if (moved > 0) new import_obsidian10.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }
