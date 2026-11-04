@@ -1,9 +1,9 @@
 # Sector Tasks
 
-A task board that reads/writes **a single** Markdown file in **Tasks plugin format** (emoji syntax). Grouping by **configurable sector tags** — the defaults implement [Carl Pullein's Time Sector System](https://www.carlpullein.com/blog/a-revolutionary-new-time-management-system-designed-for-the-21st-century/1/5/2020) (see the README for a short explanation), but any tag scheme works.
+A task board that reads/writes **a single** Markdown file in the **Tasks plugin's emoji syntax**. Grouping by **configurable sector tags** — the defaults implement [Carl Pullein's Time Sector System](https://www.carlpullein.com/blog/a-revolutionary-new-time-management-system-designed-for-the-21st-century/1/5/2020) (see the README for a short explanation), but any tag scheme works.
 
 ## Requirement
-Since version 0.3.0 the community plugin **"Tasks"** is mandatory. Creating and editing tasks runs through Tasks' own input modal (`apiV1.createTaskLineModal` / `editTaskLineModal`). Without the Tasks plugin installed and enabled, these actions do not work; a notice is shown on load.
+None besides Obsidian. From 0.3.0 to 1.4.x the community plugin **"Tasks"** was required for its input modal; since 1.5.0 Sector Tasks has its own editor. The file format is unchanged, so the Tasks plugin can stay installed alongside if you like.
 
 ## Installation
 1. In your vault: create the folder `.obsidian/plugins/sektor-tasks/`.
@@ -22,19 +22,19 @@ Since version 0.3.0 the community plugin **"Tasks"** is mandatory. Creating and 
 - A task without a sector tag lands in the **Inbox**.
 - **Auto-cleanup (since v0.21.0):** the setting "Auto-delete completed tasks" removes completed tasks from the file N days after their completion date (checked once per Obsidian start). 0 disables the cleanup (default). Completed tasks without a `✅` date are never touched. Since v0.27.0 the removed tasks are first appended to an archive note next to the tasks file (`<tasks file> (archive).md`); if that archive write fails, nothing is deleted. Since v1.1.0 the command **"Clean up completed tasks now"** runs the same cleanup on demand and shows a notice with the outcome — useful for testing the setting without restarting, and it explains when nothing is eligible (e.g. completed tasks without a `✅` date).
 - **Review reminders (since v0.21.0):** the Weekly and Monthly Review buttons in the sidebar show a small dot as long as no review of that kind has been completed in the current ISO week (Mon–Sun) / calendar month. Finishing the last step of a review clears the dot; the rollover feature from v0.20.0 was removed.
-- **Today sidebar (since v0.22.0):** the command **"Open Today sidebar"** opens a compact panel in Obsidian's right sidebar listing overdue, due-today, and (since v0.25.0) due-tomorrow tasks (archived sectors excluded). The circle completes a task (priority-colored), clicking a row opens it in the Tasks edit modal, and the `+` button quick-adds to the Inbox. The panel updates live with every change to the tasks file, and the tab carries a badge with the count of overdue + due-today tasks. Since v0.26.0 the header also has a button that opens the full board.
-- **Right-click due dates (since v0.25.0):** right-clicking any open task row (on the board or in the Today sidebar) opens a menu to set the due date to Today / Tomorrow / Next week (+7 days) or remove it — written straight into the line without the Tasks modal. The menu also has an "Edit in Tasks modal…" entry for the full editor.
+- **Today sidebar (since v0.22.0):** the command **"Open Today sidebar"** opens a compact panel in Obsidian's right sidebar listing overdue, due-today, and (since v0.25.0) due-tomorrow tasks (archived sectors excluded). The circle completes a task (priority-colored), clicking a row opens it in the editor, and the `+` button quick-adds to the Inbox. The panel updates live with every change to the tasks file, and the tab carries a badge with the count of overdue + due-today tasks. Since v0.26.0 the header also has a button that opens the full board.
+- **Right-click due dates (since v0.25.0):** right-clicking any open task row (on the board or in the Today sidebar) opens a menu to set the due date to Today / Tomorrow / Next week (+7 days) or remove it — written straight into the line without a dialog. The menu also has an "Edit…" entry for the full editor.
 - **Settings layout (since v0.22.0):** all cosmetic options (fonts, theme colors, sidebar icons, project/label colors) live in a collapsed "Appearance" group at the bottom of the settings tab. The unused "Task Description Font" option was removed.
 - **Search hotkey and completed-task filter (since v1.2.0):** the command **"Open search"** opens the board (if needed) and jumps straight to the search overlay — assign it a hotkey under Obsidian's Settings → Hotkeys. The setting "Search excludes completed tasks" (off by default) hides completed tasks from search results everywhere search runs.
-- Additional `#tags` (other than `#task` and the sector tags) are preserved on the line and written back. You assign labels directly in the task title or in the Tasks modal.
+- Additional `#tags` (other than `#task` and the sector tags) are preserved on the line and written back. You assign labels in the editor's Labels field or by typing `#label` in the title.
 - Every task row on the board has a **jump button** (visible on mouseover): it opens the underlying note and places the cursor on the matching `🆔` line.
 - **Multi-select:** Ctrl/Cmd+click selects multiple task rows (highlighted blue). Dragging one of them by the drag handle moves the whole selection together (sector, due date, or onto the Inbox). A plain click without Ctrl/Cmd clears the selection.
-- **Remove sector (Inbox):** drag the task onto the Inbox button in the sidebar, or delete the sector tag manually in the Tasks modal.
+- **Remove sector (Inbox):** drag the task onto the Inbox button in the sidebar, or pick "Inbox" as the sector in the editor.
 
 ## Creating and editing tasks
-- **Create:** Clicking "+ Add task" opens the Tasks input modal. The currently selected sector is inserted automatically as a tag on the new line. Without an active sector, the task lands in the Inbox.
-- **Edit:** Clicking a task opens the same line in the Tasks modal. After saving, the file is updated; the sector tag is preserved.
-- Due date, priority, and recurrence are managed entirely by the Tasks modal — including free-text recurrences like `every 15 july`, which are therefore guaranteed to stay Tasks-compatible.
+- **Create:** Clicking "+ Add task" opens the editor with the currently selected sector preset. Without an active sector, the task lands in the Inbox.
+- **Edit:** Clicking a task opens it in the editor: title, sector, priority, due date, labels, repeat. After saving, the line is rewritten in place.
+- **Quick capture:** the Inbox's text field adds a task without any dialog; `#labels`, a `#sector`, priority emojis and `📅` dates typed inline are recognized.
 
 ## Reviews
 Three guided walkthroughs, all resumable after interruptions:
@@ -70,10 +70,9 @@ The buttons show their hotkey as a framed letter. On mobile, the Inbox step show
 | Stable ID | `🆔 …` (set automatically, used for completing/recurrence) |
 | Start / scheduled / cancelled | `🛫` / `⏳` / `❌` dates and the `[/]` (in progress) and `[-]` (cancelled) states are not used by the board but kept as they are when the plugin rewrites a line (since 1.4.0) |
 
-## Recurrence (free-text, Tasks style)
-You enter recurrences in the Tasks modal using its free-text syntax:
-- Examples: `every day`, `every 2 weeks on monday`, `every month on the 5`, `every 15 july`, `every week when done`.
-- The text is written to the line **unchanged** (`🔁 …`) — the Tasks plugin itself computes the next due date from it.
+## Recurrence (Tasks style)
+The editor's Repeat field writes the Tasks free-text form, e.g. `🔁 every 2 weeks on friday`, `🔁 every month on the 1st`, `🔁 every weekday`, `🔁 every day when done`. It shows the exact text below the field.
+- Rules written earlier (or by hand), like `every 15 july`, are read and kept **unchanged** unless you change the repeat settings in the editor.
 - **Note:** This plugin's internal scheduler only knows regular patterns (daily/weekly/monthly/yearly) when completing a task. Date-exact yearly rules like `every 15 july` are recognized correctly since v0.4.2 (month + day are parsed and targeted exactly on completion, even if the current due date deviates from the target month/day).
 
 ## Important notes

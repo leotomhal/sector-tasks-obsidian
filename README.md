@@ -1,6 +1,6 @@
 # Sector Tasks
 
-An Obsidian task dashboard in the style of [belki](https://github.com/aribuga/obsidian-belki-tasks), but reading and writing **a single Markdown file** in **Tasks-plugin format** (emoji syntax), requires the [Obsidian Tasks Plugin](https://publish.obsidian.md/tasks/Introduction). Grouping follows **configurable sector tags** — designed for [Carl Pullein](https://www.carlpullein.com/)'s Time Sector System, but usable with any tag scheme.
+An Obsidian task dashboard in the style of [belki](https://github.com/aribuga/obsidian-belki-tasks), but reading and writing **a single Markdown file** in the emoji syntax of the [Tasks plugin](https://publish.obsidian.md/tasks/Introduction). The Tasks plugin itself is not needed (since 1.5.0). Grouping follows **configurable sector tags** — designed for [Carl Pullein](https://www.carlpullein.com/)'s Time Sector System, but usable with any tag scheme.
 
 ![Screenshot today view showing entire plugin.](/img/overview.png)
 *Overview.*
@@ -12,7 +12,7 @@ The default sector setup implements the [Time Sector System](https://www.carlpul
 However, this plugin doesn't enforce any of that: sectors are just configurable tags, and you can name, order, and review them however you like.
 
 ## Why
-Many task plugins manage their own data format. But if you already use the **Tasks** plugin, you want a single source of truth in the file — not a second, parallel task syntax. Sector Tasks only reads/writes Tasks-compatible lines and delegates creating/editing to Tasks' own input modal. The board itself is pure view + sorting, not its own task engine.
+Many task plugins manage their own data format. Sector Tasks keeps everything as plain, readable lines in one Markdown file, in the widely used Tasks emoji syntax (`📅`, `⏫`, `🔁`, …) — so the file stays a single source of truth you can read, edit, and search like any other note, with or without the plugin.
 
 ## Features
 
@@ -30,12 +30,20 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - Jump button per task: opens the underlying note at the matching `🆔` line
 
 ### Capturing & editing
-- Creating & editing tasks through the native Tasks modal (`apiV1.createTaskLineModal` / `editTaskLineModal`) — full compatibility with Tasks free-text syntax, including recurrences like `every 15 july`
+- **Own task editor:** "+ Add task" and clicking a task open a dialog with title, sector, priority, due date (with Today / Tomorrow / Next week shortcuts), labels (with suggestions from the ones you already use) and repeat (every day / weekday / week on a weekday / month on a day / year, every N, optionally counted from completion). `Cmd/Ctrl+Enter` saves. A free-text recurrence written earlier, like `every 15 july`, is kept exactly as written unless you change the repeat settings
 - Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
 - **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
-- **Quick add task (Inbox)** command: opens the Tasks modal and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
-- **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), or set the priority (P1–P4 / none), without opening the Tasks modal
+- **Quick add task (Inbox)** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
+- **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), or set the priority (P1–P4 / none), without opening the editor
 - **Undo:** checking a task off shows a short notice with an **Undo** link that restores the exact previous state — including recurring tasks that were rescheduled. Also available as the **Undo last completed task** command for a hotkey
+
+### Year plan
+- **Planning entries** are ordinary lines in your tasks file tagged `#planning` — appointments, deadlines, events. Add `#milestone` for milestones. A multi-day entry uses the Tasks start date: `- [ ] Senat und Hauptausschuss #task #planning 🛫 2026-09-16 📅 2026-09-17`
+- They never show up as tasks: not in the Inbox, sectors, reviews, search or counts. The plugin files new ones under a `## Planning` heading at the end of the tasks file, sorted by date
+- **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it, jump to its line, or delete it
+- Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**
+- **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), and the **Overview** lists the next events
+- **Past years** move to the archive note on startup once they're over (Settings → Archive past years' planning, on by default), so the tasks file only holds this year and the years ahead. The year plan still shows archived years, read-only
 
 ### Reviews
 - Each sector can be independently included in **Weekly** and/or **Monthly Review** — no fixed positional assumption about which sectors belong where
@@ -81,7 +89,7 @@ Many task plugins manage their own data format. But if you already use the **Tas
 </p>
 
 ## Requirements
-The community plugin **Tasks** must be installed and enabled. Also, tasks should be kept in a single file.
+Nothing besides Obsidian. The Tasks plugin is no longer needed since 1.5.0 (you can keep it installed; the file format is the same). Tasks are kept in a single file.
 
 ## Installation
 

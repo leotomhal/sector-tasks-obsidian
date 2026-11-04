@@ -8,12 +8,14 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { findWaitingSector, normalizeReviewSession } from "./review";
 import { reconcileWaitingSince } from "./waiting";
+import { entriesForYear, isMissedMilestone, upcomingEntries } from "./planning";
+import { formFromRule, ruleFromForm } from "./recurrenceForm";
 import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
 import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { TaskStore, completionUndoPatch, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
-import { applySectorSettings, ensureSectorInLine, ensureTaskMarker, extractTags, getTasksApi, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
+import { applySectorSettings, ordinal, ensureSectorInLine, ensureTaskMarker, extractTags, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
 export default class BelkiPlugin extends Plugin {
   settings: BelkiSettings;
@@ -22,11 +24,6 @@ export default class BelkiPlugin extends Plugin {
   seedWaitingFromCreated = false;
   async onload() {
     const hadSettings = await this.loadSettings();
-    if (!getTasksApi(this.app)) {
-      new Notice(
-        "Sector Tasks requires the community plugin \u201CTasks\u201D to be installed and enabled. Task creation and editing will not work until it is active."
-      );
-    }
     this.store = new TaskStore(this.app, this.settings);
     // Registered before any view subscribes, so views render with the updated record.
     this.store.subscribe(() => this.syncWaitingSince());
@@ -76,7 +73,7 @@ export default class BelkiPlugin extends Plugin {
       id: "quick-add-task",
       name: "Quick add task (Inbox)",
       callback: () => {
-        void this.store.createTaskViaModal(void 0).then(() => this.refreshBelkiViews());
+        void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
       }
     });
     this.addCommand({
@@ -180,6 +177,7 @@ export default class BelkiPlugin extends Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
     };
     // No record yet (first run with this feature): seed tasks that are already
@@ -369,6 +367,10 @@ export default class BelkiPlugin extends Plugin {
     try {
       await this.store.load();
       await this.pruneCompletedTasks();
+      if (this.settings.archivePastPlanning) {
+        const moved = await this.store.archivePastPlanning(new Date().getFullYear());
+        if (moved > 0) new Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+      }
     } catch (error) {
       new Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
@@ -399,6 +401,13 @@ export const __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  formFromRule,
+  ruleFromForm,
+  ordinal,
+  TaskStore,
+  entriesForYear,
+  upcomingEntries,
+  isMissedMilestone,
   buildReviewSummary,
   snapshotForReview,
   snapshotDeletion,

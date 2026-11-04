@@ -22,7 +22,8 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
     upcoming: "calendar-days",
     filters: "tag",
     projects: "kanban",
-    completed: "list-check"
+    completed: "list-check",
+    year: "calendar-range"
   },
   projectColors: {},
   labelColors: {},
@@ -48,6 +49,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   waitingSince: {},
   waitingHighlightDays: 7,
   reviewNotes: false,
+  archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
@@ -330,6 +332,11 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
+        name: "Archive past years' planning",
+        desc: "Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.",
+        control: { type: "toggle", key: "archivePastPlanning" }
+      },
+      {
         name: "Write a review summary note",
         desc: "After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.",
         control: { type: "toggle", key: "reviewNotes" }
@@ -380,6 +387,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "archivePastPlanning") {
+      settings.archivePastPlanning = value === true;
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value as number);
     } else if (key === "reviewNotesFolder") {
@@ -662,7 +671,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       ["Upcoming icon", "upcoming"],
       ["Filters icon", "filters"],
       ["Projects icon", "projects"],
-      ["Completed icon", "completed"]
+      ["Completed icon", "completed"],
+      ["Year plan icon", "year"]
     ];
     const projectItems: SettingGroupItem[] = projects.length === 0 ? [{
       name: "",
@@ -928,6 +938,12 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
+    new Setting(containerEl).setName("Archive past years' planning").setDesc("Once a year is over, move its year-plan entries from the tasks file to the archive note. The year plan still shows them, read-only.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.archivePastPlanning !== false).onChange(async (value) => {
+        this.plugin.settings.archivePastPlanning = value;
+        await this.plugin.saveSettings();
+      });
+    });
     new Setting(containerEl).setName("Write a review summary note").setDesc("After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.reviewNotes === true).onChange(async (value) => {
         this.plugin.settings.reviewNotes = value;
@@ -1069,6 +1085,7 @@ export class BelkiSettingTab extends PluginSettingTab {
       this.addIconSetting("Filters icon", "filters");
       this.addIconSetting("Projects icon", "projects");
       this.addIconSetting("Completed icon", "completed");
+      this.addIconSetting("Year plan icon", "year");
       new Setting(appearance).setName("Project colors").setHeading();
       const projects = this.plugin.getProjectNames();
       if (projects.length === 0) {

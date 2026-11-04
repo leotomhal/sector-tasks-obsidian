@@ -1,6 +1,5 @@
 import { dedupeLabels } from "./labels";
-import type { App } from "obsidian";
-import type { RepeatRule, SectorConfig, Task, TasksApiV1 } from "./types";
+import type { RepeatRule, SectorConfig, Task } from "./types";
 
 export const DEFAULT_SECTORS: SectorConfig[] = [
   { tag: "01this-week", label: "This week", inWeekly: true, inMonthly: true },
@@ -14,6 +13,10 @@ export const DEFAULT_SECTORS: SectorConfig[] = [
 export const SECTOR_TAG_PATTERN = /^[A-Za-z0-9_\-/]+$/;
 export const INBOX_SECTOR = "Inbox";
 export const TASK_MARKER_TAG = "task";
+export const PLANNING_TAG = "planning";
+export const MILESTONE_TAG = "milestone";
+/** Heading the plugin files year-plan entries under, at the end of the tasks file. */
+export const PLANNING_HEADING = "## Planning";
 export let SECTOR_TAGS = DEFAULT_SECTORS.map((s) => s.tag);
 export let SECTOR_SET = new Set(SECTOR_TAGS.map((s) => s.toLowerCase()));
 export let SECTOR_LABELS = new Map(DEFAULT_SECTORS.map((s) => [s.tag.toLowerCase(), s.label]));
@@ -21,7 +24,7 @@ export function normalizeSectorTag(value?: string): string {
   return (value || "").trim().replace(/^#/, "");
 }
 export function isReservedSectorTag(lowerTag: string): boolean {
-  return lowerTag === TASK_MARKER_TAG || lowerTag === "inbox";
+  return lowerTag === TASK_MARKER_TAG || lowerTag === "inbox" || lowerTag === PLANNING_TAG || lowerTag === MILESTONE_TAG;
 }
 export function normalizeSectors(rawSectors?: SectorConfig[]): SectorConfig[] {
   const source = Array.isArray(rawSectors) && rawSectors.length ? rawSectors : DEFAULT_SECTORS;
@@ -161,7 +164,7 @@ export function serializeTasksRecurrence(rule: RepeatRule): string {
       return `${base}${wd}${when}`;
     }
     case "monthly": {
-      const dom = rule.dayOfMonth !== void 0 ? ` on the ${rule.dayOfMonth}th` : "";
+      const dom = rule.dayOfMonth !== void 0 ? ` on the ${ordinal(rule.dayOfMonth)}` : "";
       const base = i === 1 ? "every month" : `every ${i} months`;
       return `${base}${dom}${when}`;
     }
@@ -170,6 +173,11 @@ export function serializeTasksRecurrence(rule: RepeatRule): string {
       return `${base}${when}`;
     }
   }
+}
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] || "th"}`;
 }
 export function extractTags(text: string): string[] {
   const out: string[] = [];
@@ -226,10 +234,15 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);
-  const sectorTag = tags.find((t) => SECTOR_SET.has(t.toLowerCase()));
-  const labelTags = tags.filter(
-    (t) => !SECTOR_SET.has(t.toLowerCase()) && t.toLowerCase() !== TASK_MARKER_TAG
-  );
+  const planning = tags.some((t) => t.toLowerCase() === PLANNING_TAG);
+  // #milestone only means something on a planning entry; elsewhere it stays a label.
+  const milestone = planning && tags.some((t) => t.toLowerCase() === MILESTONE_TAG);
+  const sectorTag = planning ? void 0 : tags.find((t) => SECTOR_SET.has(t.toLowerCase()));
+  const labelTags = tags.filter((t) => {
+    const lower = t.toLowerCase();
+    if (lower === TASK_MARKER_TAG || lower === PLANNING_TAG || (milestone && lower === MILESTONE_TAG)) return false;
+    return planning || !SECTOR_SET.has(lower);
+  });
   body = stripTags(body, tags);
   const title = body.replace(/\s+/g, " ").trim() || "Untitled task";
   const task: Task = {
@@ -256,6 +269,8 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
     extraProperties: [],
     order
   };
+  if (planning) task.planning = true;
+  if (milestone) task.milestone = true;
   return { task, indent };
 }
 export function serializeTaskLine(task: Task, indent = 0): string {
@@ -263,7 +278,10 @@ export function serializeTaskLine(task: Task, indent = 0): string {
   const box = task.completed ? "[x]" : task.status === "/" || task.status === "-" ? `[${task.status}]` : "[ ]";
   const parts = [task.title.trim()];
   parts.push(`#${TASK_MARKER_TAG}`);
-  if (task.project && SECTOR_SET.has(task.project.toLowerCase())) {
+  if (task.planning) {
+    parts.push(`#${PLANNING_TAG}`);
+    if (task.milestone) parts.push(`#${MILESTONE_TAG}`);
+  } else if (task.project && SECTOR_SET.has(task.project.toLowerCase())) {
     parts.push(`#${task.project}`);
   }
   for (const label of dedupeLabels(task.labels)) {
@@ -280,11 +298,6 @@ export function serializeTaskLine(task: Task, indent = 0): string {
   if (task.completed && task.completedDate) parts.push(`${E_DONE} ${task.completedDate}`);
   parts.push(`${E_ID} ${task.id}`);
   return `${pad}- ${box} ${parts.join(" ")}`;
-}
-export function getTasksApi(app: App): TasksApiV1 | undefined {
-  // App.plugins is an internal, undocumented Obsidian API; the cast keeps the access typed.
-  const withPlugins = app as App & { plugins?: { plugins?: Record<string, { apiV1?: TasksApiV1 }> } };
-  return withPlugins.plugins?.plugins?.["obsidian-tasks-plugin"]?.apiV1;
 }
 export function ensureSectorInLine(line: string, sector?: string): string {
   if (!sector) return line;

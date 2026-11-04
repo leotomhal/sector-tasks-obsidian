@@ -13,6 +13,8 @@ import { OVERDUE_RANGES } from "../types";
 import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
+import { upcomingEntries } from "../planning";
+import { YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
@@ -78,6 +80,7 @@ export class TaskBoardView extends ItemView {
   selectedProjects: Set<string>;
   /** Sector tab selected in the "overview" mode's Ring 2 / mini-list (INBOX_SECTOR or a sector tag). */
   overviewSector: string;
+  yearPlan = new YearPlanState();
   searchQuery: string;
   searchOpen: boolean;
   composerOpen: boolean;
@@ -345,7 +348,7 @@ export class TaskBoardView extends ItemView {
     sidebarAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       this.mobileNavOpen = false;
-      void this.store.createTaskViaModal(sector).then(() => this.render());
+      void this.store.createTaskInEditor(sector).then(() => this.render());
     });
     const tasks = this.store.getTasks();
     const active = tasks.filter((task) => !task.completed);
@@ -416,6 +419,10 @@ export class TaskBoardView extends ItemView {
         this.render();
       });
     }
+    const planningSection = content.createDiv({ cls: "belki-sidebar-section" });
+    planningSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Planning" });
+    const upcomingPlanning = this.store.getPlanningEntries().filter((e) => (e.due || "") >= todayIso()).length;
+    this.renderNavButton(planningSection, "Year plan", "year", upcomingPlanning, "year");
     const reviewSection = content.createDiv({ cls: "belki-sidebar-section" });
     reviewSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Review" });
     this.renderReviewNavButton(reviewSection, "daily");
@@ -586,14 +593,14 @@ export class TaskBoardView extends ItemView {
     const task = this.currentReviewTask();
     if (task && sectorTag) {
       await this.store.updateTask(task.id, { project: sectorTag });
-      await this.store.updateTaskViaModal(task.id);
+      await this.store.editTaskInEditor(task.id);
     }
     await this.advanceReview();
   }
   async applyReviewDateAction(action: string) {
     const task = this.currentReviewTask();
     if (task && action === "reschedule") {
-      await this.store.updateTaskViaModal(task.id);
+      await this.store.editTaskInEditor(task.id);
     }
     await this.advanceReview();
   }
@@ -639,6 +646,11 @@ export class TaskBoardView extends ItemView {
       this.renderOverview(main);
       return;
     }
+    if (this.mode === "year") {
+      main.addClass("is-year-plan");
+      renderYearPlan(this, this.yearPlan, main);
+      return;
+    }
     const tasks = this.store.getTasks();
     const active = tasks.filter((task) => !task.completed);
     const visible = this.getVisibleTasks(tasks);
@@ -651,6 +663,11 @@ export class TaskBoardView extends ItemView {
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
+    if (this.mode === "today") {
+      renderPlanningStrip(this, main, "Planning \u00b7 today and the next 7 days", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 7), () => this.openYearPlan());
+    } else if (this.mode === "upcoming") {
+      renderPlanningStrip(this, main, "Planning \u00b7 next 2 weeks", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 14), () => this.openYearPlan());
+    }
     const sections = main.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
     // With a single section its header badge already shows the same count.
@@ -661,7 +678,7 @@ export class TaskBoardView extends ItemView {
     inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
     inlineAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
-      void this.store.createTaskViaModal(sector).then(() => this.render());
+      void this.store.createTaskInEditor(sector).then(() => this.render());
     });
     if (active.length === 0 && tasks.length === 0) {
       main.createDiv({
@@ -703,6 +720,7 @@ export class TaskBoardView extends ItemView {
     this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
+    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366).slice(0, 4), () => this.openYearPlan());
 
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
     const tabEntries = [
@@ -726,7 +744,7 @@ export class TaskBoardView extends ItemView {
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
     inlineAdd.createSpan({ cls: "belki-add-text", text: `Add to ${sectorLabel}` });
     inlineAdd.addEventListener("click", () => {
-      void this.store.createTaskViaModal(isInboxTab ? "" : this.overviewSector).then(() => this.render());
+      void this.store.createTaskInEditor(isInboxTab ? "" : this.overviewSector).then(() => this.render());
     });
 
     const sectionTasks = isInboxTab
@@ -1582,6 +1600,15 @@ export class TaskBoardView extends ItemView {
       }).open();
     });
   }
+  openYearPlan() {
+    this.mode = "year";
+    this.selectedProjects = new Set();
+    this.mobileNavOpen = false;
+    this.render();
+  }
+  renderLinkedTitle(text: string, el: HTMLElement) {
+    renderLinkedText(text, el, this.app);
+  }
   /** Type-and-Enter field that files a task straight into the Inbox. */
   renderQuickCapture(parent: HTMLElement) {
     const form = parent.createEl("form", { cls: "belki-quick-capture" });
@@ -1660,7 +1687,7 @@ export class TaskBoardView extends ItemView {
     }
   }
   openTaskDetail(task: Task) {
-    void this.store.updateTaskViaModal(task.id).then(() => this.renderPreservingMainScroll());
+    void this.store.editTaskInEditor(task.id).then(() => this.renderPreservingMainScroll());
   }
   getVisibleTasks(tasks: Task[]): Task[] {
     const archivedSet = new Set(this.settings.archivedProjects);
@@ -1799,6 +1826,7 @@ export class TaskBoardView extends ItemView {
       case "projects": return this.selectedProjects.size > 1 ? "Several sectors, side by side" : "Tasks by time sector";
       case "completed": return "What you finished";
       case "filters": return "Saved filters and labels";
+      case "year": return "Planning, quarter by quarter";
       case "archived": return "Sectors you have put away";
       default: return "";
     }
@@ -1821,6 +1849,9 @@ export class TaskBoardView extends ItemView {
     }
     if (this.mode === "completed") {
       return "Completed";
+    }
+    if (this.mode === "year") {
+      return "Year plan";
     }
     if (this.mode === "archived") {
       return "Archived projects";
@@ -2064,12 +2095,12 @@ export class TaskBoardView extends ItemView {
     titleButton.setAttr("role", "button");
     titleButton.setAttr("tabindex", "0");
     titleButton.addEventListener("click", () => {
-      void this.store.updateTaskViaModal(task.id).then(() => this.render());
+      void this.store.editTaskInEditor(task.id).then(() => this.render());
     });
     titleButton.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        void this.store.updateTaskViaModal(task.id).then(() => this.render());
+        void this.store.editTaskInEditor(task.id).then(() => this.render());
       }
     });
     const meta = card.createDiv({ cls: "belki-review-task-meta" });

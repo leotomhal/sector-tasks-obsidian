@@ -67,8 +67,8 @@ export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEv
   });
   menu.addSeparator();
   menu.addItem((item) => {
-    item.setTitle("Edit in Tasks modal…").setIcon("pencil").onClick(() => {
-      void store.updateTaskViaModal(task.id);
+    item.setTitle("Edit…").setIcon("pencil").onClick(() => {
+      void store.editTaskInEditor(task.id);
     });
   });
   menu.showAtMouseEvent(event);
@@ -141,7 +141,7 @@ export class TodaySidebarView extends ItemView {
       attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
     });
     addButton.addEventListener("click", () => {
-      void this.store.createTaskViaModal("");
+      void this.store.createTaskInEditor("");
     });
     const archivedSet = new Set(this.settings.archivedProjects);
     const open = this.store.getTasks().filter(
@@ -212,7 +212,7 @@ export class TodaySidebarView extends ItemView {
   renderRow(parent: HTMLElement, task: Task, showDate: boolean) {
     const row = parent.createDiv({ cls: "belki-today-row" });
     row.addEventListener("click", () => {
-      void this.store.updateTaskViaModal(task.id);
+      void this.store.editTaskInEditor(task.id);
     });
     row.addEventListener("contextmenu", (event) => {
       event.preventDefault();
