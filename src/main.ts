@@ -2,12 +2,14 @@ import { Notice, Plugin, TAbstractFile } from "obsidian";
 import type { BelkiSettings } from "./types";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./views/TaskBoardView";
 import { TodaySidebarView, VIEW_TYPE_BELKI_TODAY } from "./views/TodaySidebarView";
-import { addDaysIso, isIsoDate } from "./dateUtils";
+import { addDaysIso, isIsoDate, todayIso } from "./dateUtils";
 import { dedupeLabels, normalizeLabelName } from "./labels";
 import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
-import { normalizeReviewSession } from "./review";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset } from "./settings";
+import { findWaitingSector, normalizeReviewSession } from "./review";
+import { reconcileWaitingSince } from "./waiting";
+import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { TaskStore, completionUndoPatch, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
@@ -17,6 +19,7 @@ export default class BelkiPlugin extends Plugin {
   settings: BelkiSettings;
   store: TaskStore;
   reloadDebounceTimer: number | null = null;
+  seedWaitingFromCreated = false;
   async onload() {
     const hadSettings = await this.loadSettings();
     if (!getTasksApi(this.app)) {
@@ -25,6 +28,8 @@ export default class BelkiPlugin extends Plugin {
       );
     }
     this.store = new TaskStore(this.app, this.settings);
+    // Registered before any view subscribes, so views render with the updated record.
+    this.store.subscribe(() => this.syncWaitingSince());
     this.registerView(
       VIEW_TYPE_BELKI,
       (leaf) => new TaskBoardView(leaf, this.store, this.settings, () => this.saveSettings())
@@ -171,8 +176,15 @@ export default class BelkiPlugin extends Plugin {
       visualStyle: normalizeVisualStyle(saved == null ? void 0 : saved.visualStyle),
       showReleaseNotes: (saved == null ? void 0 : saved.showReleaseNotes) !== false,
       lastSeenVersion: typeof (saved == null ? void 0 : saved.lastSeenVersion) === "string" ? saved.lastSeenVersion : "",
-      reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
+      reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession),
+      waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
+      waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
+      reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
     };
+    // No record yet (first run with this feature): seed tasks that are already
+    // waiting from their created date instead of starting them all at today.
+    if (!saved || saved.waitingSince === void 0) this.seedWaitingFromCreated = true;
     if (this.settings) {
       // The store, the views, and the settings tab all hold this object by
       // reference, so a reload has to update it in place, not replace it.
@@ -182,6 +194,20 @@ export default class BelkiPlugin extends Plugin {
     }
     applySectorSettings(this.settings.sectors);
     return raw != null;
+  }
+  syncWaitingSince() {
+    const waiting = findWaitingSector(this.settings.sectors);
+    const next = reconcileWaitingSince(
+      this.settings.waitingSince,
+      this.store.getTasks(),
+      waiting ? waiting.tag : null,
+      todayIso(),
+      this.seedWaitingFromCreated
+    );
+    if (this.store.getTasks().length > 0) this.seedWaitingFromCreated = false;
+    if (!next) return;
+    this.settings.waitingSince = next;
+    void this.saveSettings();
   }
   async saveSettings() {
     await this.saveData(this.settings);
@@ -372,6 +398,9 @@ export const __testables = {
   normalizeLabelName,
   extractTags,
   completionUndoPatch,
+  reconcileWaitingSince,
+  buildReviewSummary,
+  snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,

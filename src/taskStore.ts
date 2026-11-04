@@ -1,6 +1,6 @@
 import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
 import type { BelkiSettings, FileBlock, Task } from "./types";
-import { formatDueDateChip, todayIso } from "./dateUtils";
+import { daysBetweenIso, formatDueDateChip, shiftIsoDate, todayIso } from "./dateUtils";
 import { dedupeLabels } from "./labels";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
@@ -135,6 +135,25 @@ export class TaskStore {
     this.fileModel.blocks.push({ type: "task", taskId: task.id });
     await this.save();
   }
+  /**
+   * Quick capture: turns typed text into a task without the Tasks modal. The
+   * text goes through the normal parser, so #labels, a #sector tag, priority
+   * emojis and 📅 dates typed inline work as usual. Returns false if nothing
+   * was saved (empty text, or the file changed on disk and the save was dropped).
+   */
+  async createTaskFromText(text: string, sector?: string): Promise<boolean> {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!trimmed) return false;
+    let line = ensureTaskMarker(`- [ ] ${trimmed}`);
+    line = ensureSectorInLine(line, sector);
+    const parsed = parseTaskLine(line, createId(), this.tasks.length);
+    if (!parsed) return false;
+    const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
+    this.tasks.push(task);
+    this.fileModel.blocks.push({ type: "task", taskId: task.id });
+    await this.save();
+    return this.tasks.some((t) => t.id === task.id);
+  }
   async updateTaskViaModal(id: string) {
     const api = getTasksApi(this.app);
     if (!api) {
@@ -205,7 +224,14 @@ export class TaskStore {
         });
         this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
-        await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
+        // Like the Tasks plugin, move ⏳/🛫 along with the due date so they don't go stale.
+        const shift = task.due ? daysBetweenIso(task.due, nextDue) : 0;
+        await this.updateTask(id, {
+          completedOccurrences: occurrences,
+          due: nextDue,
+          scheduled: task.scheduled && shift ? shiftIsoDate(task.scheduled, shift) : task.scheduled,
+          start: task.start && shift ? shiftIsoDate(task.start, shift) : task.start
+        });
         this.showUndoNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`, () => this.undoLastCompletion());
       }
       return;
@@ -299,6 +325,14 @@ ${lines.join("\n")}
     await this.save();
   }
   /** Move all tasks of one sector to another (UI "rename project"). */
+  /** How many tasks (open and completed) carry this sector tag — the ones a rename rewrites. */
+  countTasksInSector(tag: string): number {
+    const lower = (tag || "").trim().toLowerCase();
+    return this.tasks.filter((task) => {
+      const current = normalizeTaskProject(task.project);
+      return Boolean(current) && current.toLowerCase() === lower;
+    }).length;
+  }
   async renameProject(oldName: string, newName: string) {
     const oldLower = (oldName || "").trim().toLowerCase();
     const newTag = (newName || "").trim();
@@ -480,8 +514,11 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
 export function completionUndoPatch(task: Task): Partial<Task> {
   return {
     completed: task.completed,
+    status: task.status,
     completedDate: task.completedDate,
     due: task.due,
+    scheduled: task.scheduled,
+    start: task.start,
     repeat: task.repeat ? { ...task.repeat } : void 0,
     completedOccurrences: task.completedOccurrences ? [...task.completedOccurrences] : void 0
   };

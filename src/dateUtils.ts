@@ -70,3 +70,15 @@ export function formatDueDateChip(value?: string): string {
     ...year !== thisYear ? { year: "numeric" } : {}
   }).format(date);
 }
+/** Whole days from a to b (both ISO dates); positive when b is later. */
+export function daysBetweenIso(a: string, b: string): number {
+  const parse = (v: string) => {
+    const [y, m, d] = v.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((parse(b) - parse(a)) / 864e5);
+}
+export function shiftIsoDate(value: string, days: number): string {
+  const [y, m, d] = value.split("-").map(Number);
+  return toIsoDate(new Date(y, m - 1, d + days));
+}

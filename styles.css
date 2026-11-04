@@ -742,6 +742,18 @@
   color: var(--belki-danger);
 }
 
+/* "Waiting 12 d" on tasks in the waiting sector */
+.belki-task-waiting {
+  color: var(--belki-muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.belki-task-waiting.is-stale {
+  color: var(--belki-danger);
+  font-weight: 600;
+}
+
 .belki-task-label {
   appearance: none;
   background: transparent;
@@ -809,15 +821,16 @@
 
 .belki-task-delete {
   appearance: none;
+  align-items: center;
   background: transparent;
   border: 0;
   border-radius: 6px;
   box-shadow: none;
   color: var(--belki-muted);
   cursor: pointer;
-  font-size: 18px;
+  display: flex;
   height: 28px;
-  line-height: 24px;
+  justify-content: center;
   opacity: 0;
   padding: 0;
   transition: opacity 120ms ease;
@@ -837,6 +850,58 @@
   .belki-task-delete {
     opacity: 1;
   }
+}
+
+/* Obsidian (mobile especially) gives buttons a background, border and shadow;
+   the row's icon buttons stay flat so they read as one quiet pair. */
+.belki-root .belki-task-actions > button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.belki-task-actions > button svg {
+  height: 16px;
+  width: 16px;
+}
+
+/* Quick capture in the Inbox */
+.belki-quick-capture {
+  align-items: center;
+  background: var(--belki-surface);
+  border: 1px solid var(--belki-border);
+  border-radius: 10px;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 0 12px;
+}
+
+.belki-quick-capture:focus-within {
+  border-color: var(--belki-accent);
+}
+
+.belki-quick-capture-icon {
+  color: var(--belki-muted);
+  display: flex;
+}
+
+.belki-quick-capture-icon svg {
+  height: 16px;
+  width: 16px;
+}
+
+.belki-root input.belki-quick-capture-input {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--belki-text);
+  flex: 1;
+  font-family: var(--belki-font-task-title);
+  font-size: 14px;
+  height: 40px;
+  min-width: 0;
+  padding: 0;
 }
 
 .belki-add-area {
@@ -1423,18 +1488,21 @@ button.belki-search-result.is-completed .belki-search-description {
 
   .belki-task-row {
     gap: 10px;
-    grid-template-columns: 24px minmax(0, 1fr) 28px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
     padding: 13px 0;
   }
 
+  /* Both buttons need their own room; a 28px column made them overlap the card edge */
   .belki-task-actions {
-    grid-column: 3;
-  }
-
-  .belki-task-delete {
-    align-self: center;
+    align-self: start;
+    gap: 4px;
     grid-column: 3;
     grid-row: 1;
+  }
+
+  .belki-task-actions > button {
+    height: 32px;
+    width: 32px;
   }
 
   .belki-task-drag-handle {
@@ -2242,7 +2310,7 @@ button.belki-review-discard:hover {
 
 /* Delete confirmation modal: renders outside .belki-root, so it uses
    Obsidian's own theme variables rather than the board's --belki-* ones. */
-.belki-confirm-delete-title {
+.belki-confirm-subject {
   border-left: 3px solid var(--text-error, #e03e3e);
   color: var(--text-normal);
   font-weight: 600;
@@ -2251,7 +2319,7 @@ button.belki-review-discard:hover {
   padding-left: 10px;
 }
 
-.belki-confirm-delete-hint {
+.belki-confirm-hint {
   color: var(--text-muted);
   font-size: var(--font-ui-small, 13px);
   margin: 0;
@@ -2423,7 +2491,8 @@ button.belki-review-discard:hover {
 
 /* Dates, deadlines and labels as pills */
 .belki-root.is-style-editorial .belki-task-date,
-.belki-root.is-style-editorial .belki-task-deadline {
+.belki-root.is-style-editorial .belki-task-deadline,
+.belki-root.is-style-editorial .belki-task-waiting {
   background: var(--belki-chip-bg);
   border-radius: 999px;
   font-size: 11.5px;
@@ -2431,7 +2500,8 @@ button.belki-review-discard:hover {
 }
 
 .belki-root.is-style-editorial .belki-task-date.is-overdue,
-.belki-root.is-style-editorial .belki-task-deadline.is-overdue {
+.belki-root.is-style-editorial .belki-task-deadline.is-overdue,
+.belki-root.is-style-editorial .belki-task-waiting.is-stale {
   background: var(--belki-danger-light);
   color: var(--belki-danger);
 }

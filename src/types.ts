@@ -44,7 +44,13 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  /** "/" (in progress) or "-" (cancelled) for open tasks; kept so a save writes the line back unchanged. */
+  status?: string;
   completedDate?: string;
+  /** Tasks-plugin dates this plugin doesn't act on but must preserve: ⏳ scheduled, 🛫 start, ❌ cancelled. */
+  scheduled?: string;
+  start?: string;
+  cancelledDate?: string;
   created?: string;
   due?: string;
   deadline?: string;
@@ -91,6 +97,15 @@ export interface ReviewSession {
   steps: ReviewStep[];
   stepIndex: number;
   taskIndex: number;
+  /** Weekly/monthly only: where each open task stood when the review began, for the summary note. */
+  startedAt?: string;
+  startSnapshot?: Record<string, ReviewSnapshotEntry>;
+}
+
+export interface ReviewSnapshotEntry {
+  /** Sector tag, or "" for the Inbox. */
+  sector: string;
+  title: string;
 }
 
 export interface BelkiSettings {
@@ -119,6 +134,12 @@ export interface BelkiSettings {
   visualStyle: string;
   showReleaseNotes: boolean;
   lastSeenVersion: string;
+  /** Task id → ISO date the task entered the waiting sector. */
+  waitingSince: Record<string, string>;
+  /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
+  waitingHighlightDays: number;
+  reviewNotes: boolean;
+  reviewNotesFolder: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }

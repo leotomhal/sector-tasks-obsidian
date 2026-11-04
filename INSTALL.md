@@ -68,6 +68,7 @@ The buttons show their hotkey as a framed letter. On mobile, the Inbox step show
 | Recurrence | `🔁 every week` |
 | Priority | `⏫` (high = P1) `🔼` (P2) `🔽` (P3) `⏬` (P4); `🔺` is read as P1 |
 | Stable ID | `🆔 …` (set automatically, used for completing/recurrence) |
+| Start / scheduled / cancelled | `🛫` / `⏳` / `❌` dates and the `[/]` (in progress) and `[-]` (cancelled) states are not used by the board but kept as they are when the plugin rewrites a line (since 1.4.0) |
 
 ## Recurrence (free-text, Tasks style)
 You enter recurrences in the Tasks modal using its free-text syntax:

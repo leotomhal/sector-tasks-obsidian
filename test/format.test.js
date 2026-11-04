@@ -43,6 +43,9 @@ const {
   normalizeLabelName,
   extractTags,
   completionUndoPatch,
+  reconcileWaitingSince,
+  buildReviewSummary,
+  snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,
@@ -176,7 +179,10 @@ test("completionUndoPatch captures every field a completion changes", () => {
     "completedDate",
     "completedOccurrences",
     "due",
-    "repeat"
+    "repeat",
+    "scheduled",
+    "start",
+    "status"
   ]);
   assert.equal(patch.completed, false);
   assert.equal(patch.completedDate, undefined);
@@ -279,4 +285,74 @@ test("releaseNotesSince shows every skipped version, newest first", () => {
   assert.deepEqual(releaseNotesSince(entries, "1.3.12", "1.3.13").map((e) => e.version), ["1.3.13"]);
   assert.deepEqual(releaseNotesSince(entries, "", "1.3.13").map((e) => e.version), ["1.3.13"], "unknown previous version: only the current one");
   assert.deepEqual(releaseNotesSince(entries, "1.3.13", "1.3.13"), [], "nothing new");
+});
+
+test("scheduled, start and cancelled dates survive a save", () => {
+  const line = "- [ ] Plan trip #task #01this-week ➕ 2026-07-01 🛫 2026-07-10 ⏳ 2026-07-12 📅 2026-07-15 🆔 abc";
+  const { task } = parseTaskLine(line, "x", 0);
+  assert.equal(task.scheduled, "2026-07-12");
+  assert.equal(task.start, "2026-07-10");
+  assert.equal(task.title, "Plan trip");
+  assert.equal(serializeTaskLine(task), line);
+  const cancelled = parseTaskLine("- [-] Dropped #task ❌ 2026-07-03 🆔 c1", "x", 0).task;
+  assert.equal(serializeTaskLine(cancelled), "- [-] Dropped #task ❌ 2026-07-03 🆔 c1");
+});
+
+test("in-progress and cancelled status are written back, completing wins", () => {
+  const { task } = parseTaskLine("- [/] Writing #task 🆔 w1", "x", 0);
+  assert.equal(task.completed, false);
+  assert.match(serializeTaskLine(task), /^- \[\/\] /);
+  assert.match(serializeTaskLine({ ...task, completed: true, completedDate: "2026-07-04" }), /^- \[x\] /);
+  assert.equal(completionUndoPatch(task).status, "/", "undo restores the in-progress status");
+});
+
+test("waiting since: new waiting tasks start today, leavers are dropped", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const tasks = [
+    t("- [ ] Reply from Anna #task #waiting ➕ 2026-10-01 🆔 a"),
+    t("- [ ] Quote #task #waiting 🆔 b"),
+    t("- [ ] Not waiting #task #01this-week 🆔 c"),
+    t("- [x] Done waiting #task #waiting ✅ 2026-11-01 🆔 d")
+  ];
+  const first = reconcileWaitingSince({}, tasks, "waiting", "2026-11-04", true);
+  assert.deepEqual(first, { a: "2026-10-01", b: "2026-11-04" }, "first run seeds from ➕ created, else today");
+  assert.equal(reconcileWaitingSince(first, tasks, "waiting", "2026-11-05", false), null, "nothing changes on later days");
+  const moved = reconcileWaitingSince(first, tasks.slice(1), "waiting", "2026-11-05", false);
+  assert.deepEqual(moved, { b: "2026-11-04" }, "a task that left the sector loses its date");
+  const later = reconcileWaitingSince({}, tasks, "waiting", "2026-11-04", false);
+  assert.equal(later.a, "2026-11-04", "after the first run, a task entering waiting starts today, not at its created date");
+  assert.equal(reconcileWaitingSince(first, [], "waiting", "2026-11-05", false), null, "an empty file never wipes the record");
+});
+
+test("review summary lists done, moved, deleted, new and waiting tasks", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const sectors = [
+    { tag: "01this-week", label: "This week" },
+    { tag: "02next-week", label: "Next week" },
+    { tag: "waiting", label: "Waiting", isWaiting: true }
+  ];
+  const before = [
+    t("- [ ] Slides #task #01this-week 🆔 s"),
+    t("- [ ] Old idea #task #02next-week 🆔 o"),
+    t("- [ ] Reply from Anna #task #waiting 🆔 a")
+  ];
+  const snapshot = snapshotForReview(before);
+  const after = [
+    t("- [ ] Slides #task #02next-week 🆔 s"),
+    t("- [ ] Reply from Anna #task #waiting 🆔 a"),
+    t("- [x] Budget #task #01this-week ✅ 2026-11-03 🆔 b"),
+    t("- [ ] Call Ben #task ➕ 2026-11-02 📅 2026-11-01 🆔 c")
+  ];
+  const md = buildReviewSummary({
+    type: "weekly", periodKey: "2026-W45", today: "2026-11-04", tasks: after, sectors, snapshot,
+    waitingSince: { a: "2026-10-23" }
+  });
+  assert.match(md, /^---\ntype: weekly-review\ndate: 2026-11-04\nperiod: 2026-W45\n---\n# Weekly review 2026-W45/);
+  assert.match(md, /## Done recently \(1\)\n- Budget · This week/);
+  assert.match(md, /## Moved during the review \(1\)\n- Slides: This week → Next week/);
+  assert.match(md, /## Deleted during the review \(1\)\n- Old idea/);
+  assert.match(md, /## New recently \(1\)\n- Call Ben · Inbox/);
+  assert.match(md, /## Waiting \(1\)\n- Reply from Anna · waiting 12 days/);
+  assert.match(md, /\| Inbox \| 1 \| 1 \|/);
+  assert.ok(!/- \[[ x]\]/.test(md), "no checkbox lines that Tasks queries would pick up");
 });

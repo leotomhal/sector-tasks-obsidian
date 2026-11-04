@@ -7,6 +7,7 @@ import { dedupeLabels, displayLabel, normalizeLabelName } from "./labels";
 import { projectDisplayName } from "./projects";
 import { DEFAULT_SECTORS, SECTOR_TAG_PATTERN, applySectorSettings, isReservedSectorTag, normalizeSectorTag } from "./tasksFormat";
 import { FONT_OPTIONS, OVERDUE_RANGES, SORT_MODES } from "./types";
+import { confirmAction } from "./views/ConfirmModal";
 
 export const DEFAULT_DATA_FOLDER_PATH = "_belki_files";
 export const DEFAULT_SETTINGS: BelkiSettings = {
@@ -44,6 +45,10 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   visualStyle: "default",
   showReleaseNotes: true,
   lastSeenVersion: "",
+  waitingSince: {},
+  waitingHighlightDays: 7,
+  reviewNotes: false,
+  reviewNotesFolder: "Reviews",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -121,6 +126,22 @@ export function normalizeOverdueRange(value?: string): string {
 export function normalizeAutoDeleteDays(value?: number | string): number {
   const num = typeof value === "number" ? Math.floor(value) : parseInt(value, 10);
   return Number.isInteger(num) && num > 0 ? num : 0;
+}
+export function normalizeWaitingHighlightDays(value?: number | string): number {
+  if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.waitingHighlightDays;
+  return normalizeAutoDeleteDays(value);
+}
+export function normalizeWaitingSince(value?: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [id, date] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) out[id] = date;
+  }
+  return out;
+}
+export function normalizeReviewNotesFolder(value?: string): string {
+  const trimmed = (value || "").trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? normalizePath(trimmed) : DEFAULT_SETTINGS.reviewNotesFolder;
 }
 export function normalizeFontOption(value?: string): string {
   return FONT_OPTIONS.includes(value) ? value : "system";
@@ -251,9 +272,13 @@ export function applyBelkiFontSettings(element: HTMLElement, settings: BelkiSett
     "--belki-font-label": fontStackForOption(settings.labelFont)
   });
 }
+function taskCount(n: number): string {
+  return n === 1 ? "1 task" : `${n} tasks`;
+}
 export class BelkiSettingTab extends PluginSettingTab {
   plugin: BelkiPlugin;
   appearanceOpen?: boolean;
+  sectorsOpen?: boolean;
   constructor(app: App, plugin: BelkiPlugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -305,11 +330,17 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
-        name: "",
-        desc: "Sectors: the tag is written 1:1 as #tag in the tasks file; changing a tag automatically renames already-tagged tasks. Drag rows to change the column order on the board.",
-        searchable: false
+        name: "Write a review summary note",
+        desc: "After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.",
+        control: { type: "toggle", key: "reviewNotes" }
       },
-      this.buildSectorList(),
+      {
+        name: "Review notes folder",
+        desc: "Where review summary notes are saved. The folder is created when needed.",
+        visible: () => this.plugin.settings.reviewNotes === true,
+        control: { type: "text", key: "reviewNotesFolder", placeholder: "Reviews" }
+      },
+      this.buildSectorsPage(),
       this.buildAppearancePage()
     ];
   }
@@ -349,6 +380,15 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "waitingHighlightDays") {
+      settings.waitingHighlightDays = normalizeAutoDeleteDays(value as number);
+    } else if (key === "reviewNotesFolder") {
+      settings.reviewNotesFolder = normalizeReviewNotesFolder(asString(value));
+    } else if (key === "reviewNotes") {
+      settings.reviewNotes = value === true;
+      await this.plugin.saveSettings();
+      this.rerender();
+      return;
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -377,10 +417,34 @@ export class BelkiSettingTab extends PluginSettingTab {
   }
   validateTasksFilePath(value: string): string | void {
     const path = normalizePath((value || "").trim() || DEFAULT_SETTINGS.tasksFilePath);
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing && !(existing instanceof TFile)) {
+    if (this.app.vault.getFolderByPath(path)) {
       return `"${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`;
     }
+  }
+  buildSectorsPage(): SettingDefinitionItem {
+    const count = () => {
+      const n = this.plugin.settings.sectors.length;
+      return n === 1 ? "1 sector" : `${n} sectors`;
+    };
+    return {
+      type: "page",
+      name: "Sectors",
+      desc: "The columns of the board: their tags, names, order, and review steps. Set up once; changing a tag rewrites your tasks file.",
+      displayValue: count,
+      items: [
+        {
+          name: "",
+          desc: "The tag is written 1:1 as #tag in the tasks file; changing a tag automatically renames already-tagged tasks. Drag rows to change the column order on the board.",
+          searchable: false
+        },
+        this.buildSectorList(),
+        {
+          name: "Mark long waits",
+          desc: "Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.",
+          control: { type: "number", key: "waitingHighlightDays", min: 0, step: 1, placeholder: "7" }
+        }
+      ]
+    };
   }
   buildSectorList(): SettingDefinitionItem {
     return {
@@ -493,6 +557,22 @@ export class BelkiSettingTab extends PluginSettingTab {
     const newLabel = (rawLabel || "").trim() || newTag;
     const oldTag = current.tag;
     const tagChanged = oldTag.toLowerCase() !== lower;
+    if (tagChanged) {
+      const affected = this.plugin.store.countTasksInSector(oldTag);
+      if (affected > 0) {
+        const confirmed = await confirmAction(this.app, {
+          title: "Rename sector tag?",
+          subject: `#${oldTag} \u2192 #${newTag}`,
+          body: `This changes ${taskCount(affected)} in your tasks file.`,
+          confirmText: "Rename",
+          destructive: true
+        });
+        if (!confirmed) {
+          this.rerender();
+          return;
+        }
+      }
+    }
     sectors[index] = {
       tag: newTag,
       label: newLabel,
@@ -529,6 +609,20 @@ export class BelkiSettingTab extends PluginSettingTab {
     }
     const removed = sectors[index];
     if (!removed) return;
+    const affected = this.plugin.store.countTasksInSector(removed.tag);
+    const confirmed = await confirmAction(this.app, {
+      title: "Remove sector?",
+      subject: `${removed.label} (#${removed.tag})`,
+      body: affected > 0
+        ? `Its ${taskCount(affected)} keep #${removed.tag} as a label but won't appear in any sector. Nothing is deleted from your tasks file.`
+        : "No tasks use this sector yet. Nothing changes in your tasks file.",
+      confirmText: "Remove",
+      destructive: true
+    });
+    if (!confirmed) {
+      this.rerender();
+      return;
+    }
     this.plugin.settings.sectors = sectors.filter((_, i) => i !== index);
     applySectorSettings(this.plugin.settings.sectors);
     await this.plugin.saveSettings();
@@ -834,6 +928,21 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
+    new Setting(containerEl).setName("Write a review summary note").setDesc("After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.reviewNotes === true).onChange(async (value) => {
+        this.plugin.settings.reviewNotes = value;
+        await this.plugin.saveSettings();
+        this.renderLegacyTab();
+      });
+    });
+    if (this.plugin.settings.reviewNotes === true) {
+      new Setting(containerEl).setName("Review notes folder").setDesc("Where review summary notes are saved. The folder is created when needed.").addText((text) => {
+        text.setPlaceholder("Reviews").setValue(this.plugin.settings.reviewNotesFolder).onChange(async (value) => {
+          this.plugin.settings.reviewNotesFolder = normalizeReviewNotesFolder(value);
+          await this.plugin.saveSettings();
+        });
+      });
+    }
     new Setting(containerEl).setName("Task rows").setDesc('Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.').addDropdown((dropdown) => {
       dropdown.addOption("stacked", "Stacked");
       dropdown.addOption("singleLine", "Single line");
@@ -843,15 +952,36 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
-    new Setting(containerEl).setName("Sectors").setHeading();
-    containerEl.createDiv({
+    const sectorsSection = containerEl.createEl("details", { cls: "belki-settings-appearance" });
+    if (this.sectorsOpen === true) {
+      sectorsSection.setAttr("open", "");
+    }
+    sectorsSection.addEventListener("toggle", () => {
+      this.sectorsOpen = sectorsSection.open;
+    });
+    sectorsSection.createEl("summary", { cls: "belki-settings-appearance-summary", text: "Sectors" });
+    sectorsSection.createDiv({
       cls: "setting-item-description",
       text: "Tag (written 1:1 as #tag in the file) and display name per sector column. Changing the tag automatically renames already-tagged tasks in the file. Order here determines column order."
     });
-    this.plugin.settings.sectors.forEach((sector, index) => {
-      this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
-    });
-    this.addNewSectorSetting();
+    const sectorsRoot = this.containerEl;
+    this.containerEl = sectorsSection;
+    try {
+      this.plugin.settings.sectors.forEach((sector, index) => {
+        this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
+      });
+      this.addNewSectorSetting();
+      new Setting(sectorsSection).setName("Mark long waits").setDesc("Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.").addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder("7").setValue(String(this.plugin.settings.waitingHighlightDays)).onChange(async (value) => {
+          this.plugin.settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
+    } finally {
+      this.containerEl = sectorsRoot;
+    }
     const appearance = containerEl.createEl("details", { cls: "belki-settings-appearance" });
     if (this.appearanceOpen === true) {
       appearance.setAttr("open", "");
