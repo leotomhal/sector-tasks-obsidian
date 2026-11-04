@@ -10,8 +10,9 @@ the [changelog](./CHANGELOG.md).
   Obsidian API (`leaf.tabHeaderEl`); fall back to the tab title ("Today (3)")
   if that ever breaks. Only worth doing if the badge misbehaves.
 - **Refresh screenshots** — the `img/*.png` in the README could be updated to
-  show the current UI (Overview dashboard, single-line rows, Today sidebar,
-  grouped settings). Author task, since it needs a real vault.
+  show the current UI (Overview dashboard, year plan, the task editor, Editorial
+  style, single-line rows, Today sidebar). Author task, since it needs a real
+  vault.
 
 ## Parked (larger)
 
@@ -27,9 +28,9 @@ the [changelog](./CHANGELOG.md).
 
 ## Out of scope (by design)
 
-The plugin deliberately delegates these to the Tasks plugin or the note itself,
-to stay a lean view over Tasks-compatible lines:
+Left out on purpose, so a task stays one readable line:
 
-- Task descriptions, attachments, sub-tasks, and deadlines on the board.
+- Task descriptions, attachments, sub-tasks, and deadlines — link a note from
+  the title instead.
 - A second, parallel task data format — Sector Tasks only reads/writes
-  Tasks-compatible Markdown.
+  Markdown lines in the Tasks plugin's emoji syntax.

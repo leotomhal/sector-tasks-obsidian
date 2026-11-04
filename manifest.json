@@ -3,7 +3,7 @@
   "name": "Sector Tasks",
   "version": "1.5.2",
   "minAppVersion": "1.7.2",
-  "description": "Task board over a single Markdown file in Tasks emoji format, grouped by configurable sector tags, with guided reviews and a year plan. Designed for Carl Pullein's Time Sector System, usable with any tag scheme.",
+  "description": "Task board and year plan over a single Markdown file, with tasks grouped by when you'll do them and guided daily, weekly and monthly reviews. Designed for Carl Pullein's Time Sector System, usable with any tag scheme.",
   "author": "Tom Leonhardt",
   "authorUrl": "https://tomleonhardt.net",
   "isDesktopOnly": false
