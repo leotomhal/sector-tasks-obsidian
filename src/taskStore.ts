@@ -1,10 +1,10 @@
 import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
 import type { BelkiSettings, FileBlock, Task } from "./types";
-import { daysBetweenIso, formatDueDateChip, shiftIsoDate, todayIso } from "./dateUtils";
+import { daysBetweenIso, formatDueDateChip, isIsoDate, shiftIsoDate, todayIso } from "./dateUtils";
 import { dedupeLabels } from "./labels";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
-import { INBOX_SECTOR, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, getTasksApi, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
+import { INBOX_SECTOR, PLANNING_HEADING, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, getTasksApi, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
 export class TaskStore {
   app: App;
@@ -38,8 +38,97 @@ export class TaskStore {
   isTaskStorageFile(path: string): boolean {
     return normalizePath(path) === this.filePath;
   }
+  /** Tasks only; year-plan entries (#planning) live in getPlanningEntries(). */
   getTasks() {
-    return this.tasks.map(cloneTask);
+    return this.tasks.filter((t) => !t.planning).map(cloneTask);
+  }
+  getPlanningEntries() {
+    return this.tasks.filter((t) => t.planning).map(cloneTask);
+  }
+  /**
+   * Where a new line goes. Planning entries are kept together under "## Planning"
+   * (created at the end of the file on first use), sorted by date; tasks go
+   * just above that section so they never end up under the Planning heading.
+   */
+  insertTaskBlock(task: Task) {
+    const blocks = this.fileModel.blocks;
+    const block: FileBlock = { type: "task", taskId: task.id };
+    let headingIndex = blocks.findIndex((b) => b.type === "raw" && isPlanningHeading(b.line));
+    if (!task.planning) {
+      if (headingIndex === -1) {
+        blocks.push(block);
+        return;
+      }
+      let at = headingIndex;
+      while (at > 0 && blocks[at - 1].type === "raw" && !(blocks[at - 1].line || "").trim()) at -= 1;
+      blocks.splice(at, 0, block);
+      return;
+    }
+    if (headingIndex === -1) {
+      const last = blocks[blocks.length - 1];
+      if (blocks.length && !(last.type === "raw" && !(last.line || "").trim())) blocks.push({ type: "raw", line: "" });
+      blocks.push({ type: "raw", line: PLANNING_HEADING });
+      headingIndex = blocks.length - 1;
+    }
+    const byId = new Map(this.tasks.map((t) => [t.id, t]));
+    const key = planningSortKey(task);
+    let at = headingIndex + 1;
+    for (let i = headingIndex + 1; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (b.type === "raw" && /^#{1,6}\s/.test(b.line || "")) break;
+      const other = b.type === "task" ? byId.get(b.taskId) : void 0;
+      if (other?.planning && other.id !== task.id && planningSortKey(other) <= key) at = i + 1;
+    }
+    blocks.splice(at, 0, block);
+  }
+  /** New year-plan entry; `start` makes it span several days (🛫 start … 📅 end). */
+  async createPlanningEntry(input: { title: string; date: string; start?: string; milestone?: boolean }): Promise<boolean> {
+    const title = input.title.replace(/\s+/g, " ").trim();
+    if (!title || !isIsoDate(input.date)) return false;
+    const start = isIsoDate(input.start) && input.start < input.date ? input.start : void 0;
+    const task: Task = {
+      id: createId(),
+      title,
+      completed: false,
+      due: input.date,
+      start,
+      priority: "none",
+      labels: [],
+      attachments: [],
+      extraProperties: [],
+      order: this.tasks.length,
+      sourcePath: this.filePath,
+      planning: true,
+      milestone: input.milestone === true
+    };
+    this.tasks.push(task);
+    this.insertTaskBlock(task);
+    await this.save();
+    return this.tasks.some((t) => t.id === task.id);
+  }
+  /** Moves planning entries of past years to the archive note. Returns how many moved. */
+  async archivePastPlanning(currentYear: number): Promise<number> {
+    const cutoff = `${currentYear}-01-01`;
+    const past = this.tasks.filter((t) => t.planning && isIsoDate(t.due) && t.due < cutoff);
+    if (!past.length) return 0;
+    const archived = await this.archiveCompletedTasks(past, `Planning archived ${todayIso()}`);
+    if (!archived) return 0;
+    await this.deleteManyTasks(past.map((t) => t.id));
+    return past.length;
+  }
+  /** Planning entries already moved to the archive note, for looking back at past years. */
+  async readArchivedPlanning(): Promise<Task[]> {
+    const file = this.app.vault.getFileByPath(this.archiveFilePath);
+    if (!file) return [];
+    const content = await this.app.vault.cachedRead(file);
+    const out: Task[] = [];
+    let order = 0;
+    for (const line of content.split(/\r?\n/)) {
+      if (!isTaskLine(line) || !hasTaskMarker(line)) continue;
+      const parsed = parseTaskLine(line, createId(), order++);
+      if (parsed?.task.planning) out.push(parsed.task);
+    }
+    return out;
   }
   /** "Projects" in the belki UI are time sectors. */
   getProjects() {
@@ -112,7 +201,7 @@ export class TaskStore {
       sourcePath: this.filePath
     };
     this.tasks.push(task);
-    this.fileModel.blocks.push({ type: "task", taskId: task.id });
+    this.insertTaskBlock(task);
     await this.save();
   }
   async createTaskViaModal(sector?: string) {
@@ -132,7 +221,7 @@ export class TaskStore {
     }
     const task = { ...parsed.task, sourcePath: this.filePath };
     this.tasks.push(task);
-    this.fileModel.blocks.push({ type: "task", taskId: task.id });
+    this.insertTaskBlock(task);
     await this.save();
   }
   /**
@@ -150,7 +239,7 @@ export class TaskStore {
     if (!parsed) return false;
     const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
     this.tasks.push(task);
-    this.fileModel.blocks.push({ type: "task", taskId: task.id });
+    this.insertTaskBlock(task);
     await this.save();
     return this.tasks.some((t) => t.id === task.id);
   }
@@ -297,14 +386,14 @@ export class TaskStore {
     const p = this.filePath;
     return p.replace(/\.md$/i, "") + " (archive).md";
   }
-  async archiveCompletedTasks(tasks: Task[]): Promise<boolean> {
+  async archiveCompletedTasks(tasks: Task[], heading = `Archived ${todayIso()}`): Promise<boolean> {
     if (!tasks.length) return false;
     const file = await this.ensureFile(this.archiveFilePath);
     if (!file) return false;
     const lines = tasks.map((t) => serializeTaskLine(t));
     const block = `
 
-## Archived ${todayIso()}
+## ${heading}
 ${lines.join("\n")}
 `;
     try {
@@ -511,6 +600,13 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
   return { blocks: nextBlocks, tasks: nextTasks };
 }
 /** The fields toggleComplete may change, captured so a completion can be taken back. */
+export function isPlanningHeading(line?: string): boolean {
+  return /^##\s+planning\s*$/i.test((line || "").trim());
+}
+/** Sort key for the Planning section: first day, then last day. */
+export function planningSortKey(task: Task): string {
+  return `${task.start || task.due || ""}|${task.due || ""}`;
+}
 export function completionUndoPatch(task: Task): Partial<Task> {
   return {
     completed: task.completed,

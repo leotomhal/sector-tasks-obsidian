@@ -65,6 +65,10 @@ export interface Task {
   extraProperties: Record<string, unknown>[];
   order: number;
   sourcePath?: string;
+  /** A year-plan entry (#planning), not a task: kept out of every task list, review and count. */
+  planning?: boolean;
+  /** A #planning entry that is also tagged #milestone; only these can be checked off. */
+  milestone?: boolean;
 }
 
 export interface SectorConfig {
@@ -139,6 +143,8 @@ export interface BelkiSettings {
   /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
   waitingHighlightDays: number;
   reviewNotes: boolean;
+  /** Move year-plan entries of past years to the archive note on startup. */
+  archivePastPlanning: boolean;
   reviewNotesFolder: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;

@@ -8,6 +8,7 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { findWaitingSector, normalizeReviewSession } from "./review";
 import { reconcileWaitingSince } from "./waiting";
+import { entriesForYear, isMissedMilestone, upcomingEntries } from "./planning";
 import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
 import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
@@ -180,6 +181,7 @@ export default class BelkiPlugin extends Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
     };
     // No record yet (first run with this feature): seed tasks that are already
@@ -369,6 +371,10 @@ export default class BelkiPlugin extends Plugin {
     try {
       await this.store.load();
       await this.pruneCompletedTasks();
+      if (this.settings.archivePastPlanning) {
+        const moved = await this.store.archivePastPlanning(new Date().getFullYear());
+        if (moved > 0) new Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+      }
     } catch (error) {
       new Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
@@ -399,6 +405,10 @@ export const __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  TaskStore,
+  entriesForYear,
+  upcomingEntries,
+  isMissedMilestone,
   buildReviewSummary,
   snapshotForReview,
   snapshotDeletion,

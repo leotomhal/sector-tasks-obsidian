@@ -44,6 +44,10 @@ const {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  TaskStore,
+  entriesForYear,
+  upcomingEntries,
+  isMissedMilestone,
   buildReviewSummary,
   snapshotForReview,
   snapshotDeletion,
@@ -355,4 +359,72 @@ test("review summary lists done, moved, deleted, new and waiting tasks", () => {
   assert.match(md, /## Waiting \(1\)\n- Reply from Anna · waiting 12 days/);
   assert.match(md, /\| Inbox \| 1 \| 1 \|/);
   assert.ok(!/- \[[ x]\]/.test(md), "no checkbox lines that Tasks queries would pick up");
+});
+
+test("planning entries: parsed apart from tasks, written back unchanged", () => {
+  const line = "- [ ] Senat und Hauptausschuss #task #planning 🛫 2026-09-16 📅 2026-09-17 🆔 p1";
+  const { task } = parseTaskLine(line, "x", 0);
+  assert.equal(task.planning, true);
+  assert.equal(task.milestone, undefined);
+  assert.equal(task.project, undefined);
+  assert.deepEqual(task.labels, []);
+  assert.equal(serializeTaskLine(task), line);
+  const ms = parseTaskLine("- [x] Jahresbericht freigegeben #task #planning #milestone 📅 2026-02-20 ✅ 2026-02-19 🆔 m1", "x", 0).task;
+  assert.equal(ms.milestone, true);
+  assert.equal(serializeTaskLine(ms), "- [x] Jahresbericht freigegeben #task #planning #milestone 📅 2026-02-20 ✅ 2026-02-19 🆔 m1");
+  const plain = parseTaskLine("- [ ] Ship v2 #task #milestone 🆔 t1", "x", 0).task;
+  assert.equal(plain.planning, undefined);
+  assert.deepEqual(plain.labels, ["milestone"], "#milestone on an ordinary task stays a label");
+});
+
+test("planning entries go under ## Planning in date order; tasks stay above it", () => {
+  const store = new TaskStore({}, { tasksFilePath: "Tasks.md" });
+  const content = [
+    "# Tasks",
+    "- [ ] Write report #task #01this-week 🆔 a",
+    "",
+    "## Planning",
+    "- [ ] Spring #task #planning 📅 2026-03-01 🆔 p1",
+    "- [ ] Autumn #task #planning 📅 2026-10-01 🆔 p2"
+  ].join("\n");
+  const parsed = store.parseContent(content);
+  store.fileModel = { blocks: parsed.blocks };
+  store.tasks = parsed.tasks;
+  const add = (line) => {
+    const task = parseTaskLine(line, "n" + store.tasks.length, store.tasks.length).task;
+    store.tasks.push(task);
+    store.insertTaskBlock(task);
+  };
+  add("- [ ] Summer #task #planning 📅 2026-07-01 🆔 p3");
+  add("- [ ] Call Ben #task 🆔 b");
+  const ids = store.fileModel.blocks.map((b) => b.type === "task" ? b.taskId : JSON.stringify(b.line));
+  assert.deepEqual(ids, ['"# Tasks"', "a", "b", '""', '"## Planning"', "p1", "p3", "p2"]);
+  assert.deepEqual(store.getTasks().map((t) => t.id), ["a", "b"], "getTasks never returns planning entries");
+  assert.deepEqual(store.getPlanningEntries().map((t) => t.id).sort(), ["p1", "p2", "p3"]);
+});
+
+test("the Planning heading is created at the end on first use", () => {
+  const store = new TaskStore({}, { tasksFilePath: "Tasks.md" });
+  const parsed = store.parseContent("- [ ] Task #task 🆔 a");
+  store.fileModel = { blocks: parsed.blocks };
+  store.tasks = parsed.tasks;
+  const entry = parseTaskLine("- [ ] Kickoff #task #planning 📅 2027-01-10 🆔 k", "k", 1).task;
+  store.tasks.push(entry);
+  store.insertTaskBlock(entry);
+  assert.deepEqual(store.fileModel.blocks.map((b) => b.taskId || b.line), ["a", "", "## Planning", "k"]);
+});
+
+test("year plan helpers: year, upcoming window, missed milestones", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const entries = [
+    t("- [ ] New year #task #planning 📅 2027-01-02 🆔 a"),
+    t("- [ ] Fair #task #planning 🛫 2026-12-30 📅 2027-01-01 🆔 b"),
+    t("- [ ] Brochure #task #planning #milestone 📅 2026-06-30 🆔 c"),
+    t("- [ ] Senat #task #planning 🛫 2026-11-03 📅 2026-11-05 🆔 d")
+  ];
+  assert.deepEqual(entriesForYear(entries, 2027).map((e) => e.id), ["b", "a"], "an entry spanning new year shows in both years");
+  assert.deepEqual(entriesForYear(entries, 2026).map((e) => e.id), ["c", "d", "b"]);
+  assert.deepEqual(upcomingEntries(entries, "2026-11-04", 7).map((e) => e.id), ["d"], "running entries count as upcoming");
+  assert.equal(isMissedMilestone(entries[2], "2026-11-04"), true);
+  assert.equal(isMissedMilestone({ ...entries[2], completed: true }, "2026-11-04"), false);
 });

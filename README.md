@@ -37,6 +37,14 @@ Many task plugins manage their own data format. But if you already use the **Tas
 - **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), or set the priority (P1–P4 / none), without opening the Tasks modal
 - **Undo:** checking a task off shows a short notice with an **Undo** link that restores the exact previous state — including recurring tasks that were rescheduled. Also available as the **Undo last completed task** command for a hotkey
 
+### Year plan
+- **Planning entries** are ordinary lines in your tasks file tagged `#planning` — appointments, deadlines, events. Add `#milestone` for milestones. A multi-day entry uses the Tasks start date: `- [ ] Senat und Hauptausschuss #task #planning 🛫 2026-09-16 📅 2026-09-17`
+- They never show up as tasks: not in the Inbox, sectors, reviews, search or counts. The plugin files new ones under a `## Planning` heading at the end of the tasks file, sorted by date
+- **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it in the Tasks modal, jump to its line, or delete it
+- Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**
+- **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), and the **Overview** lists the next events
+- **Past years** move to the archive note on startup once they're over (Settings → Archive past years' planning, on by default), so the tasks file only holds this year and the years ahead. The year plan still shows archived years, read-only
+
 ### Reviews
 - Each sector can be independently included in **Weekly** and/or **Monthly Review** — no fixed positional assumption about which sectors belong where
 - **Weekly/Monthly Review**: a guided, sector-by-sector walkthrough (Inbox → configured sectors → Waiting), with Stay/Up/Down/Inbox per task, or Follow up/Keep waiting for Waiting-tagged tasks; progress persists across interruptions

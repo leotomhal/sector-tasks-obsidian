@@ -13,6 +13,8 @@ import { OVERDUE_RANGES } from "../types";
 import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
+import { upcomingEntries } from "../planning";
+import { YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
@@ -78,6 +80,7 @@ export class TaskBoardView extends ItemView {
   selectedProjects: Set<string>;
   /** Sector tab selected in the "overview" mode's Ring 2 / mini-list (INBOX_SECTOR or a sector tag). */
   overviewSector: string;
+  yearPlan = new YearPlanState();
   searchQuery: string;
   searchOpen: boolean;
   composerOpen: boolean;
@@ -416,6 +419,10 @@ export class TaskBoardView extends ItemView {
         this.render();
       });
     }
+    const planningSection = content.createDiv({ cls: "belki-sidebar-section" });
+    planningSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Planning" });
+    const upcomingPlanning = this.store.getPlanningEntries().filter((e) => (e.due || "") >= todayIso()).length;
+    this.renderNavButton(planningSection, "Year plan", "year", upcomingPlanning, "year");
     const reviewSection = content.createDiv({ cls: "belki-sidebar-section" });
     reviewSection.createDiv({ cls: "belki-sidebar-heading belki-sidebar-heading-static", text: "Review" });
     this.renderReviewNavButton(reviewSection, "daily");
@@ -639,6 +646,11 @@ export class TaskBoardView extends ItemView {
       this.renderOverview(main);
       return;
     }
+    if (this.mode === "year") {
+      main.addClass("is-year-plan");
+      renderYearPlan(this, this.yearPlan, main);
+      return;
+    }
     const tasks = this.store.getTasks();
     const active = tasks.filter((task) => !task.completed);
     const visible = this.getVisibleTasks(tasks);
@@ -650,6 +662,11 @@ export class TaskBoardView extends ItemView {
     this.renderSortingControl(header);
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
+    }
+    if (this.mode === "today") {
+      renderPlanningStrip(this, main, "Planning \u00b7 today and the next 7 days", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 7), () => this.openYearPlan());
+    } else if (this.mode === "upcoming") {
+      renderPlanningStrip(this, main, "Planning \u00b7 next 2 weeks", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 14), () => this.openYearPlan());
     }
     const sections = main.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
@@ -703,6 +720,7 @@ export class TaskBoardView extends ItemView {
     this.renderOverviewStat(stats, "Overdue", overdueCount, overdueCount > 0 ? "is-warning" : "");
     this.renderOverviewStat(stats, "Done today", todayDone);
     this.renderOverviewStat(stats, "Done this week", this.countCompletionsSince(tasks, startOfIsoWeekIso()));
+    renderPlanningStrip(this, main, "Next events", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 366).slice(0, 4), () => this.openYearPlan());
 
     const tabs = main.createDiv({ cls: "belki-overview-tabs" });
     const tabEntries = [
@@ -1582,6 +1600,15 @@ export class TaskBoardView extends ItemView {
       }).open();
     });
   }
+  openYearPlan() {
+    this.mode = "year";
+    this.selectedProjects = new Set();
+    this.mobileNavOpen = false;
+    this.render();
+  }
+  renderLinkedTitle(text: string, el: HTMLElement) {
+    renderLinkedText(text, el, this.app);
+  }
   /** Type-and-Enter field that files a task straight into the Inbox. */
   renderQuickCapture(parent: HTMLElement) {
     const form = parent.createEl("form", { cls: "belki-quick-capture" });
@@ -1799,6 +1826,7 @@ export class TaskBoardView extends ItemView {
       case "projects": return this.selectedProjects.size > 1 ? "Several sectors, side by side" : "Tasks by time sector";
       case "completed": return "What you finished";
       case "filters": return "Saved filters and labels";
+      case "year": return "Planning, quarter by quarter";
       case "archived": return "Sectors you have put away";
       default: return "";
     }
@@ -1821,6 +1849,9 @@ export class TaskBoardView extends ItemView {
     }
     if (this.mode === "completed") {
       return "Completed";
+    }
+    if (this.mode === "year") {
+      return "Year plan";
     }
     if (this.mode === "archived") {
       return "Archived projects";
