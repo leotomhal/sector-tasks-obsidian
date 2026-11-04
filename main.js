@@ -543,6 +543,16 @@ function uniqueRealProjects(projects) {
 // src/views/TodaySidebarView.ts
 var VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 var TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
+function formatSnoozeDate(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return new Intl.DateTimeFormat(void 0, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...y !== (/* @__PURE__ */ new Date()).getFullYear() ? { year: "numeric" } : {}
+  }).format(date);
+}
 function showTaskContextMenu(store, task, event) {
   const menu = new import_obsidian2.Menu();
   const currentDue = task.due;
@@ -563,6 +573,16 @@ function showTaskContextMenu(store, task, event) {
       void store.updateTask(task.id, { due: void 0 });
     });
   });
+  menu.addSeparator();
+  const base = currentDue && currentDue > todayIso() ? currentDue : todayIso();
+  for (const days of [1, 3, 7]) {
+    const target = shiftIsoDate(base, days);
+    menu.addItem((item) => {
+      item.setTitle(`Snooze ${days === 1 ? "1 day" : `${days} days`} · ${formatSnoozeDate(target)}`).onClick(() => {
+        void store.updateTask(task.id, { due: target });
+      });
+    });
+  }
   menu.addSeparator();
   const currentPriority = task.priority || "none";
   for (const priority of ["P1", "P2", "P3", "P4"]) {
@@ -1039,6 +1059,10 @@ var DEFAULT_SETTINGS = {
   visualStyle: "default",
   showReleaseNotes: true,
   lastSeenVersion: "",
+  waitingSince: {},
+  waitingHighlightDays: 7,
+  reviewNotes: false,
+  reviewNotesFolder: "Reviews",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -1116,6 +1140,22 @@ function normalizeOverdueRange(value) {
 function normalizeAutoDeleteDays(value) {
   const num = typeof value === "number" ? Math.floor(value) : parseInt(value, 10);
   return Number.isInteger(num) && num > 0 ? num : 0;
+}
+function normalizeWaitingHighlightDays(value) {
+  if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.waitingHighlightDays;
+  return normalizeAutoDeleteDays(value);
+}
+function normalizeWaitingSince(value) {
+  const out = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [id, date] of Object.entries(value)) {
+    if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) out[id] = date;
+  }
+  return out;
+}
+function normalizeReviewNotesFolder(value) {
+  const trimmed = (value || "").trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? (0, import_obsidian3.normalizePath)(trimmed) : DEFAULT_SETTINGS.reviewNotesFolder;
 }
 function normalizeFontOption(value) {
   return FONT_OPTIONS.includes(value) ? value : "system";
@@ -1300,6 +1340,17 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
         desc: "When on, search only matches open tasks. Completed tasks never show up in results.",
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
+      {
+        name: "Write a review summary note",
+        desc: "After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.",
+        control: { type: "toggle", key: "reviewNotes" }
+      },
+      {
+        name: "Review notes folder",
+        desc: "Where review summary notes are saved. The folder is created when needed.",
+        visible: () => this.plugin.settings.reviewNotes === true,
+        control: { type: "text", key: "reviewNotesFolder", placeholder: "Reviews" }
+      },
       this.buildSectorsPage(),
       this.buildAppearancePage()
     ];
@@ -1340,6 +1391,15 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "waitingHighlightDays") {
+      settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+    } else if (key === "reviewNotesFolder") {
+      settings.reviewNotesFolder = normalizeReviewNotesFolder(asString(value));
+    } else if (key === "reviewNotes") {
+      settings.reviewNotes = value === true;
+      await this.plugin.saveSettings();
+      this.rerender();
+      return;
     } else if (key === "uiFont" || key === "taskTitleFont" || key === "taskDescriptionFont" || key === "labelFont") {
       settings[key] = normalizeFontOption(asString(value));
     } else if (key === "themePreset") {
@@ -1389,7 +1449,12 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
           desc: "The tag is written 1:1 as #tag in the tasks file; changing a tag automatically renames already-tagged tasks. Drag rows to change the column order on the board.",
           searchable: false
         },
-        this.buildSectorList()
+        this.buildSectorList(),
+        {
+          name: "Mark long waits",
+          desc: "Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.",
+          control: { type: "number", key: "waitingHighlightDays", min: 0, step: 1, placeholder: "7" }
+        }
       ]
     };
   }
@@ -1873,6 +1938,21 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
+    new import_obsidian3.Setting(containerEl).setName("Write a review summary note").setDesc("After a weekly or monthly review, write a note with what you finished, what moved, what's new, and what you're waiting for.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.reviewNotes === true).onChange(async (value) => {
+        this.plugin.settings.reviewNotes = value;
+        await this.plugin.saveSettings();
+        this.renderLegacyTab();
+      });
+    });
+    if (this.plugin.settings.reviewNotes === true) {
+      new import_obsidian3.Setting(containerEl).setName("Review notes folder").setDesc("Where review summary notes are saved. The folder is created when needed.").addText((text) => {
+        text.setPlaceholder("Reviews").setValue(this.plugin.settings.reviewNotesFolder).onChange(async (value) => {
+          this.plugin.settings.reviewNotesFolder = normalizeReviewNotesFolder(value);
+          await this.plugin.saveSettings();
+        });
+      });
+    }
     new import_obsidian3.Setting(containerEl).setName("Task rows").setDesc("Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.").addDropdown((dropdown) => {
       dropdown.addOption("stacked", "Stacked");
       dropdown.addOption("singleLine", "Single line");
@@ -1901,6 +1981,14 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
         this.addSectorSetting(sector, index, this.plugin.settings.sectors.length);
       });
       this.addNewSectorSetting();
+      new import_obsidian3.Setting(sectorsSection).setName("Mark long waits").setDesc("Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.").addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder("7").setValue(String(this.plugin.settings.waitingHighlightDays)).onChange(async (value) => {
+          this.plugin.settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
     } finally {
       this.containerEl = sectorsRoot;
     }
@@ -2227,6 +2315,37 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
   }
 };
 
+// src/waiting.ts
+function reconcileWaitingSince(current, tasks, waitingTag, today, seedFromCreated) {
+  if (tasks.length === 0) return null;
+  const tag = (waitingTag || "").toLowerCase();
+  const next = {};
+  if (tag) {
+    for (const task of tasks) {
+      if (task.completed || (normalizeTaskProject(task.project) || "").toLowerCase() !== tag) continue;
+      const known = current[task.id];
+      if (isIsoDate(known)) {
+        next[task.id] = known;
+      } else if (seedFromCreated && isIsoDate(task.created) && task.created <= today) {
+        next[task.id] = task.created;
+      } else {
+        next[task.id] = today;
+      }
+    }
+  }
+  const before = Object.keys(current);
+  const after = Object.keys(next);
+  const same = before.length === after.length && after.every((id) => current[id] === next[id]);
+  return same ? null : next;
+}
+function formatWaitingAge(since, today) {
+  const days = Math.max(0, daysBetweenIso(since, today));
+  return days === 0 ? "Waiting since today" : `Waiting ${days} d`;
+}
+function waitingDays(since, today) {
+  return Math.max(0, daysBetweenIso(since, today));
+}
+
 // src/views/TaskBoardView.ts
 var VIEW_TYPE_BELKI = "sector-task-board";
 var LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
@@ -2283,6 +2402,8 @@ var SORT_OPTIONS = [
 var TaskBoardView = class extends import_obsidian4.ItemView {
   constructor(leaf, store, settings, saveSettings) {
     super(leaf);
+    this.captureDraft = "";
+    this.captureInputEl = null;
     this.store = store;
     this.settings = settings;
     this.saveSettings = saveSettings;
@@ -2429,6 +2550,8 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     this.removeProjectMenu();
     const { containerEl } = this;
     const sidebarScrollLeft = (_c = (_b = containerEl.querySelector(".belki-sidebar")) == null ? void 0 : _b.scrollLeft) != null ? _c : this.sidebarScrollLeft;
+    const captureHadFocus = this.captureInputEl !== null && this.captureInputEl === containerEl.doc.activeElement;
+    this.captureInputEl = null;
     containerEl.empty();
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
@@ -2447,6 +2570,11 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       this.renderReviewOverlay(containerEl);
     }
     this.restoreSidebarScroll(sidebarScrollLeft);
+    if (captureHadFocus && this.captureInputEl) {
+      const input = this.captureInputEl;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
   }
   getMainScrollSnapshot() {
     const main = this.containerEl.querySelector(".belki-main");
@@ -2814,13 +2942,14 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     const titleWrap = header.createDiv();
     this.renderEyebrow(titleWrap);
     titleWrap.createEl("h1", { text: this.getTitle() });
-    titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
+    const subtitle = titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
     this.renderSortingControl(header);
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
     const sections = main.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
+    if (sections.querySelectorAll(":scope > .belki-section").length <= 1) subtitle.remove();
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
@@ -2887,6 +3016,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     });
     const sectionTasks = isInboxTab ? this.getInboxTasks(active) : this.sortTasks(active.filter((task) => normalizeTaskProject(task.project) === this.overviewSector));
     const sections = main.createDiv({ cls: "belki-sections" });
+    if (isInboxTab) this.renderQuickCapture(sections);
     const section = this.createSection(sections, sectorLabel, sectionTasks.length);
     if (!isInboxTab) this.markSectorSection(section, this.overviewSector);
     this.renderTaskList(section, sectionTasks);
@@ -3051,7 +3181,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
       const todayTasks = this.sortTasks(active.filter((task) => isToday(task.due)));
-      const todaySection = this.createSection(parent, formatGroupHeader(todayIso()), todayTasks.length);
+      const todaySection = this.createSection(parent, formatGroupHeader(todayIso(), false), todayTasks.length);
       this.enableTodayDrop(todaySection);
       this.renderTaskList(todaySection, todayTasks);
       const overdue = this.sortTasks(this.getOverdueTasks(active));
@@ -3141,6 +3271,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         void this.startReview("inbox-only");
       });
     } : void 0;
+    if (this.mode === "inbox") this.renderQuickCapture(parent);
     const section = this.createSection(parent, this.getTitle(), visible.length, headerAction);
     this.renderTaskList(section, visible);
   }
@@ -3653,6 +3784,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         (0, import_obsidian4.setIcon)(ri, "repeat");
       }
     }
+    this.renderWaitingAge(meta, task);
     if (task.deadline) {
       meta.createSpan({
         cls: `belki-task-deadline${isBeforeToday(task.deadline) ? " is-overdue" : ""}`,
@@ -3710,14 +3842,15 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       event.stopPropagation();
       void this.openTaskInNote(task);
     });
-    actions.createEl("button", {
+    const deleteBtn = actions.createEl("button", {
       cls: "belki-task-delete",
-      text: "×",
       attr: {
         type: "button",
         "aria-label": "Delete task"
       }
-    }).addEventListener("click", (event) => {
+    });
+    (0, import_obsidian4.setIcon)(deleteBtn, "x");
+    deleteBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       new ConfirmModal(this.app, {
         title: "Delete task?",
@@ -3729,6 +3862,52 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         void this.store.deleteTask(task.id);
       }).open();
     });
+  }
+  /** Type-and-Enter field that files a task straight into the Inbox. */
+  renderQuickCapture(parent) {
+    const form = parent.createEl("form", { cls: "belki-quick-capture" });
+    const icon = form.createSpan({ cls: "belki-quick-capture-icon" });
+    (0, import_obsidian4.setIcon)(icon, "plus");
+    const input = form.createEl("input", {
+      cls: "belki-quick-capture-input",
+      attr: {
+        type: "text",
+        placeholder: "Capture a task, then press enter",
+        "aria-label": "Quick capture to inbox",
+        enterkeyhint: "done",
+        autocomplete: "off"
+      }
+    });
+    input.value = this.captureDraft;
+    this.captureInputEl = input;
+    input.addEventListener("input", () => {
+      this.captureDraft = input.value;
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      this.captureDraft = "";
+      input.value = "";
+      void this.store.createTaskFromText(text).then((saved) => {
+        if (saved) return;
+        this.captureDraft = text;
+        this.render();
+      });
+    });
+  }
+  /** "Waiting 12 d" on open tasks in the waiting sector; marked once it passes the threshold. */
+  renderWaitingAge(parent, task) {
+    if (task.completed) return;
+    const since = this.settings.waitingSince[task.id];
+    if (!since) return;
+    const waiting = findWaitingSector(this.settings.sectors);
+    if (!waiting || (normalizeTaskProject(task.project) || "").toLowerCase() !== waiting.tag.toLowerCase()) return;
+    const today = todayIso();
+    const threshold = this.settings.waitingHighlightDays;
+    const chip = parent.createSpan({ cls: "belki-task-waiting", text: formatWaitingAge(since, today) });
+    chip.toggleClass("is-stale", threshold > 0 && waitingDays(since, today) >= threshold);
+    chip.setAttr("aria-label", `Waiting since ${formatShortDate(since)}`);
   }
   async openTaskInNote(task) {
     const path = task.sourcePath || this.store.filePath;
@@ -4183,6 +4362,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       meta.createSpan({ cls: "belki-review-sector-chip", text: currentSector ? currentSector.label : "Inbox" });
     }
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
+    if (step.kind === "waiting") this.renderWaitingAge(meta, task);
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
     const withHotkey = (el, letter) => {
@@ -4498,16 +4678,11 @@ function formatDueChip(value) {
   }
   return formatShortDate(value);
 }
-function formatGroupHeader(value) {
-  const day = formatShortDate(value);
-  const weekday = formatWeekday(value);
-  if (value === todayIso()) {
-    return `${day} - Today - ${weekday}`;
-  }
-  if (value === addDaysIso2(1)) {
-    return `${day} - Tomorrow - ${weekday}`;
-  }
-  return `${day} - ${weekday}`;
+function formatGroupHeader(value, relative = true) {
+  const date = `${formatWeekday(value)}, ${formatShortDate(value)}`;
+  if (relative && value === todayIso()) return `Today · ${date}`;
+  if (relative && value === addDaysIso2(1)) return `Tomorrow · ${date}`;
+  return date;
 }
 function formatCompletedHeader(date) {
   if (date === todayIso()) return "Today";
@@ -4822,6 +4997,25 @@ var TaskStore = class {
     this.tasks.push(task);
     this.fileModel.blocks.push({ type: "task", taskId: task.id });
     await this.save();
+  }
+  /**
+   * Quick capture: turns typed text into a task without the Tasks modal. The
+   * text goes through the normal parser, so #labels, a #sector tag, priority
+   * emojis and 📅 dates typed inline work as usual. Returns false if nothing
+   * was saved (empty text, or the file changed on disk and the save was dropped).
+   */
+  async createTaskFromText(text, sector) {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!trimmed) return false;
+    let line = ensureTaskMarker(`- [ ] ${trimmed}`);
+    line = ensureSectorInLine(line, sector);
+    const parsed = parseTaskLine(line, createId(), this.tasks.length);
+    if (!parsed) return false;
+    const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
+    this.tasks.push(task);
+    this.fileModel.blocks.push({ type: "task", taskId: task.id });
+    await this.save();
+    return this.tasks.some((t) => t.id === task.id);
   }
   async updateTaskViaModal(id) {
     const api = getTasksApi(this.app);
@@ -5207,6 +5401,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.reloadDebounceTimer = null;
+    this.seedWaitingFromCreated = false;
   }
   async onload() {
     const hadSettings = await this.loadSettings();
@@ -5216,6 +5411,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
       );
     }
     this.store = new TaskStore(this.app, this.settings);
+    this.store.subscribe(() => this.syncWaitingSince());
     this.registerView(
       VIEW_TYPE_BELKI,
       (leaf) => new TaskBoardView(leaf, this.store, this.settings, () => this.saveSettings())
@@ -5362,8 +5558,13 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
       visualStyle: normalizeVisualStyle(saved == null ? void 0 : saved.visualStyle),
       showReleaseNotes: (saved == null ? void 0 : saved.showReleaseNotes) !== false,
       lastSeenVersion: typeof (saved == null ? void 0 : saved.lastSeenVersion) === "string" ? saved.lastSeenVersion : "",
-      reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession)
+      reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession),
+      waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
+      waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
+      reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
     };
+    if (!saved || saved.waitingSince === void 0) this.seedWaitingFromCreated = true;
     if (this.settings) {
       Object.assign(this.settings, next);
     } else {
@@ -5371,6 +5572,20 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
     }
     applySectorSettings(this.settings.sectors);
     return raw != null;
+  }
+  syncWaitingSince() {
+    const waiting = findWaitingSector(this.settings.sectors);
+    const next = reconcileWaitingSince(
+      this.settings.waitingSince,
+      this.store.getTasks(),
+      waiting ? waiting.tag : null,
+      todayIso(),
+      this.seedWaitingFromCreated
+    );
+    if (this.store.getTasks().length > 0) this.seedWaitingFromCreated = false;
+    if (!next) return;
+    this.settings.waitingSince = next;
+    void this.saveSettings();
   }
   async saveSettings() {
     await this.saveData(this.settings);
@@ -5552,6 +5767,7 @@ var __testables = {
   normalizeLabelName,
   extractTags,
   completionUndoPatch,
+  reconcileWaitingSince,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,

@@ -135,6 +135,25 @@ export class TaskStore {
     this.fileModel.blocks.push({ type: "task", taskId: task.id });
     await this.save();
   }
+  /**
+   * Quick capture: turns typed text into a task without the Tasks modal. The
+   * text goes through the normal parser, so #labels, a #sector tag, priority
+   * emojis and 📅 dates typed inline work as usual. Returns false if nothing
+   * was saved (empty text, or the file changed on disk and the save was dropped).
+   */
+  async createTaskFromText(text: string, sector?: string): Promise<boolean> {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!trimmed) return false;
+    let line = ensureTaskMarker(`- [ ] ${trimmed}`);
+    line = ensureSectorInLine(line, sector);
+    const parsed = parseTaskLine(line, createId(), this.tasks.length);
+    if (!parsed) return false;
+    const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
+    this.tasks.push(task);
+    this.fileModel.blocks.push({ type: "task", taskId: task.id });
+    await this.save();
+    return this.tasks.some((t) => t.id === task.id);
+  }
   async updateTaskViaModal(id: string) {
     const api = getTasksApi(this.app);
     if (!api) {

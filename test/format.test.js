@@ -43,6 +43,7 @@ const {
   normalizeLabelName,
   extractTags,
   completionUndoPatch,
+  reconcileWaitingSince,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,
@@ -301,4 +302,22 @@ test("in-progress and cancelled status are written back, completing wins", () =>
   assert.match(serializeTaskLine(task), /^- \[\/\] /);
   assert.match(serializeTaskLine({ ...task, completed: true, completedDate: "2026-07-04" }), /^- \[x\] /);
   assert.equal(completionUndoPatch(task).status, "/", "undo restores the in-progress status");
+});
+
+test("waiting since: new waiting tasks start today, leavers are dropped", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const tasks = [
+    t("- [ ] Reply from Anna #task #waiting ➕ 2026-10-01 🆔 a"),
+    t("- [ ] Quote #task #waiting 🆔 b"),
+    t("- [ ] Not waiting #task #01this-week 🆔 c"),
+    t("- [x] Done waiting #task #waiting ✅ 2026-11-01 🆔 d")
+  ];
+  const first = reconcileWaitingSince({}, tasks, "waiting", "2026-11-04", true);
+  assert.deepEqual(first, { a: "2026-10-01", b: "2026-11-04" }, "first run seeds from ➕ created, else today");
+  assert.equal(reconcileWaitingSince(first, tasks, "waiting", "2026-11-05", false), null, "nothing changes on later days");
+  const moved = reconcileWaitingSince(first, tasks.slice(1), "waiting", "2026-11-05", false);
+  assert.deepEqual(moved, { b: "2026-11-04" }, "a task that left the sector loses its date");
+  const later = reconcileWaitingSince({}, tasks, "waiting", "2026-11-04", false);
+  assert.equal(later.a, "2026-11-04", "after the first run, a task entering waiting starts today, not at its created date");
+  assert.equal(reconcileWaitingSince(first, [], "waiting", "2026-11-05", false), null, "an empty file never wipes the record");
 });

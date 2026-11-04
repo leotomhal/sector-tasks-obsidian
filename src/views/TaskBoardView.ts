@@ -6,12 +6,13 @@ import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBe
 import { dedupeLabels, displayLabel, normalizeLabelName } from "../labels";
 import { getPriorityClass, getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName, uniqueRealProjects } from "../projects";
-import { buildReviewSteps, pruneReviewSession, reviewSectorNeighbors, reviewTypeLabel } from "../review";
+import { buildReviewSteps, findWaitingSector, pruneReviewSession, reviewSectorNeighbors, reviewTypeLabel } from "../review";
 import { applyBelkiFontSettings, applyBelkiThemeSettings, normalizeOverdueRange, overdueRangeLabel } from "../settings";
 import { E_ID, INBOX_SECTOR, SECTOR_SET } from "../tasksFormat";
 import { OVERDUE_RANGES } from "../types";
 import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
+import { formatWaitingAge, waitingDays } from "../waiting";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
 export const LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
@@ -94,6 +95,8 @@ export class TaskBoardView extends ItemView {
   sidebarScrollLeft: number;
   pendingScrollSnapshot: { top: number; left: number } | null;
   composerCleanup: (() => void) | null;
+  captureDraft = "";
+  captureInputEl: HTMLInputElement | null = null;
   renderScheduled: boolean;
   handleRootKeyDown: (event: KeyboardEvent) => void;
   unsubscribe?: () => void;
@@ -242,6 +245,9 @@ export class TaskBoardView extends ItemView {
     this.removeProjectMenu();
     const { containerEl } = this;
     const sidebarScrollLeft = containerEl.querySelector(".belki-sidebar")?.scrollLeft ?? this.sidebarScrollLeft;
+    // Re-rendering replaces the quick-capture field; keep typing focus across it.
+    const captureHadFocus = this.captureInputEl !== null && this.captureInputEl === containerEl.doc.activeElement;
+    this.captureInputEl = null;
     containerEl.empty();
     containerEl.addClass("belki-root");
     containerEl.addClass("belki-view");
@@ -260,6 +266,11 @@ export class TaskBoardView extends ItemView {
       this.renderReviewOverlay(containerEl);
     }
     this.restoreSidebarScroll(sidebarScrollLeft);
+    if (captureHadFocus && this.captureInputEl) {
+      const input = this.captureInputEl;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
   }
   getMainScrollSnapshot() {
     const main = this.containerEl.querySelector(".belki-main");
@@ -627,13 +638,15 @@ export class TaskBoardView extends ItemView {
     const titleWrap = header.createDiv();
     this.renderEyebrow(titleWrap);
     titleWrap.createEl("h1", { text: this.getTitle() });
-    titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
+    const subtitle = titleWrap.createDiv({ cls: "belki-subtitle", text: `${visible.length} task${visible.length === 1 ? "" : "s"}` });
     this.renderSortingControl(header);
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
     const sections = main.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
+    // With a single section its header badge already shows the same count.
+    if (sections.querySelectorAll(":scope > .belki-section").length <= 1) subtitle.remove();
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
@@ -712,6 +725,7 @@ export class TaskBoardView extends ItemView {
       ? this.getInboxTasks(active)
       : this.sortTasks(active.filter((task) => normalizeTaskProject(task.project) === this.overviewSector));
     const sections = main.createDiv({ cls: "belki-sections" });
+    if (isInboxTab) this.renderQuickCapture(sections);
     const section = this.createSection(sections, sectorLabel, sectionTasks.length);
     if (!isInboxTab) this.markSectorSection(section, this.overviewSector);
     this.renderTaskList(section, sectionTasks);
@@ -876,7 +890,8 @@ export class TaskBoardView extends ItemView {
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
       const todayTasks = this.sortTasks(active.filter((task) => isToday(task.due)));
-      const todaySection = this.createSection(parent, formatGroupHeader(todayIso()), todayTasks.length);
+      // The page is already titled "Today", so the section names the date only.
+      const todaySection = this.createSection(parent, formatGroupHeader(todayIso(), false), todayTasks.length);
       this.enableTodayDrop(todaySection);
       this.renderTaskList(todaySection, todayTasks);
       const overdue = this.sortTasks(this.getOverdueTasks(active));
@@ -966,6 +981,7 @@ export class TaskBoardView extends ItemView {
         void this.startReview("inbox-only");
       });
     } : void 0;
+    if (this.mode === "inbox") this.renderQuickCapture(parent);
     const section = this.createSection(parent, this.getTitle(), visible.length, headerAction);
     this.renderTaskList(section, visible);
   }
@@ -1478,6 +1494,7 @@ export class TaskBoardView extends ItemView {
         setIcon(ri, "repeat");
       }
     }
+    this.renderWaitingAge(meta, task);
     if (task.deadline) {
       meta.createSpan({
         cls: `belki-task-deadline${isBeforeToday(task.deadline) ? " is-overdue" : ""}`,
@@ -1535,14 +1552,16 @@ export class TaskBoardView extends ItemView {
       event.stopPropagation();
       void this.openTaskInNote(task);
     });
-    actions.createEl("button", {
+    const deleteBtn = actions.createEl("button", {
       cls: "belki-task-delete",
-      text: "\xD7",
       attr: {
         type: "button",
         "aria-label": "Delete task"
       }
-    }).addEventListener("click", (event) => {
+    });
+    // Same Lucide icon set and box as the jump button, so the pair lines up.
+    setIcon(deleteBtn, "x");
+    deleteBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       new ConfirmModal(this.app, {
         title: "Delete task?",
@@ -1554,6 +1573,53 @@ export class TaskBoardView extends ItemView {
         void this.store.deleteTask(task.id);
       }).open();
     });
+  }
+  /** Type-and-Enter field that files a task straight into the Inbox. */
+  renderQuickCapture(parent: HTMLElement) {
+    const form = parent.createEl("form", { cls: "belki-quick-capture" });
+    const icon = form.createSpan({ cls: "belki-quick-capture-icon" });
+    setIcon(icon, "plus");
+    const input = form.createEl("input", {
+      cls: "belki-quick-capture-input",
+      attr: {
+        type: "text",
+        placeholder: "Capture a task, then press enter",
+        "aria-label": "Quick capture to inbox",
+        enterkeyhint: "done",
+        autocomplete: "off"
+      }
+    });
+    input.value = this.captureDraft;
+    this.captureInputEl = input;
+    input.addEventListener("input", () => {
+      this.captureDraft = input.value;
+    });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      this.captureDraft = "";
+      input.value = "";
+      void this.store.createTaskFromText(text).then((saved) => {
+        if (saved) return;
+        // Not written (e.g. the file changed on disk): give the text back.
+        this.captureDraft = text;
+        this.render();
+      });
+    });
+  }
+  /** "Waiting 12 d" on open tasks in the waiting sector; marked once it passes the threshold. */
+  renderWaitingAge(parent: HTMLElement, task: Task) {
+    if (task.completed) return;
+    const since = this.settings.waitingSince[task.id];
+    if (!since) return;
+    const waiting = findWaitingSector(this.settings.sectors);
+    if (!waiting || (normalizeTaskProject(task.project) || "").toLowerCase() !== waiting.tag.toLowerCase()) return;
+    const today = todayIso();
+    const threshold = this.settings.waitingHighlightDays;
+    const chip = parent.createSpan({ cls: "belki-task-waiting", text: formatWaitingAge(since, today) });
+    chip.toggleClass("is-stale", threshold > 0 && waitingDays(since, today) >= threshold);
+    chip.setAttr("aria-label", `Waiting since ${formatShortDate(since)}`);
   }
   async openTaskInNote(task: Task) {
     const path = task.sourcePath || this.store.filePath;
@@ -2004,6 +2070,7 @@ export class TaskBoardView extends ItemView {
       meta.createSpan({ cls: "belki-review-sector-chip", text: currentSector ? currentSector.label : "Inbox" });
     }
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
+    if (step.kind === "waiting") this.renderWaitingAge(meta, task);
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
     const withHotkey = (el: HTMLElement, letter: string) => {
@@ -2320,16 +2387,11 @@ export function formatDueChip(value: string): string {
   }
   return formatShortDate(value);
 }
-export function formatGroupHeader(value: string): string {
-  const day = formatShortDate(value);
-  const weekday = formatWeekday(value);
-  if (value === todayIso()) {
-    return `${day} - Today - ${weekday}`;
-  }
-  if (value === addDaysIso2(1)) {
-    return `${day} - Tomorrow - ${weekday}`;
-  }
-  return `${day} - ${weekday}`;
+export function formatGroupHeader(value: string, relative = true): string {
+  const date = `${formatWeekday(value)}, ${formatShortDate(value)}`;
+  if (relative && value === todayIso()) return `Today \u00b7 ${date}`;
+  if (relative && value === addDaysIso2(1)) return `Tomorrow \u00b7 ${date}`;
+  return date;
 }
 export function formatCompletedHeader(date: string): string {
   if (date === todayIso()) return "Today";

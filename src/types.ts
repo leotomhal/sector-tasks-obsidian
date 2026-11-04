@@ -125,6 +125,12 @@ export interface BelkiSettings {
   visualStyle: string;
   showReleaseNotes: boolean;
   lastSeenVersion: string;
+  /** Task id → ISO date the task entered the waiting sector. */
+  waitingSince: Record<string, string>;
+  /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
+  waitingHighlightDays: number;
+  reviewNotes: boolean;
+  reviewNotesFolder: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }
