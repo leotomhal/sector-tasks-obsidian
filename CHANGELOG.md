@@ -3,6 +3,23 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.4.0
+
+### New
+- **Snooze:** right-click a task and snooze it by 1, 3 or 7 days. Each entry shows the date the task moves to. It counts from the due date if that's still ahead, otherwise from today, so an overdue task never lands in the past again.
+- **Waiting age:** tasks in your Waiting sector show how long they've been waiting ("Waiting 12 d"), on the board and in the review. After 7 days the count turns red as a nudge to follow up; change or turn off the threshold under Settings → Sectors. The date lives in the plugin's data, not in your tasks file. Tasks that were already waiting start from their ➕ created date.
+- **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field. Type a task, press Enter, done — no dialog. `#labels`, a `#sector` tag, priority emojis and `📅` dates in the text work as usual.
+- **Review summary note** (optional, off by default): after a weekly or monthly review, a note in your `Reviews` folder lists what you finished, what moved or was deleted during the review, what's new, who you're waiting on and for how long, and open/overdue tasks per sector. Turn it on under Settings → Write a review summary note.
+- **Sectors settings page:** the sector list moved from the main settings to its own "Sectors" page (a collapsible group on Obsidian before 1.13). Renaming a sector's tag or removing a sector now asks first and tells you how many tasks are affected.
+
+### Fixed
+- **Scheduled, start and cancelled dates are no longer lost.** Whenever the plugin saved, it rewrote every task line and dropped `⏳` scheduled, `🛫` start and `❌` cancelled dates, and turned `[/]` (in progress) and `[-]` (cancelled) back into open tasks — even on lines you never touched. These are now kept. Completing a recurring task moves `⏳`/`🛫` along with the due date.
+- **Task row buttons on phones:** the jump and delete buttons overlapped the card's edge and looked mismatched. They're now two flat icons side by side with room to tap.
+- **Today header:** the section shows "Tuesday, 4 Nov" instead of repeating "Today", and the task count isn't shown twice.
+
+### Internal
+- `getFileByPath`/`getFolderByPath` where only one kind of file is needed; tsconfig ready for TypeScript 7 (`moduleResolution: bundler`, no `baseUrl`).
+
 ## 1.3.14
 
 ### New
