@@ -147,6 +147,17 @@ function formatDueDateChip(value) {
     ...year !== thisYear ? { year: "numeric" } : {}
   }).format(date);
 }
+function daysBetweenIso(a, b) {
+  const parse = (v) => {
+    const [y, m, d] = v.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((parse(b) - parse(a)) / 864e5);
+}
+function shiftIsoDate(value, days) {
+  const [y, m, d] = value.split("-").map(Number);
+  return toIsoDate(new Date(y, m - 1, d + days));
+}
 
 // src/priority.ts
 var PRIORITY_COLORS = {
@@ -392,6 +403,9 @@ function parseTaskLine(line, id, order) {
   const due = dateAfter(E_DUE, body);
   const completedDate = dateAfter(E_DONE, body);
   const created = dateAfter(E_CREATED, body);
+  const scheduled = dateAfter(E_SCHEDULED, body);
+  const start = dateAfter(E_START, body);
+  const cancelledDate = dateAfter(E_CANCELLED, body);
   let existingId;
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
@@ -425,8 +439,12 @@ function parseTaskLine(line, id, order) {
     id: existingId || id,
     title,
     completed,
+    status: statusChar === "/" || statusChar === "-" ? statusChar : void 0,
     completedDate: completed ? completedDate : void 0,
     created,
+    scheduled,
+    start,
+    cancelledDate,
     due,
     deadline: void 0,
     project: sectorTag || void 0,
@@ -445,7 +463,7 @@ function parseTaskLine(line, id, order) {
 }
 function serializeTaskLine(task, indent = 0) {
   const pad = " ".repeat(indent);
-  const box = task.completed ? "[x]" : "[ ]";
+  const box = task.completed ? "[x]" : task.status === "/" || task.status === "-" ? `[${task.status}]` : "[ ]";
   const parts = [task.title.trim()];
   parts.push(`#${TASK_MARKER_TAG}`);
   if (task.project && SECTOR_SET.has(task.project.toLowerCase())) {
@@ -458,7 +476,10 @@ function serializeTaskLine(task, indent = 0) {
   if (pe) parts.push(pe);
   if (task.repeat) parts.push(`${E_RECUR} ${serializeTasksRecurrence(task.repeat)}`);
   if (task.created) parts.push(`${E_CREATED} ${task.created}`);
+  if (task.start) parts.push(`${E_START} ${task.start}`);
+  if (task.scheduled) parts.push(`${E_SCHEDULED} ${task.scheduled}`);
   if (task.due) parts.push(`${E_DUE} ${task.due}`);
+  if (task.cancelledDate) parts.push(`${E_CANCELLED} ${task.cancelledDate}`);
   if (task.completed && task.completedDate) parts.push(`${E_DONE} ${task.completedDate}`);
   parts.push(`${E_ID} ${task.id}`);
   return `${pad}- ${box} ${parts.join(" ")}`;
@@ -4873,7 +4894,13 @@ var TaskStore = class {
         });
         this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
-        await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
+        const shift = task.due ? daysBetweenIso(task.due, nextDue) : 0;
+        await this.updateTask(id, {
+          completedOccurrences: occurrences,
+          due: nextDue,
+          scheduled: task.scheduled && shift ? shiftIsoDate(task.scheduled, shift) : task.scheduled,
+          start: task.start && shift ? shiftIsoDate(task.start, shift) : task.start
+        });
         this.showUndoNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`, () => this.undoLastCompletion());
       }
       return;
@@ -5142,8 +5169,11 @@ function reinsertDeletedTask(blocks, tasks, snapshot) {
 function completionUndoPatch(task) {
   return {
     completed: task.completed,
+    status: task.status,
     completedDate: task.completedDate,
     due: task.due,
+    scheduled: task.scheduled,
+    start: task.start,
     repeat: task.repeat ? { ...task.repeat } : void 0,
     completedOccurrences: task.completedOccurrences ? [...task.completedOccurrences] : void 0
   };

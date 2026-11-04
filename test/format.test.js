@@ -176,7 +176,10 @@ test("completionUndoPatch captures every field a completion changes", () => {
     "completedDate",
     "completedOccurrences",
     "due",
-    "repeat"
+    "repeat",
+    "scheduled",
+    "start",
+    "status"
   ]);
   assert.equal(patch.completed, false);
   assert.equal(patch.completedDate, undefined);
@@ -279,4 +282,23 @@ test("releaseNotesSince shows every skipped version, newest first", () => {
   assert.deepEqual(releaseNotesSince(entries, "1.3.12", "1.3.13").map((e) => e.version), ["1.3.13"]);
   assert.deepEqual(releaseNotesSince(entries, "", "1.3.13").map((e) => e.version), ["1.3.13"], "unknown previous version: only the current one");
   assert.deepEqual(releaseNotesSince(entries, "1.3.13", "1.3.13"), [], "nothing new");
+});
+
+test("scheduled, start and cancelled dates survive a save", () => {
+  const line = "- [ ] Plan trip #task #01this-week ➕ 2026-07-01 🛫 2026-07-10 ⏳ 2026-07-12 📅 2026-07-15 🆔 abc";
+  const { task } = parseTaskLine(line, "x", 0);
+  assert.equal(task.scheduled, "2026-07-12");
+  assert.equal(task.start, "2026-07-10");
+  assert.equal(task.title, "Plan trip");
+  assert.equal(serializeTaskLine(task), line);
+  const cancelled = parseTaskLine("- [-] Dropped #task ❌ 2026-07-03 🆔 c1", "x", 0).task;
+  assert.equal(serializeTaskLine(cancelled), "- [-] Dropped #task ❌ 2026-07-03 🆔 c1");
+});
+
+test("in-progress and cancelled status are written back, completing wins", () => {
+  const { task } = parseTaskLine("- [/] Writing #task 🆔 w1", "x", 0);
+  assert.equal(task.completed, false);
+  assert.match(serializeTaskLine(task), /^- \[\/\] /);
+  assert.match(serializeTaskLine({ ...task, completed: true, completedDate: "2026-07-04" }), /^- \[x\] /);
+  assert.equal(completionUndoPatch(task).status, "/", "undo restores the in-progress status");
 });

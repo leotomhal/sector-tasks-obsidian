@@ -200,6 +200,9 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
   const due = dateAfter(E_DUE, body);
   const completedDate = dateAfter(E_DONE, body);
   const created = dateAfter(E_CREATED, body);
+  const scheduled = dateAfter(E_SCHEDULED, body);
+  const start = dateAfter(E_START, body);
+  const cancelledDate = dateAfter(E_CANCELLED, body);
   let existingId: string | undefined;
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
@@ -233,8 +236,12 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
     id: existingId || id,
     title,
     completed,
+    status: statusChar === "/" || statusChar === "-" ? statusChar : void 0,
     completedDate: completed ? completedDate : void 0,
     created,
+    scheduled,
+    start,
+    cancelledDate,
     due,
     deadline: void 0,
     project: sectorTag || void 0,
@@ -253,7 +260,7 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
 }
 export function serializeTaskLine(task: Task, indent = 0): string {
   const pad = " ".repeat(indent);
-  const box = task.completed ? "[x]" : "[ ]";
+  const box = task.completed ? "[x]" : task.status === "/" || task.status === "-" ? `[${task.status}]` : "[ ]";
   const parts = [task.title.trim()];
   parts.push(`#${TASK_MARKER_TAG}`);
   if (task.project && SECTOR_SET.has(task.project.toLowerCase())) {
@@ -266,7 +273,10 @@ export function serializeTaskLine(task: Task, indent = 0): string {
   if (pe) parts.push(pe);
   if (task.repeat) parts.push(`${E_RECUR} ${serializeTasksRecurrence(task.repeat)}`);
   if (task.created) parts.push(`${E_CREATED} ${task.created}`);
+  if (task.start) parts.push(`${E_START} ${task.start}`);
+  if (task.scheduled) parts.push(`${E_SCHEDULED} ${task.scheduled}`);
   if (task.due) parts.push(`${E_DUE} ${task.due}`);
+  if (task.cancelledDate) parts.push(`${E_CANCELLED} ${task.cancelledDate}`);
   if (task.completed && task.completedDate) parts.push(`${E_DONE} ${task.completedDate}`);
   parts.push(`${E_ID} ${task.id}`);
   return `${pad}- ${box} ${parts.join(" ")}`;

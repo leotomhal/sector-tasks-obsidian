@@ -44,7 +44,13 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  /** "/" (in progress) or "-" (cancelled) for open tasks; kept so a save writes the line back unchanged. */
+  status?: string;
   completedDate?: string;
+  /** Tasks-plugin dates this plugin doesn't act on but must preserve: ⏳ scheduled, 🛫 start, ❌ cancelled. */
+  scheduled?: string;
+  start?: string;
+  cancelledDate?: string;
   created?: string;
   due?: string;
   deadline?: string;

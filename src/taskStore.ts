@@ -1,6 +1,6 @@
 import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
 import type { BelkiSettings, FileBlock, Task } from "./types";
-import { formatDueDateChip, todayIso } from "./dateUtils";
+import { daysBetweenIso, formatDueDateChip, shiftIsoDate, todayIso } from "./dateUtils";
 import { dedupeLabels } from "./labels";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
@@ -205,7 +205,14 @@ export class TaskStore {
         });
         this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
-        await this.updateTask(id, { completedOccurrences: occurrences, due: nextDue });
+        // Like the Tasks plugin, move ⏳/🛫 along with the due date so they don't go stale.
+        const shift = task.due ? daysBetweenIso(task.due, nextDue) : 0;
+        await this.updateTask(id, {
+          completedOccurrences: occurrences,
+          due: nextDue,
+          scheduled: task.scheduled && shift ? shiftIsoDate(task.scheduled, shift) : task.scheduled,
+          start: task.start && shift ? shiftIsoDate(task.start, shift) : task.start
+        });
         this.showUndoNotice(`Recurring task rescheduled to ${formatDueDateChip(nextDue)}.`, () => this.undoLastCompletion());
       }
       return;
@@ -488,8 +495,11 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
 export function completionUndoPatch(task: Task): Partial<Task> {
   return {
     completed: task.completed,
+    status: task.status,
     completedDate: task.completedDate,
     due: task.due,
+    scheduled: task.scheduled,
+    start: task.start,
     repeat: task.repeat ? { ...task.repeat } : void 0,
     completedOccurrences: task.completedOccurrences ? [...task.completedOccurrences] : void 0
   };
