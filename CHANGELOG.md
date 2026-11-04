@@ -3,6 +3,17 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.5.0
+
+### New
+- **The Tasks plugin is no longer needed.** Sector Tasks now has its own editor for adding and editing tasks: title, sector, priority, due date (with Today / Tomorrow / Next week buttons), labels (with suggestions from the ones you already use) and repeat (every day, weekday, week on a chosen day, month on a chosen day, or year; every N; optionally counted from when it's done). It shows the exact `🔁` text it writes. A repeat rule you wrote earlier, like `every 15 july`, stays exactly as it is unless you change it. `Cmd/Ctrl+Enter` saves. Your file keeps the same Tasks emoji format, so you can keep the Tasks plugin installed or remove it.
+- **Year plan:** appointments and milestones as lines in your tasks file, tagged `#planning` (add `#milestone` for milestones). A new **Year plan** view in the sidebar shows the four quarters side by side with the months inside; past entries turn grey, and a milestone still open after its date says **Not reached**. Add an entry right in its quarter, and click one to edit it, jump to its line, or delete it. Multi-day entries use a start date: `🛫 2026-09-16 📅 2026-09-17`.
+- Planning entries never show up as tasks. **Today** and **Upcoming** show them in a small strip above your tasks, and the **Overview** lists the next ones.
+- New planning entries are kept together under a `## Planning` heading at the end of your tasks file, sorted by date. Once a year is over, its entries move to the archive note (Settings → Archive past years' planning, on by default); the year plan still shows them, read-only.
+
+### Fixed
+- Monthly repeat rules are written as "on the 1st", "on the 2nd" instead of "on the 1th".
+
 ## 1.4.0
 
 ### New
