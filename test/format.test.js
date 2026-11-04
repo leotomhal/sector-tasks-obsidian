@@ -44,6 +44,8 @@ const {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  buildReviewSummary,
+  snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,
@@ -320,4 +322,37 @@ test("waiting since: new waiting tasks start today, leavers are dropped", () => 
   const later = reconcileWaitingSince({}, tasks, "waiting", "2026-11-04", false);
   assert.equal(later.a, "2026-11-04", "after the first run, a task entering waiting starts today, not at its created date");
   assert.equal(reconcileWaitingSince(first, [], "waiting", "2026-11-05", false), null, "an empty file never wipes the record");
+});
+
+test("review summary lists done, moved, deleted, new and waiting tasks", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const sectors = [
+    { tag: "01this-week", label: "This week" },
+    { tag: "02next-week", label: "Next week" },
+    { tag: "waiting", label: "Waiting", isWaiting: true }
+  ];
+  const before = [
+    t("- [ ] Slides #task #01this-week 🆔 s"),
+    t("- [ ] Old idea #task #02next-week 🆔 o"),
+    t("- [ ] Reply from Anna #task #waiting 🆔 a")
+  ];
+  const snapshot = snapshotForReview(before);
+  const after = [
+    t("- [ ] Slides #task #02next-week 🆔 s"),
+    t("- [ ] Reply from Anna #task #waiting 🆔 a"),
+    t("- [x] Budget #task #01this-week ✅ 2026-11-03 🆔 b"),
+    t("- [ ] Call Ben #task ➕ 2026-11-02 📅 2026-11-01 🆔 c")
+  ];
+  const md = buildReviewSummary({
+    type: "weekly", periodKey: "2026-W45", today: "2026-11-04", tasks: after, sectors, snapshot,
+    waitingSince: { a: "2026-10-23" }
+  });
+  assert.match(md, /^---\ntype: weekly-review\ndate: 2026-11-04\nperiod: 2026-W45\n---\n# Weekly review 2026-W45/);
+  assert.match(md, /## Done recently \(1\)\n- Budget · This week/);
+  assert.match(md, /## Moved during the review \(1\)\n- Slides: This week → Next week/);
+  assert.match(md, /## Deleted during the review \(1\)\n- Old idea/);
+  assert.match(md, /## New recently \(1\)\n- Call Ben · Inbox/);
+  assert.match(md, /## Waiting \(1\)\n- Reply from Anna · waiting 12 days/);
+  assert.match(md, /\| Inbox \| 1 \| 1 \|/);
+  assert.ok(!/- \[[ x]\]/.test(md), "no checkbox lines that Tasks queries would pick up");
 });

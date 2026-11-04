@@ -1,5 +1,5 @@
 import { addDaysIso, todayIso } from "./dateUtils";
-import type { ReviewSession, ReviewStep, SectorConfig, Task } from "./types";
+import type { ReviewSession, ReviewSnapshotEntry, ReviewStep, SectorConfig, Task } from "./types";
 import { normalizeTaskProject } from "./projects";
 
 export function findWaitingSector(sectors: SectorConfig[]): SectorConfig | null {
@@ -32,7 +32,16 @@ export function normalizeReviewSession(raw?: ReviewSession | null): ReviewSessio
   if (steps.length === 0 || stepIndex >= steps.length) return null;
   const completedSteps = Number.isInteger(raw.completedSteps) && raw.completedSteps >= 0 ? raw.completedSteps : 0;
   const totalSteps = Number.isInteger(raw.totalSteps) && raw.totalSteps >= completedSteps + steps.length ? raw.totalSteps : completedSteps + steps.length;
-  return { type, totalSteps, completedSteps, steps, stepIndex, taskIndex };
+  const session: ReviewSession = { type, totalSteps, completedSteps, steps, stepIndex, taskIndex };
+  if (typeof raw.startedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.startedAt)) session.startedAt = raw.startedAt;
+  if (raw.startSnapshot && typeof raw.startSnapshot === "object") {
+    const snapshot: Record<string, ReviewSnapshotEntry> = {};
+    for (const [id, entry] of Object.entries(raw.startSnapshot)) {
+      if (entry && typeof entry.sector === "string" && typeof entry.title === "string") snapshot[id] = { sector: entry.sector, title: entry.title };
+    }
+    session.startSnapshot = snapshot;
+  }
+  return session;
 }
 export function buildReviewSteps(type: string, sectors: SectorConfig[], tasks: Task[]): ReviewStep[] {
   const active = tasks.filter((t) => !t.completed);

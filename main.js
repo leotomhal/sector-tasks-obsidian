@@ -25,10 +25,10 @@ __export(main_exports, {
   toSettingsData: () => toSettingsData
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 
 // src/views/TaskBoardView.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/views/ConfirmModal.ts
 var import_obsidian = require("obsidian");
@@ -880,7 +880,16 @@ function normalizeReviewSession(raw) {
   if (steps.length === 0 || stepIndex >= steps.length) return null;
   const completedSteps = Number.isInteger(raw.completedSteps) && raw.completedSteps >= 0 ? raw.completedSteps : 0;
   const totalSteps = Number.isInteger(raw.totalSteps) && raw.totalSteps >= completedSteps + steps.length ? raw.totalSteps : completedSteps + steps.length;
-  return { type, totalSteps, completedSteps, steps, stepIndex, taskIndex };
+  const session = { type, totalSteps, completedSteps, steps, stepIndex, taskIndex };
+  if (typeof raw.startedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw.startedAt)) session.startedAt = raw.startedAt;
+  if (raw.startSnapshot && typeof raw.startSnapshot === "object") {
+    const snapshot = {};
+    for (const [id, entry] of Object.entries(raw.startSnapshot)) {
+      if (entry && typeof entry.sector === "string" && typeof entry.title === "string") snapshot[id] = { sector: entry.sector, title: entry.title };
+    }
+    session.startSnapshot = snapshot;
+  }
+  return session;
 }
 function buildReviewSteps(type, sectors, tasks) {
   const active = tasks.filter((t) => !t.completed);
@@ -2346,6 +2355,128 @@ function waitingDays(since, today) {
   return Math.max(0, daysBetweenIso(since, today));
 }
 
+// src/reviewSummary.ts
+var import_obsidian4 = require("obsidian");
+function reviewNoteTitle(type, periodKey) {
+  return `${type === "monthly" ? "Monthly" : "Weekly"} review ${periodKey}`;
+}
+function buildReviewSummary(input) {
+  const { type, periodKey, today, tasks, sectors, snapshot, waitingSince } = input;
+  const windowDays = type === "monthly" ? 30 : 7;
+  const windowStart = shiftDays(today, -(windowDays - 1));
+  const labels = new Map(sectors.map((s) => [s.tag.toLowerCase(), s.label]));
+  const sectorName = (tag) => tag ? labels.get(tag.toLowerCase()) || `#${tag}` : "Inbox";
+  const sectorOf = (task) => normalizeTaskProject(task.project) || "";
+  const open = tasks.filter((t) => !t.completed);
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const done = tasks.filter((t) => t.completed && isIsoDate(t.completedDate) && t.completedDate >= windowStart && t.completedDate <= today).sort((a, b) => (b.completedDate || "").localeCompare(a.completedDate || ""));
+  const moved = [];
+  const deleted = [];
+  for (const [id, before] of Object.entries(snapshot)) {
+    const task = byId.get(id);
+    if (!task) {
+      deleted.push(before.title);
+      continue;
+    }
+    if (task.completed) continue;
+    const now = sectorOf(task);
+    if (now.toLowerCase() !== before.sector.toLowerCase()) {
+      moved.push(`${task.title}: ${sectorName(before.sector)} → ${sectorName(now)}`);
+    }
+  }
+  const added = tasks.filter((t) => isIsoDate(t.created) && t.created >= windowStart && t.created <= today);
+  const waitingSector = findWaitingSector(sectors);
+  const waiting = waitingSector ? open.filter((t) => sectorOf(t).toLowerCase() === waitingSector.tag.toLowerCase()).map((t) => ({ task: t, days: waitingSince[t.id] ? Math.max(0, daysBetweenIso(waitingSince[t.id], today)) : null })).sort((a, b) => {
+    var _a, _b;
+    return ((_a = b.days) != null ? _a : -1) - ((_b = a.days) != null ? _b : -1);
+  }) : [];
+  const lines = [
+    "---",
+    `type: ${type}-review`,
+    `date: ${today}`,
+    `period: ${periodKey}`,
+    "---",
+    `# ${reviewNoteTitle(type, periodKey)}`,
+    "",
+    `${open.length} open task${open.length === 1 ? "" : "s"} after the review. "Recent" below means the last ${windowDays} days.`,
+    ""
+  ];
+  const section = (title, items, empty) => {
+    lines.push(`## ${title} (${items.length})`);
+    lines.push(...items.length ? items.map((item) => `- ${item}`) : [empty], "");
+  };
+  section("Done recently", done.map((t) => `${t.title} · ${sectorName(sectorOf(t))}`), "Nothing completed.");
+  section("Moved during the review", moved, "Nothing moved.");
+  if (deleted.length) section("Deleted during the review", deleted, "");
+  section("New recently", added.map((t) => `${t.title} · ${sectorName(sectorOf(t))}${t.completed ? " (done)" : ""}`), "Nothing new.");
+  if (waitingSector) {
+    section(
+      waitingSector.label,
+      waiting.map(({ task, days }) => `${task.title}${days === null ? "" : ` · waiting ${days} day${days === 1 ? "" : "s"}`}`),
+      "Nothing to wait for."
+    );
+  }
+  lines.push("## Open per sector", "", "| Sector | Open | Overdue |", "| --- | ---: | ---: |");
+  for (const tag of ["", ...sectors.map((s) => s.tag)]) {
+    const inSector = open.filter((t) => sectorOf(t).toLowerCase() === tag.toLowerCase());
+    const overdue = inSector.filter((t) => isIsoDate(t.due) && t.due < today).length;
+    lines.push(`| ${sectorName(tag)} | ${inSector.length} | ${overdue} |`);
+  }
+  return lines.join("\n") + "\n";
+}
+function shiftDays(iso, days) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function snapshotForReview(tasks) {
+  const snapshot = {};
+  for (const task of tasks) {
+    if (!task.completed) snapshot[task.id] = { sector: normalizeTaskProject(task.project) || "", title: task.title };
+  }
+  return snapshot;
+}
+async function writeReviewSummaryNote(app, settings, session, tasks) {
+  if (session.type !== "weekly" && session.type !== "monthly") return;
+  const periodKey = session.type === "monthly" ? currentMonthKey() : currentIsoWeekKey();
+  const markdown = buildReviewSummary({
+    type: session.type,
+    periodKey,
+    today: todayIso(),
+    tasks,
+    sectors: settings.sectors,
+    snapshot: session.startSnapshot || {},
+    waitingSince: settings.waitingSince
+  });
+  try {
+    const folder = (0, import_obsidian4.normalizePath)(settings.reviewNotesFolder || "Reviews");
+    if (!(app.vault.getFolderByPath(folder) instanceof import_obsidian4.TFolder)) {
+      await app.vault.createFolder(folder);
+    }
+    const base = `${folder}/${reviewNoteTitle(session.type, periodKey)}`;
+    let path = (0, import_obsidian4.normalizePath)(`${base}.md`);
+    for (let n = 2; app.vault.getAbstractFileByPath(path); n++) path = (0, import_obsidian4.normalizePath)(`${base} (${n}).md`);
+    const file = await app.vault.create(path, markdown);
+    showOpenNotice(app, file);
+  } catch (error) {
+    console.error("[belki] Could not write the review summary note.", error);
+    new import_obsidian4.Notice("Could not write the review summary note. Check the review notes folder in the plugin settings.");
+  }
+}
+function showOpenNotice(app, file) {
+  let notice = null;
+  const fragment = createFragment((el) => {
+    el.appendText("Review summary saved. ");
+    const link = el.createEl("a", { cls: "belki-notice-undo", text: "Open note" });
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      notice == null ? void 0 : notice.hide();
+      void app.workspace.getLeaf(true).openFile(file);
+    });
+  });
+  notice = new import_obsidian4.Notice(fragment, 8e3);
+}
+
 // src/views/TaskBoardView.ts
 var VIEW_TYPE_BELKI = "sector-task-board";
 var LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
@@ -2399,7 +2530,7 @@ var SORT_OPTIONS = [
   { mode: "project", label: "Sector" },
   { mode: "alphabetical", label: "Alphabetical" }
 ];
-var TaskBoardView = class extends import_obsidian4.ItemView {
+var TaskBoardView = class extends import_obsidian5.ItemView {
   constructor(leaf, store, settings, saveSettings) {
     super(leaf);
     this.captureDraft = "";
@@ -2634,7 +2765,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         "aria-expanded": String(this.mobileNavOpen)
       }
     });
-    (0, import_obsidian4.setIcon)(mobileToggle, this.mobileNavOpen ? "x" : "menu");
+    (0, import_obsidian5.setIcon)(mobileToggle, this.mobileNavOpen ? "x" : "menu");
     mobileToggle.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -2767,7 +2898,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
   async startReview(type) {
     const existing = this.settings.reviewSession;
     if (existing && existing.type !== type) {
-      new import_obsidian4.Notice(
+      new import_obsidian5.Notice(
         `${reviewTypeLabel(existing.type)} is still running – finish it first, or choose "discard" inside the review.`
       );
       this.reviewOpen = true;
@@ -2777,13 +2908,17 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     const tasks = this.store.getTasks();
     const steps = buildReviewSteps(type, this.settings.sectors, tasks);
     if (steps.length === 0) {
-      new import_obsidian4.Notice(`Nothing to review – ${reviewTypeLabel(type)} is empty.`);
+      new import_obsidian5.Notice(`Nothing to review – ${reviewTypeLabel(type)} is empty.`);
       this.stampReviewCompleted(type);
       await this.saveSettings();
       this.render();
       return;
     }
     this.settings.reviewSession = { type, totalSteps: steps.length, completedSteps: 0, steps, stepIndex: 0, taskIndex: 0 };
+    if (type === "weekly" || type === "monthly") {
+      this.settings.reviewSession.startedAt = todayIso();
+      this.settings.reviewSession.startSnapshot = snapshotForReview(tasks);
+    }
     await this.saveSettings();
     this.reviewOpen = true;
     this.render();
@@ -2829,8 +2964,11 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       this.stampReviewCompleted(session.type);
       await this.saveSettings();
       this.reviewOpen = false;
-      new import_obsidian4.Notice(`${reviewTypeLabel(session.type)} complete.`);
+      new import_obsidian5.Notice(`${reviewTypeLabel(session.type)} complete.`);
       this.render();
+      if (this.settings.reviewNotes) {
+        await writeReviewSummaryNote(this.app, this.settings, session, this.store.getTasks());
+      }
       return;
     }
     await this.saveSettings();
@@ -2905,7 +3043,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     button.toggleClass("is-active", active);
     const iconSpan = button.createSpan({ cls: "belki-nav-icon" });
     if (iconKey && this.settings.icons[iconKey]) {
-      (0, import_obsidian4.setIcon)(iconSpan, this.settings.icons[iconKey]);
+      (0, import_obsidian5.setIcon)(iconSpan, this.settings.icons[iconKey]);
     }
     button.createSpan({ cls: "belki-nav-label", text: label });
     if (count !== void 0) {
@@ -3108,7 +3246,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       }
     });
     const icon = button.createSpan({ cls: "belki-sorting-icon" });
-    (0, import_obsidian4.setIcon)(icon, "arrow-up-down");
+    (0, import_obsidian5.setIcon)(icon, "arrow-up-down");
     button.createSpan({ text: "Sorting" });
     button.addEventListener("click", (event) => {
       event.preventDefault();
@@ -3781,7 +3919,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       });
       if (task.repeat) {
         const ri = dateSpan.createSpan({ cls: "belki-task-repeat-icon" });
-        (0, import_obsidian4.setIcon)(ri, "repeat");
+        (0, import_obsidian5.setIcon)(ri, "repeat");
       }
     }
     this.renderWaitingAge(meta, task);
@@ -3818,7 +3956,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     if (!task.completed && task.completedOccurrences && task.completedOccurrences.length > 0) {
       const last = task.completedOccurrences[task.completedOccurrences.length - 1];
       const lastSpan = meta.createSpan({ cls: "belki-task-last-completed" });
-      (0, import_obsidian4.setIcon)(lastSpan.createSpan({ cls: "belki-chip-icon" }), "check");
+      (0, import_obsidian5.setIcon)(lastSpan.createSpan({ cls: "belki-chip-icon" }), "check");
       lastSpan.createSpan({ text: formatDueChip(last) });
     }
     const project = normalizeTaskProject(task.project);
@@ -3837,7 +3975,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         "aria-label": "Open task in note"
       }
     });
-    (0, import_obsidian4.setIcon)(backlinkBtn, "file-symlink");
+    (0, import_obsidian5.setIcon)(backlinkBtn, "file-symlink");
     backlinkBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.openTaskInNote(task);
@@ -3849,7 +3987,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         "aria-label": "Delete task"
       }
     });
-    (0, import_obsidian4.setIcon)(deleteBtn, "x");
+    (0, import_obsidian5.setIcon)(deleteBtn, "x");
     deleteBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       new ConfirmModal(this.app, {
@@ -3867,7 +4005,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
   renderQuickCapture(parent) {
     const form = parent.createEl("form", { cls: "belki-quick-capture" });
     const icon = form.createSpan({ cls: "belki-quick-capture-icon" });
-    (0, import_obsidian4.setIcon)(icon, "plus");
+    (0, import_obsidian5.setIcon)(icon, "plus");
     const input = form.createEl("input", {
       cls: "belki-quick-capture-input",
       attr: {
@@ -3912,12 +4050,12 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
   async openTaskInNote(task) {
     const path = task.sourcePath || this.store.filePath;
     if (!path) {
-      new import_obsidian4.Notice("No source file for this task.");
+      new import_obsidian5.Notice("No source file for this task.");
       return;
     }
     const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian4.TFile)) {
-      new import_obsidian4.Notice(`Source file not found: ${path}`);
+    if (!(file instanceof import_obsidian5.TFile)) {
+      new import_obsidian5.Notice(`Source file not found: ${path}`);
       return;
     }
     let line = -1;
@@ -3931,7 +4069,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     const leaf = this.app.workspace.getLeaf(true);
     await leaf.openFile(file);
     if (line >= 0) {
-      if (leaf.view instanceof import_obsidian4.MarkdownView) {
+      if (leaf.view instanceof import_obsidian5.MarkdownView) {
         const editor = leaf.view.editor;
         editor.setCursor({ line, ch: 0 });
         editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
@@ -4313,7 +4451,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     }
     if (!session) {
       this.reviewOpen = false;
-      new import_obsidian4.Notice(`${reviewTypeLabel(rawSession.type)} complete – no open tasks left.`);
+      new import_obsidian5.Notice(`${reviewTypeLabel(rawSession.type)} complete – no open tasks left.`);
       this.renderPreservingMainScroll();
       return;
     }
@@ -4340,7 +4478,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
       text: `Step ${session.completedSteps + session.stepIndex + 1}/${session.totalSteps} — ${step.label} (Task ${doneInStep + 1}/${totalInStep})`
     });
     const closeButton = header.createEl("button", { cls: "belki-review-close", attr: { type: "button", "aria-label": "Close" } });
-    (0, import_obsidian4.setIcon)(closeButton, "x");
+    (0, import_obsidian5.setIcon)(closeButton, "x");
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });
@@ -4390,7 +4528,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     });
     const actions = modal.createDiv({ cls: "belki-review-actions" });
     if (step.kind === "inbox") {
-      if (import_obsidian4.Platform.isMobile) {
+      if (import_obsidian5.Platform.isMobile) {
         const row = actions.createDiv({ cls: "belki-review-inbox-row" });
         for (const sector of this.settings.sectors) {
           const sectorButton = row.createEl("button", { cls: "belki-button", text: sector.label });
@@ -4422,7 +4560,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
         this.runReviewAction(() => this.applyReviewWaitingAction("wait"));
       });
     } else if (step.kind === "date") {
-      if (import_obsidian4.Platform.isMobile) {
+      if (import_obsidian5.Platform.isMobile) {
         const row = actions.createDiv({ cls: "belki-review-inbox-row" });
         for (const sector of this.settings.sectors) {
           const sectorButton = row.createEl("button", { cls: "belki-button", text: sector.label });
@@ -4554,7 +4692,7 @@ var TaskBoardView = class extends import_obsidian4.ItemView {
     event.stopImmediatePropagation();
   }
 };
-var LabelPromptModal = class extends import_obsidian4.Modal {
+var LabelPromptModal = class extends import_obsidian5.Modal {
   constructor(app, onSubmit) {
     super(app);
     this.onSubmit = onSubmit;
@@ -4844,13 +4982,13 @@ function bundledReleaseNotes() {
 }
 
 // src/views/ReleaseNotesModal.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 var CHANGELOG_URL = "https://github.com/leotomhal/sector-tasks-obsidian/blob/main/CHANGELOG.md";
-var ReleaseNotesModal = class extends import_obsidian5.Modal {
+var ReleaseNotesModal = class extends import_obsidian6.Modal {
   constructor(app, entries) {
     super(app);
     this.entries = entries;
-    this.component = new import_obsidian5.Component();
+    this.component = new import_obsidian6.Component();
   }
   onOpen() {
     const { contentEl } = this;
@@ -4862,7 +5000,7 @@ var ReleaseNotesModal = class extends import_obsidian5.Modal {
       const section = contentEl.createDiv({ cls: "belki-release-notes-entry" });
       if (this.entries.length > 1) section.createEl("h3", { text: `Version ${entry.version}` });
       const body = section.createDiv({ cls: "belki-release-notes-body" });
-      void import_obsidian5.MarkdownRenderer.render(this.app, entry.body, body, "", this.component);
+      void import_obsidian6.MarkdownRenderer.render(this.app, entry.body, body, "", this.component);
     }
     const footer = contentEl.createDiv({ cls: "belki-release-notes-footer" });
     footer.createEl("a", { text: "Full changelog", href: CHANGELOG_URL });
@@ -4878,7 +5016,7 @@ var ReleaseNotesModal = class extends import_obsidian5.Modal {
 };
 
 // src/taskStore.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 var TaskStore = class {
   constructor(app, settings) {
     this.app = app;
@@ -4893,13 +5031,13 @@ var TaskStore = class {
     this.lastDeletion = null;
   }
   get filePath() {
-    return (0, import_obsidian6.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
+    return (0, import_obsidian7.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
   }
   isCurrentlyWriting(path) {
-    return this.writing && (0, import_obsidian6.normalizePath)(path) === this.filePath;
+    return this.writing && (0, import_obsidian7.normalizePath)(path) === this.filePath;
   }
   isTaskStorageFile(path) {
-    return (0, import_obsidian6.normalizePath)(path) === this.filePath;
+    return (0, import_obsidian7.normalizePath)(path) === this.filePath;
   }
   getTasks() {
     return this.tasks.map(cloneTask);
@@ -4981,7 +5119,7 @@ var TaskStore = class {
   async createTaskViaModal(sector) {
     const api = getTasksApi(this.app);
     if (!api) {
-      new import_obsidian6.Notice("Tasks plugin not available – cannot create task.");
+      new import_obsidian7.Notice("Tasks plugin not available – cannot create task.");
       return;
     }
     let line = await api.createTaskLineModal();
@@ -4990,7 +5128,7 @@ var TaskStore = class {
     line = ensureSectorInLine(line, sector);
     const parsed = parseTaskLine(line, createId(), this.tasks.length);
     if (!parsed) {
-      new import_obsidian6.Notice("Could not parse the task line from the Tasks modal.");
+      new import_obsidian7.Notice("Could not parse the task line from the Tasks modal.");
       return;
     }
     const task = { ...parsed.task, sourcePath: this.filePath };
@@ -5020,7 +5158,7 @@ var TaskStore = class {
   async updateTaskViaModal(id) {
     const api = getTasksApi(this.app);
     if (!api) {
-      new import_obsidian6.Notice("Tasks plugin not available – cannot edit task.");
+      new import_obsidian7.Notice("Tasks plugin not available – cannot edit task.");
       return;
     }
     const current = this.tasks.find((t) => t.id === id);
@@ -5031,7 +5169,7 @@ var TaskStore = class {
     line = ensureTaskMarker(line.trim());
     const parsed = parseTaskLine(line, id, current.order);
     if (!parsed) {
-      new import_obsidian6.Notice("Could not parse the edited task line.");
+      new import_obsidian7.Notice("Could not parse the edited task line.");
       return;
     }
     const updated = { ...parsed.task, id, order: current.order, sourcePath: this.filePath };
@@ -5114,22 +5252,22 @@ var TaskStore = class {
         void undo();
       });
     });
-    notice = new import_obsidian6.Notice(fragment, 6e3);
+    notice = new import_obsidian7.Notice(fragment, 6e3);
   }
   /** Restores the task state captured before the most recent completion. */
   async undoLastCompletion() {
     const last = this.lastCompletion;
     if (!last) {
-      new import_obsidian6.Notice("Nothing to undo.");
+      new import_obsidian7.Notice("Nothing to undo.");
       return false;
     }
     this.lastCompletion = null;
     if (!this.tasks.some((t) => t.id === last.id)) {
-      new import_obsidian6.Notice("The completed task is no longer in the tasks file.");
+      new import_obsidian7.Notice("The completed task is no longer in the tasks file.");
       return false;
     }
     await this.updateTask(last.id, last.patch);
-    new import_obsidian6.Notice(`Restored "${last.title}".`);
+    new import_obsidian7.Notice(`Restored "${last.title}".`);
     return true;
   }
   /** Deletes one task the user chose to delete, with a notice that can undo it. */
@@ -5144,7 +5282,7 @@ var TaskStore = class {
   async undoLastDeletion() {
     const snapshot = this.lastDeletion;
     if (!snapshot) {
-      new import_obsidian6.Notice("Nothing to undo.");
+      new import_obsidian7.Notice("Nothing to undo.");
       return false;
     }
     this.lastDeletion = null;
@@ -5153,7 +5291,7 @@ var TaskStore = class {
     this.fileModel.blocks = restored.blocks;
     this.tasks = restored.tasks;
     await this.save();
-    new import_obsidian6.Notice(`Restored "${snapshot.task.title}".`);
+    new import_obsidian7.Notice(`Restored "${snapshot.task.title}".`);
     return true;
   }
   get archiveFilePath() {
@@ -5232,7 +5370,7 @@ ${lines.join("\n")}
   async save() {
     const file = await this.ensureFile(this.filePath);
     if (!file) {
-      new import_obsidian6.Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
+      new import_obsidian7.Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
       return;
     }
     const tasksById = new Map(this.tasks.map((t) => [t.id, t]));
@@ -5260,7 +5398,7 @@ ${lines.join("\n")}
       this.writing = false;
     }
     if (conflict) {
-      new import_obsidian6.Notice("Tasks file changed on disk (sync or external edit). Reloaded the latest version — your last action was not applied, please retry.");
+      new import_obsidian7.Notice("Tasks file changed on disk (sync or external edit). Reloaded the latest version — your last action was not applied, please retry.");
       await this.load();
       return;
     }
@@ -5275,9 +5413,9 @@ ${lines.join("\n")}
   }
   // --- File helpers --------------------------------------------------------
   async ensureFile(path) {
-    const normalizedPath = (0, import_obsidian6.normalizePath)(path);
+    const normalizedPath = (0, import_obsidian7.normalizePath)(path);
     const existing = this.app.vault.getAbstractFileByPath(normalizedPath);
-    if (existing instanceof import_obsidian6.TFile) return existing;
+    if (existing instanceof import_obsidian7.TFile) return existing;
     if (existing) {
       this.warnWrongType(normalizedPath, existing);
       return null;
@@ -5288,20 +5426,20 @@ ${lines.join("\n")}
       return await this.app.vault.create(normalizedPath, "");
     } catch (error) {
       const created = this.app.vault.getAbstractFileByPath(normalizedPath);
-      if (created instanceof import_obsidian6.TFile) return created;
+      if (created instanceof import_obsidian7.TFile) return created;
       console.warn("[belki] Could not create tasks file.", error, { path: normalizedPath });
       return null;
     }
   }
   async ensureParentFolders(path) {
     var _a;
-    const parts = (0, import_obsidian6.normalizePath)(path).split("/");
+    const parts = (0, import_obsidian7.normalizePath)(path).split("/");
     parts.pop();
     let current = "";
     for (const part of parts) {
       current = current ? `${current}/${part}` : part;
       const existing = this.app.vault.getAbstractFileByPath(current);
-      if (existing instanceof import_obsidian6.TFolder) continue;
+      if (existing instanceof import_obsidian7.TFolder) continue;
       if (existing) {
         this.warnWrongType(current, existing);
         return false;
@@ -5311,7 +5449,7 @@ ${lines.join("\n")}
       } catch (error) {
         const after = this.app.vault.getAbstractFileByPath(current);
         const alreadyExists = /already exists/i.test(String((_a = error == null ? void 0 : error.message) != null ? _a : error));
-        if (after instanceof import_obsidian6.TFolder || alreadyExists) {
+        if (after instanceof import_obsidian7.TFolder || alreadyExists) {
           continue;
         }
         console.warn("[belki] Could not create folder.", error, { path: current });
@@ -5324,8 +5462,8 @@ ${lines.join("\n")}
     const key = `wrong-type:${path}`;
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
-    const kind = existing instanceof import_obsidian6.TFolder ? "folder" : "something";
-    new import_obsidian6.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
+    const kind = existing instanceof import_obsidian7.TFolder ? "folder" : "something";
+    new import_obsidian7.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
 function sameBlock(a, b) {
@@ -5397,7 +5535,7 @@ function cloneTask(task) {
 }
 
 // src/main.ts
-var BelkiPlugin = class extends import_obsidian7.Plugin {
+var BelkiPlugin = class extends import_obsidian8.Plugin {
   constructor() {
     super(...arguments);
     this.reloadDebounceTimer = null;
@@ -5406,7 +5544,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
   async onload() {
     const hadSettings = await this.loadSettings();
     if (!getTasksApi(this.app)) {
-      new import_obsidian7.Notice(
+      new import_obsidian8.Notice(
         "Sector Tasks requires the community plugin “Tasks” to be installed and enabled. Task creation and editing will not work until it is active."
       );
     }
@@ -5451,7 +5589,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new import_obsidian7.Notice("Sector Tasks labels normalized.");
+        new import_obsidian8.Notice("Sector Tasks labels normalized.");
       }
     });
     this.addCommand({
@@ -5610,7 +5748,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
     const entries = bundledReleaseNotes();
     const entry = entries.find((e) => e.version === this.manifest.version) || entries[0];
     if (!entry) {
-      new import_obsidian7.Notice("No release notes found.");
+      new import_obsidian8.Notice("No release notes found.");
       return;
     }
     new ReleaseNotesModal(this.app, [entry]).open();
@@ -5627,7 +5765,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new import_obsidian7.Notice("Sector Tasks could not reload task data.");
+      new import_obsidian8.Notice("Sector Tasks could not reload task data.");
       console.error(error);
     }
   }
@@ -5635,7 +5773,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) {
       if (manual) {
-        new import_obsidian7.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+        new import_obsidian8.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
       }
       return;
     }
@@ -5646,18 +5784,18 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
       if (manual) {
         const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
         const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
-        new import_obsidian7.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+        new import_obsidian8.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
       }
       return;
     }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
-      new import_obsidian7.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      new import_obsidian8.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
       return;
     }
     await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new import_obsidian7.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
+    new import_obsidian8.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -5742,7 +5880,7 @@ var BelkiPlugin = class extends import_obsidian7.Plugin {
       await this.store.load();
       await this.pruneCompletedTasks();
     } catch (error) {
-      new import_obsidian7.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
+      new import_obsidian8.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath
@@ -5768,6 +5906,8 @@ var __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  buildReviewSummary,
+  snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,

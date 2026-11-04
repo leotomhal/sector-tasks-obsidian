@@ -8,6 +8,7 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { findWaitingSector, normalizeReviewSession } from "./review";
 import { reconcileWaitingSince } from "./waiting";
+import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
 import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
@@ -398,6 +399,8 @@ export const __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  buildReviewSummary,
+  snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
   parseChangelog,

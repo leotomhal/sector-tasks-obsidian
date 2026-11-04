@@ -13,6 +13,7 @@ import { OVERDUE_RANGES } from "../types";
 import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
+import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
 export const LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
@@ -480,6 +481,10 @@ export class TaskBoardView extends ItemView {
       return;
     }
     this.settings.reviewSession = { type, totalSteps: steps.length, completedSteps: 0, steps, stepIndex: 0, taskIndex: 0 };
+    if (type === "weekly" || type === "monthly") {
+      this.settings.reviewSession.startedAt = todayIso();
+      this.settings.reviewSession.startSnapshot = snapshotForReview(tasks);
+    }
     await this.saveSettings();
     this.reviewOpen = true;
     this.render();
@@ -527,6 +532,9 @@ export class TaskBoardView extends ItemView {
       this.reviewOpen = false;
       new Notice(`${reviewTypeLabel(session.type)} complete.`);
       this.render();
+      if (this.settings.reviewNotes) {
+        await writeReviewSummaryNote(this.app, this.settings, session, this.store.getTasks());
+      }
       return;
     }
     await this.saveSettings();

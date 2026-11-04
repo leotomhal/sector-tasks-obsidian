@@ -97,6 +97,15 @@ export interface ReviewSession {
   steps: ReviewStep[];
   stepIndex: number;
   taskIndex: number;
+  /** Weekly/monthly only: where each open task stood when the review began, for the summary note. */
+  startedAt?: string;
+  startSnapshot?: Record<string, ReviewSnapshotEntry>;
+}
+
+export interface ReviewSnapshotEntry {
+  /** Sector tag, or "" for the Inbox. */
+  sector: string;
+  title: string;
 }
 
 export interface BelkiSettings {
