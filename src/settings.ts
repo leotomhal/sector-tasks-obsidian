@@ -417,8 +417,7 @@ export class BelkiSettingTab extends PluginSettingTab {
   }
   validateTasksFilePath(value: string): string | void {
     const path = normalizePath((value || "").trim() || DEFAULT_SETTINGS.tasksFilePath);
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing && !(existing instanceof TFile)) {
+    if (this.app.vault.getFolderByPath(path)) {
       return `"${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`;
     }
   }

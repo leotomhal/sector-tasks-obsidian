@@ -1,4 +1,4 @@
-import { App, ItemView, MarkdownView, Modal, Notice, Platform, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, MarkdownView, Modal, Notice, Platform, WorkspaceLeaf, setIcon } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
 import { showTaskContextMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
@@ -1635,8 +1635,8 @@ export class TaskBoardView extends ItemView {
       new Notice("No source file for this task.");
       return;
     }
-    const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof TFile)) {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) {
       new Notice(`Source file not found: ${path}`);
       return;
     }

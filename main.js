@@ -1437,8 +1437,7 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
   }
   validateTasksFilePath(value) {
     const path = (0, import_obsidian3.normalizePath)((value || "").trim() || DEFAULT_SETTINGS.tasksFilePath);
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing && !(existing instanceof import_obsidian3.TFile)) {
+    if (this.app.vault.getFolderByPath(path)) {
       return `"${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`;
     }
   }
@@ -4053,8 +4052,8 @@ var TaskBoardView = class extends import_obsidian5.ItemView {
       new import_obsidian5.Notice("No source file for this task.");
       return;
     }
-    const file = this.app.vault.getAbstractFileByPath(path);
-    if (!(file instanceof import_obsidian5.TFile)) {
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) {
       new import_obsidian5.Notice(`Source file not found: ${path}`);
       return;
     }
