@@ -292,7 +292,7 @@ var E_SCHEDULED = "⏳";
 var E_START = "🛫";
 var E_CANCELLED = "❌";
 var ISO = "\\d{4}-\\d{2}-\\d{2}";
-var TASK_LINE = /^(\s*)- \[( |x|X|\/|-)\]\s+(.*)$/;
+var TASK_LINE = /^(\s*)-\s\[(\s|x|X|\/|-)\]\s+(.*)$/;
 function dateAfter(emoji, text) {
   const re = new RegExp(`${emoji}\\s*(${ISO})`);
   const m = text.match(re);
