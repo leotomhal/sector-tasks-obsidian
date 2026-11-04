@@ -1,6 +1,5 @@
 import { dedupeLabels } from "./labels";
-import type { App } from "obsidian";
-import type { RepeatRule, SectorConfig, Task, TasksApiV1 } from "./types";
+import type { RepeatRule, SectorConfig, Task } from "./types";
 
 export const DEFAULT_SECTORS: SectorConfig[] = [
   { tag: "01this-week", label: "This week", inWeekly: true, inMonthly: true },
@@ -165,7 +164,7 @@ export function serializeTasksRecurrence(rule: RepeatRule): string {
       return `${base}${wd}${when}`;
     }
     case "monthly": {
-      const dom = rule.dayOfMonth !== void 0 ? ` on the ${rule.dayOfMonth}th` : "";
+      const dom = rule.dayOfMonth !== void 0 ? ` on the ${ordinal(rule.dayOfMonth)}` : "";
       const base = i === 1 ? "every month" : `every ${i} months`;
       return `${base}${dom}${when}`;
     }
@@ -174,6 +173,11 @@ export function serializeTasksRecurrence(rule: RepeatRule): string {
       return `${base}${when}`;
     }
   }
+}
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] || "th"}`;
 }
 export function extractTags(text: string): string[] {
   const out: string[] = [];
@@ -294,11 +298,6 @@ export function serializeTaskLine(task: Task, indent = 0): string {
   if (task.completed && task.completedDate) parts.push(`${E_DONE} ${task.completedDate}`);
   parts.push(`${E_ID} ${task.id}`);
   return `${pad}- ${box} ${parts.join(" ")}`;
-}
-export function getTasksApi(app: App): TasksApiV1 | undefined {
-  // App.plugins is an internal, undocumented Obsidian API; the cast keeps the access typed.
-  const withPlugins = app as App & { plugins?: { plugins?: Record<string, { apiV1?: TasksApiV1 }> } };
-  return withPlugins.plugins?.plugins?.["obsidian-tasks-plugin"]?.apiV1;
 }
 export function ensureSectorInLine(line: string, sector?: string): string {
   if (!sector) return line;

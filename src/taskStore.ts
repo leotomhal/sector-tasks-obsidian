@@ -2,9 +2,10 @@ import { App, Notice, TFile, TFolder, normalizePath } from "obsidian";
 import type { BelkiSettings, FileBlock, Task } from "./types";
 import { daysBetweenIso, formatDueDateChip, isIsoDate, shiftIsoDate, todayIso } from "./dateUtils";
 import { dedupeLabels } from "./labels";
+import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
-import { INBOX_SECTOR, PLANNING_HEADING, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, getTasksApi, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
+import { INBOX_SECTOR, PLANNING_HEADING, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
 export class TaskStore {
   app: App;
@@ -204,28 +205,14 @@ export class TaskStore {
     this.insertTaskBlock(task);
     await this.save();
   }
-  async createTaskViaModal(sector?: string) {
-    const api = getTasksApi(this.app);
-    if (!api) {
-      new Notice("Tasks plugin not available \u2013 cannot create task.");
-      return;
-    }
-    let line = await api.createTaskLineModal();
-    if (!line || !line.trim()) return;
-    line = ensureTaskMarker(line.trim());
-    line = ensureSectorInLine(line, sector);
-    const parsed = parseTaskLine(line, createId(), this.tasks.length);
-    if (!parsed) {
-      new Notice("Could not parse the task line from the Tasks modal.");
-      return;
-    }
-    const task = { ...parsed.task, sourcePath: this.filePath };
-    this.tasks.push(task);
-    this.insertTaskBlock(task);
-    await this.save();
+  /** Opens the task editor for a new task; sector "" or undefined means Inbox. */
+  async createTaskInEditor(sector?: string) {
+    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels() });
+    if (!edit) return;
+    await this.createTask(edit);
   }
   /**
-   * Quick capture: turns typed text into a task without the Tasks modal. The
+   * Quick capture: turns typed text into a task without a dialog. The
    * text goes through the normal parser, so #labels, a #sector tag, priority
    * emojis and 📅 dates typed inline work as usual. Returns false if nothing
    * was saved (empty text, or the file changed on disk and the save was dropped).
@@ -243,26 +230,26 @@ export class TaskStore {
     await this.save();
     return this.tasks.some((t) => t.id === task.id);
   }
-  async updateTaskViaModal(id: string) {
-    const api = getTasksApi(this.app);
-    if (!api) {
-      new Notice("Tasks plugin not available \u2013 cannot edit task.");
-      return;
-    }
+  /** Opens the editor for a task or planning entry and saves what it returns. */
+  async editTaskInEditor(id: string) {
     const current = this.tasks.find((t) => t.id === id);
     if (!current) return;
-    const before = serializeTaskLine(current).replace(/^\s*/, "");
-    let line = await api.editTaskLineModal(before);
-    if (!line || !line.trim()) return;
-    line = ensureTaskMarker(line.trim());
-    const parsed = parseTaskLine(line, id, current.order);
-    if (!parsed) {
-      new Notice("Could not parse the edited task line.");
-      return;
+    const edit = await openTaskEditor(this.app, {
+      task: cloneTask(current),
+      planning: current.planning === true,
+      sectors: this.settings.sectors,
+      knownLabels: this.knownLabels()
+    });
+    if (!edit) return;
+    if (current.planning) {
+      await this.updateTask(id, { title: edit.title, due: edit.due, start: edit.start, milestone: edit.milestone === true });
+    } else {
+      await this.updateTask(id, { title: edit.title, project: edit.project, due: edit.due, priority: edit.priority, labels: edit.labels, repeat: edit.repeat });
     }
-    const updated = { ...parsed.task, id, order: current.order, sourcePath: this.filePath };
-    this.tasks = this.tasks.map((t) => t.id === id ? updated : t);
-    await this.save();
+  }
+  /** Labels to suggest in the editor: the saved registry plus every label in use. */
+  knownLabels(): string[] {
+    return dedupeLabels([...(this.settings.labelRegistry || []), ...this.tasks.flatMap((t) => t.labels)]).sort();
   }
   async updateTask(id: string, patch: Partial<Task>) {
     await this.updateManyTasks([id], patch);
@@ -313,7 +300,7 @@ export class TaskStore {
         });
         this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
       } else {
-        // Like the Tasks plugin, move ⏳/🛫 along with the due date so they don't go stale.
+        // Move ⏳/🛫 along with the due date so they don't go stale (as the Tasks plugin does).
         const shift = task.due ? daysBetweenIso(task.due, nextDue) : 0;
         await this.updateTask(id, {
           completedOccurrences: occurrences,

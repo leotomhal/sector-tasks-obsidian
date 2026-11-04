@@ -150,8 +150,3 @@ export interface BelkiSettings {
   lastMonthlyReviewKey: string;
 }
 
-// Minimal surface of the Tasks plugin's public API (apiV1) that Sector Tasks uses.
-export interface TasksApiV1 {
-  createTaskLineModal(): Promise<string>;
-  editTaskLineModal(taskLine: string): Promise<string>;
-}

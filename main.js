@@ -25,7 +25,7 @@ __export(main_exports, {
   toSettingsData: () => toSettingsData
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 
 // src/views/TaskBoardView.ts
 var import_obsidian6 = require("obsidian");
@@ -367,7 +367,7 @@ function serializeTasksRecurrence(rule) {
       return `${base}${wd}${when}`;
     }
     case "monthly": {
-      const dom = rule.dayOfMonth !== void 0 ? ` on the ${rule.dayOfMonth}th` : "";
+      const dom = rule.dayOfMonth !== void 0 ? ` on the ${ordinal(rule.dayOfMonth)}` : "";
       const base = i === 1 ? "every month" : `every ${i} months`;
       return `${base}${dom}${when}`;
     }
@@ -376,6 +376,11 @@ function serializeTasksRecurrence(rule) {
       return `${base}${when}`;
     }
   }
+}
+function ordinal(n) {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"}`;
 }
 function extractTags(text) {
   const out = [];
@@ -496,11 +501,6 @@ function serializeTaskLine(task, indent = 0) {
   parts.push(`${E_ID} ${task.id}`);
   return `${pad}- ${box} ${parts.join(" ")}`;
 }
-function getTasksApi(app) {
-  var _a, _b, _c;
-  const withPlugins = app;
-  return (_c = (_b = (_a = withPlugins.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["obsidian-tasks-plugin"]) == null ? void 0 : _c.apiV1;
-}
 function ensureSectorInLine(line, sector) {
   if (!sector) return line;
   const tag = `#${sector}`;
@@ -611,8 +611,8 @@ function showTaskContextMenu(store, task, event) {
   });
   menu.addSeparator();
   menu.addItem((item) => {
-    item.setTitle("Edit in Tasks modal…").setIcon("pencil").onClick(() => {
-      void store.updateTaskViaModal(task.id);
+    item.setTitle("Edit…").setIcon("pencil").onClick(() => {
+      void store.editTaskInEditor(task.id);
     });
   });
   menu.showAtMouseEvent(event);
@@ -682,7 +682,7 @@ var TodaySidebarView = class extends import_obsidian2.ItemView {
       attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
     });
     addButton.addEventListener("click", () => {
-      void this.store.createTaskViaModal("");
+      void this.store.createTaskInEditor("");
     });
     const archivedSet = new Set(this.settings.archivedProjects);
     const open = this.store.getTasks().filter(
@@ -755,7 +755,7 @@ var TodaySidebarView = class extends import_obsidian2.ItemView {
   renderRow(parent, task, showDate) {
     const row = parent.createDiv({ cls: "belki-today-row" });
     row.addEventListener("click", () => {
-      void this.store.updateTaskViaModal(task.id);
+      void this.store.editTaskInEditor(task.id);
     });
     row.addEventListener("contextmenu", (event) => {
       event.preventDefault();
@@ -2661,9 +2661,9 @@ var PlanningEntryModal = class extends import_obsidian4.Modal {
       this.close();
       void host.openTaskInNote(entry);
     });
-    add("Edit in Tasks modal", () => {
+    add("Edit", () => {
       this.close();
-      void host.store.updateTaskViaModal(entry.id);
+      void host.store.editTaskInEditor(entry.id);
     });
     if (entry.milestone) {
       add(entry.completed ? "Mark as open" : "Mark as reached", () => {
@@ -3103,7 +3103,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     sidebarAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "";
       this.mobileNavOpen = false;
-      void this.store.createTaskViaModal(sector).then(() => this.render());
+      void this.store.createTaskInEditor(sector).then(() => this.render());
     });
     const tasks = this.store.getTasks();
     const active = tasks.filter((task) => !task.completed);
@@ -3348,14 +3348,14 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     const task = this.currentReviewTask();
     if (task && sectorTag) {
       await this.store.updateTask(task.id, { project: sectorTag });
-      await this.store.updateTaskViaModal(task.id);
+      await this.store.editTaskInEditor(task.id);
     }
     await this.advanceReview();
   }
   async applyReviewDateAction(action) {
     const task = this.currentReviewTask();
     if (task && action === "reschedule") {
-      await this.store.updateTaskViaModal(task.id);
+      await this.store.editTaskInEditor(task.id);
     }
     await this.advanceReview();
   }
@@ -3432,7 +3432,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
     inlineAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "";
-      void this.store.createTaskViaModal(sector).then(() => this.render());
+      void this.store.createTaskInEditor(sector).then(() => this.render());
     });
     if (active.length === 0 && tasks.length === 0) {
       main.createDiv({
@@ -3489,7 +3489,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
     inlineAdd.createSpan({ cls: "belki-add-text", text: `Add to ${sectorLabel}` });
     inlineAdd.addEventListener("click", () => {
-      void this.store.createTaskViaModal(isInboxTab ? "" : this.overviewSector).then(() => this.render());
+      void this.store.createTaskInEditor(isInboxTab ? "" : this.overviewSector).then(() => this.render());
     });
     const sectionTasks = isInboxTab ? this.getInboxTasks(active) : this.sortTasks(active.filter((task) => normalizeTaskProject(task.project) === this.overviewSector));
     const sections = main.createDiv({ cls: "belki-sections" });
@@ -4425,7 +4425,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     }
   }
   openTaskDetail(task) {
-    void this.store.updateTaskViaModal(task.id).then(() => this.renderPreservingMainScroll());
+    void this.store.editTaskInEditor(task.id).then(() => this.renderPreservingMainScroll());
   }
   getVisibleTasks(tasks) {
     const archivedSet = new Set(this.settings.archivedProjects);
@@ -4839,12 +4839,12 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     titleButton.setAttr("role", "button");
     titleButton.setAttr("tabindex", "0");
     titleButton.addEventListener("click", () => {
-      void this.store.updateTaskViaModal(task.id).then(() => this.render());
+      void this.store.editTaskInEditor(task.id).then(() => this.render());
     });
     titleButton.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        void this.store.updateTaskViaModal(task.id).then(() => this.render());
+        void this.store.editTaskInEditor(task.id).then(() => this.render());
       }
     });
     const meta = card.createDiv({ cls: "belki-review-task-meta" });
@@ -5297,6 +5297,44 @@ function isRepeatEnded(rule, occurrenceCount, nextDate) {
   return false;
 }
 
+// src/recurrenceForm.ts
+function weekdayOf(iso) {
+  if (!iso) return (/* @__PURE__ */ new Date()).getDay();
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay();
+}
+function dayOfMonthOf(iso) {
+  return iso ? Number(iso.slice(8, 10)) : (/* @__PURE__ */ new Date()).getDate();
+}
+function formFromRule(rule, due) {
+  var _a, _b, _c;
+  if (!rule) return { frequency: "none", interval: 1, weekday: weekdayOf(due), dayOfMonth: dayOfMonthOf(due), whenDone: false };
+  return {
+    frequency: rule.frequency,
+    interval: Math.max(1, (_a = rule.interval) != null ? _a : 1),
+    weekday: (_b = rule.weekday) != null ? _b : weekdayOf(due),
+    dayOfMonth: (_c = rule.dayOfMonth) != null ? _c : dayOfMonthOf(due),
+    whenDone: rule.mode === "completedDate"
+  };
+}
+function ruleFromForm(form) {
+  if (form.frequency === "none") return void 0;
+  const interval = Math.max(1, Math.floor(form.interval || 1));
+  const rule = {
+    frequency: form.frequency,
+    interval: form.frequency === "weekdays" ? 1 : interval,
+    mode: form.whenDone ? "completedDate" : "scheduledDate",
+    ends: "never"
+  };
+  if (form.frequency === "weekly") rule.weekday = form.weekday;
+  if (form.frequency === "monthly") rule.dayOfMonth = Math.min(31, Math.max(1, Math.floor(form.dayOfMonth || 1)));
+  return rule;
+}
+function isCustomRule(rule) {
+  if (!rule) return false;
+  return rule.frequency === "yearly" && (rule.month !== void 0 || rule.dayOfMonth !== void 0);
+}
+
 // CHANGELOG.md
 var CHANGELOG_default = '# Changelog\n\nAll notable changes to Sector Tasks are documented here. Versions follow the\n`manifest.json` version; dates are release dates.\n\n## 1.4.0\n\n### New\n- **Snooze:** right-click a task and snooze it by 1, 3 or 7 days. Each entry shows the date the task moves to. It counts from the due date if that\'s still ahead, otherwise from today, so an overdue task never lands in the past again.\n- **Waiting age:** tasks in your Waiting sector show how long they\'ve been waiting ("Waiting 12 d"), on the board and in the review. After 7 days the count turns red as a nudge to follow up; change or turn off the threshold under Settings → Sectors. The date lives in the plugin\'s data, not in your tasks file. Tasks that were already waiting start from their ➕ created date.\n- **Quick capture:** the Inbox (and the Overview\'s Inbox tab) has a text field. Type a task, press Enter, done — no dialog. `#labels`, a `#sector` tag, priority emojis and `📅` dates in the text work as usual.\n- **Review summary note** (optional, off by default): after a weekly or monthly review, a note in your `Reviews` folder lists what you finished, what moved or was deleted during the review, what\'s new, who you\'re waiting on and for how long, and open/overdue tasks per sector. Turn it on under Settings → Write a review summary note.\n- **Sectors settings page:** the sector list moved from the main settings to its own "Sectors" page (a collapsible group on Obsidian before 1.13). Renaming a sector\'s tag or removing a sector now asks first and tells you how many tasks are affected.\n\n### Fixed\n- **Scheduled, start and cancelled dates are no longer lost.** Whenever the plugin saved, it rewrote every task line and dropped `⏳` scheduled, `🛫` start and `❌` cancelled dates, and turned `[/]` (in progress) and `[-]` (cancelled) back into open tasks — even on lines you never touched. These are now kept. Completing a recurring task moves `⏳`/`🛫` along with the due date.\n- **Task row buttons on phones:** the jump and delete buttons overlapped the card\'s edge and looked mismatched. They\'re now two flat icons side by side with room to tap.\n- **Today header:** the section shows "Tuesday, 4 Nov" instead of repeating "Today", and the task count isn\'t shown twice.\n\n### Internal\n- `getFileByPath`/`getFolderByPath` where only one kind of file is needed; tsconfig ready for TypeScript 7 (`moduleResolution: bundler`, no `baseUrl`).\n\n## 1.3.14\n\n### New\n- **Release notes in Obsidian:** after the plugin updates, this "What\'s new" dialog shows what changed — including every version you skipped. It doesn\'t appear on a fresh install, you can turn it off under Settings → Show release notes after updates, and the **Show release notes** command opens it again any time.\n\n## 1.3.13\n\n### New\n- **Editorial style:** a new Appearance → Theme → Style option (default unchanged). Serif page titles with a short line above them, sections as cards with a header tinted in the sector\'s color, dates and labels as pills (overdue red, today warm), and the Overview\'s rings and counters as tiles with the sector tabs as a segmented bar. It brings its own warm light and dark palette when the color scheme follows Obsidian; a fixed or custom scheme keeps its colors.\n\n### Fixed\n- **Deleting a task now asks first.** The × on a task row used to delete the line immediately, with no way back. It now opens a "Delete task?" dialog, and after deleting, a notice with **Undo** restores the task at the same place in the file — under the same heading even if the file changed in between. Deleting from the review walkthrough\'s X hotkey gets the same Undo.\n\n## 1.3.12\n\n### New\n- **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today). New board tabs start there, and the ribbon icon, the Open command, and the Today sidebar\'s board button return to it.\n\n### Fixed\n- **"Open search" after a restart:** when the board tab had been restored at startup but not shown yet, the command focused the board without opening search. The Today sidebar\'s board button had the same problem.\n- **Settings synced from another device** (e.g. via Obsidian Sync) are now picked up. Previously the plugin kept its old settings in memory and the next save on this device overwrote the synced ones — a review in progress, renamed sectors, colors.\n\n### Internal\n- Type checks and lint now run against the Obsidian 1.14.4 API and the current plugin-review rules.\n\n## 1.3.11\n\n### Internal\n- Cleared the remaining finding from Obsidian\'s plugin review: the settings tab no longer calls the deprecated `display()` from plugin code. The fallback settings tab for Obsidian < 1.13 is unchanged and `minAppVersion` stays 1.7.2.\n\n## 1.3.10\n\n### Fixed\n- **Faster board with large task files:** rendering the board no longer re-reads and copies every task once per visible row. A leftover sub-task counter did this on every row without ever showing anything (sub-tasks aren\'t supported), and the drag-target check did the same in the Upcoming view. With 1,000 tasks this saved roughly 290 ms on every re-render — i.e. on every check-off, drag, or edit.\n\n### Internal\n- CI and release builds run on Node 22 (Node 20 is end-of-life).\n- Resolved the three high-severity `npm audit` advisories in the lint tooling. None of them ever shipped in the plugin, which has no runtime dependencies.\n- README feature list and roadmap brought up to date with 1.3.4–1.3.9.\n\n## 1.3.9\n\n### New\n- **Overview:** a new sidebar entry adds a landing dashboard — two progress rings (Today, and whichever sector tab is selected below it), Overdue/Done today/Done this week counters, a sector tab bar (Inbox first, then sectors in settings order), and a quick-add + mini task list scoped to the selected tab. Built around sectors rather than due dates, since sector is the plugin\'s actual organizing concept.\n\n## 1.3.8\n\n### New\n- **Single-line task rows:** a new Appearance → Layout → Task rows setting (default "Stacked", the unchanged existing layout) offers "Single line" — title, due date, labels, and the project chip on one row instead of a title line with a meta line below it, for a noticeably shorter list. The description isn\'t shown in this mode (a full description doesn\'t fit one line without turning into unreadable fragments); the title truncates with an ellipsis instead of wrapping.\n\n## 1.3.7\n\n### New\n- **Combine sectors into one view:** Ctrl/Cmd+click a sector in the sidebar to add it to the current view instead of replacing it — see everything from "This Week" and "Next Week" together, sorted and grouped as usual, each task still carrying its sector chip. A plain click still switches to just that one sector.\n\n### Fixed\n- The plugin version in `manifest.json` had drifted out of sync with the published 1.3.6 tag/release (still said 1.3.5). Corrected here.\n\n## 1.3.6\n\n### New\n- **Completed-view stats:** two numbers at the top of the Completed view show how many tasks were finished today and this ISO week, counted from the existing `✅` dates (recurring tasks included, counted once per completion event).\n\n### Internal\n- Fixed the release workflow\'s notes fallback (`gh release edit` has no `--generate-notes` flag) and bumped the workflow actions to their current majors.\n\n## 1.3.5\n\n### New\n- **Undo after checking a task off:** completing a task now shows a short notice with an inline "Undo" that restores the state from before — completed flag, completion date, due date, repeat rule and recorded occurrences. This covers recurring tasks too, where completing silently reschedules the task to its next due date. Also available as the **"Undo last completed task"** command, so it can get a hotkey; it works from the board, the Today sidebar, and the review walkthrough\'s `D` action.\n\n### Docs\n- The README no longer hardcodes the version number (it had gone stale twice, since release commits don\'t touch it) and links to the releases page instead.\n- Backfilled the missing 1.3.3 changelog entry.\n- `package-lock.json` now tracks the released version.\n\n## 1.3.4\n\n### New\n- **Combined right-click menu:** right-clicking a task row (board or Today sidebar) now opens one menu with due date (Today/Tomorrow/Next week/Remove) and priority (P1-P4/No priority) together, instead of two separate menus split across the row and the checkbox.\n\n### Fixed\n- **Priority now visible on open board tasks:** the board\'s task checkbox only showed its priority color once a task was checked off; it now shows it while open too, matching the Today sidebar checkbox. Priority is visible directly in the sector columns, not only via the priority sort/group mode.\n\n## 1.3.3\n\n### New\n- **Right-click priority menu:** right-clicking a task\'s checkbox (board or Today sidebar) opened a menu to set P1-P4 or clear the priority, without going through the Tasks modal. Superseded in 1.3.4, which merged it into the row\'s context menu.\n\n### Docs\n- Fixed the README\'s "Current version" line, which was still showing 1.2.1.\n- Trimmed two backlog ideas from the roadmap that are no longer wanted: the "overdue → today" bulk action and the focus-timer/Pomodoro idea.\n\n## 1.3.2\n\n### Changed\n- **Search results:** completed tasks (shown when the "search excludes completed tasks" setting is off) now sort after active matches, appear italic and greyed, and carry a "Completed" badge in the result meta row.\n\n## 1.3.1\n\n### Fixed\n- Restored support for Obsidian 1.7.2: `minAppVersion` is back to 1.7.2. Obsidian 1.13+ keeps the new declarative settings tab (settings search, drag-and-drop sectors); older versions get the previous imperative settings tab as a fallback. Version 1.3.0 itself remains marked as requiring 1.13.0 in `versions.json`, since it shipped without that fallback.\n\n## 1.3.0\n\n### New\n- Settings migrated to Obsidian\'s declarative settings API (`getSettingDefinitions()`): all Sector Tasks settings now appear in Obsidian\'s settings search (Obsidian 1.13+), sectors can be reordered by drag-and-drop and deleted directly from the list, and Appearance (fonts, theme colors, icons, project/label colors) is a proper sub-page instead of a collapsible section.\n- The tasks-file path and icon-name fields now validate input inline instead of silently falling back.\n\n### Changed\n- `minAppVersion` raised from 1.7.2 to 1.13.0 — required for the declarative settings API. Users on older Obsidian versions keep their installed plugin version but won\'t receive this update until they update Obsidian.\n- Adding a sector now creates a placeholder entry (`#new-sector`) to edit in place, replacing the separate add-sector form.\n\n## 1.2.3\n\n### Internal\n- Fixed the root cause of the type-safety warnings still reported by Obsidian\'s review of 1.2.2: `tsconfig.json` declared `lib: ES5/ES6/ES7`, so under the reviewer\'s environment `padStart`, `Object.entries`, `flatMap`, and `Promise.finally` resolved as error-typed values (locally this was masked by `@types/node` pulling in newer lib definitions). The lib is now `ES2020`, matching the compile target and Obsidian 1.7.2\'s runtime. No code changes; the bundle is unchanged.\n- Replaced the deprecated `builtin-modules` dev dependency with Node\'s built-in `builtinModules` (from `node:module`) in the esbuild config, per Obsidian\'s review recommendation. Build output is unchanged.\n\n## 1.2.2\n\n### Internal\n- Type-safety cleanup for Obsidian\'s plugin review: the entire `src/` codebase now uses real TypeScript types (central `Task`/`RepeatRule`/`SectorConfig`/`BelkiSettings`/`ReviewSession` interfaces, typed class fields and method signatures, a typed minimal `TasksApiV1` interface for the Tasks plugin API). This eliminates all ~3,400 advisory `no-unsafe-*`/`no-explicit-any` warnings from the review report; the compiled `main.js` behaves identically.\n- Replaced transpiler-artifact `let _a` optional-chaining temps with native optional chaining.\n\n## 1.2.1\n\n### Fixed\n- Cleared the blocking error from Obsidian\'s plugin review: `Workspace.revealLeaf` is only supported since Obsidian 1.7.2, so `minAppVersion` is raised from 1.6.6 to 1.7.2 (revealLeaf is used to open the Today sidebar).\n\n### Internal\n- Addressed the actionable lint findings from Obsidian\'s review: `document.createElement`/`createEl("span")` → `createSpan`/`createDiv` helpers, `var` → `const`/`let`, removed unnecessary regex escapes, added the `u` flag to emoji character classes, and removed an empty catch block.\n- Added ESLint (with `eslint-plugin-obsidianmd` + `typescript-eslint`) as a dev dependency and a `lint` script, and wired it into CI so genuine review-blocking issues surface before submission. The remaining type-safety warnings on the intentionally loosely-typed reconstructed code are advisory (non-blocking), matching how Obsidian\'s review reports them.\n\n## 1.2.0\n\n### New\n- **"Open search"** command — opens the board (activating it if needed) and jumps straight to the search overlay. Assign it a hotkey under Obsidian\'s Settings → Hotkeys.\n- **"Search excludes completed tasks"** setting (off by default): when on, completed tasks are hidden from search results everywhere search runs.\n\n### Internal\n- Completed Phases 1-4 of the source-based build migration: `main.js` is now generated from real TypeScript source (`src/`) via `tsc` + esbuild, CI runs the build and fails on drift between source and the committed bundle, and releases attest build provenance for the published assets. See prior PRs (#21-24) for details.\n\n## 1.1.1\n\n### Fixed\n- Folder creation no longer logs a "Could not create folder. Error: Folder already exists." warning (and no longer aborts file setup) when a parent folder already exists but Obsidian\'s lookup doesn\'t immediately see it — the "already exists" case is now treated as success.\n\n## 1.1.0\n\n### New\n- **"Clean up completed tasks now"** command — runs the auto-delete cleanup on demand and reports the result, including why nothing was removed (e.g. completed tasks without a `✅` date, which are never deleted).\n- **Tasks-file path warning** in settings: a note appears under the "Tasks file" field when the path points to a folder or to a file that doesn\'t exist yet.\n\n## 1.0.0\n\nFirst stable release. The Time Sector workflow is complete and the file-writing\ncore is covered by tests — see the earlier entries for the full feature history.\n\n### Changed\n- Added `authorUrl` to the manifest.\n- Removed the misleading collapse chevron from the sidebar\'s "Review" heading.\n- The Today sidebar\'s "Due tomorrow" section can now be collapsed by clicking its header.\n\n## 0.27.0\n\n### Changed\n- **Auto-cleanup safety net:** completed tasks removed by the auto-delete cleanup are now appended to an archive note (`<tasks file> (archive).md`) before deletion; if the archive can\'t be written, nothing is deleted.\n\n### Internal\n- Added a test suite (`node --test`) covering the task-line parse/serialize round-trip, recurrence handling, and tag/label helpers, plus a CI workflow that runs it on every push and pull request.\n\n## 0.26.0\n\n### New\n- **Open board** button in the Today sidebar header — jump to the full task board without going through the ribbon or command palette.\n\n### Docs\n- Added this changelog.\n\n## 0.25.0\n\n### New\n- **Due tomorrow** section in the Today sidebar, below Overdue and Due today.\n- **Tab badge** on the Today sidebar showing the count of overdue + due-today tasks.\n- **Right-click due dates:** right-click any open task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal.\n\n## 0.24.0\n\n### Changed\n- Enlarged the Today sidebar entries by ~10% (font sizes, checkbox, spacing).\n\n## 0.23.0\n\n### Changed\n- Removed the "fork of belki" attribution from the manifest author and user-facing strings; the README keeps a "Based on belki" credit. (0.22.1 was rolled into this release.)\n\n## 0.22.0\n\n### New\n- **Today sidebar:** the "Open Today sidebar" command opens a compact panel in the right sidebar listing overdue and due-today tasks, with priority-colored complete buttons, click-to-edit, and Inbox quick-add. Updates live with the tasks file.\n\n### Changed\n- Grouped all cosmetic settings (fonts, theme colors, sidebar icons, project/label colors) into a collapsible "Appearance" section.\n- Removed the unused "Task Description Font" option.\n\n## 0.21.0\n\n### New\n- **Auto-delete completed tasks:** optional cleanup that removes completed tasks from the file N days after their completion date (settings, default off).\n- **Review reminders:** the Weekly and Monthly Review buttons show a dot until a review of that kind has been completed in the current ISO week / calendar month.\n\n### Removed\n- The sector rollover feature from 0.20.0.\n\n## 0.20.0\n\n### New\n- **Sector rollover** command (later removed in 0.21.0).\n\n## 0.19.0\n\n### New\n- **Quick add task (Inbox)** command for capturing tasks straight into the Inbox via a hotkey, without opening the board.\n\n### Infrastructure\n- GitHub Actions workflow to publish releases with `main.js`, `manifest.json`, and `styles.css` attached as assets.\n';
 
@@ -5369,7 +5407,304 @@ var ReleaseNotesModal = class extends import_obsidian7.Modal {
 };
 
 // src/taskStore.ts
+var import_obsidian9 = require("obsidian");
+
+// src/views/TaskEditModal.ts
 var import_obsidian8 = require("obsidian");
+var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+var FREQUENCIES = [
+  ["none", "Never"],
+  ["daily", "Every day"],
+  ["weekdays", "Every weekday (Mon–Fri)"],
+  ["weekly", "Every week"],
+  ["monthly", "Every month"],
+  ["yearly", "Every year"]
+];
+var UNIT = { daily: "day", weekly: "week", monthly: "month", yearly: "year" };
+function openTaskEditor(app, options) {
+  return new Promise((resolve) => {
+    new TaskEditModal(app, options, resolve).open();
+  });
+}
+var fieldCounter = 0;
+var TaskEditModal = class extends import_obsidian8.Modal {
+  constructor(app, options, done) {
+    super(app);
+    this.settled = false;
+    this.options = options;
+    this.done = done;
+  }
+  finish(result) {
+    if (this.settled) return;
+    this.settled = true;
+    this.done(result);
+  }
+  onOpen() {
+    const { contentEl, options } = this;
+    const task = options.task;
+    contentEl.empty();
+    contentEl.addClass("belki-editor");
+    const planning = options.planning === true;
+    this.setTitle(task ? planning ? "Edit planning entry" : "Edit task" : planning ? "New planning entry" : "New task");
+    const form = contentEl.createEl("form", { cls: "belki-editor-form" });
+    const field = (label, cls = "") => {
+      const id = `belki-editor-${++fieldCounter}`;
+      const wrap = form.createDiv({ cls: `belki-editor-field ${cls}`.trim() });
+      wrap.createEl("label", { text: label, attr: { for: id } });
+      return { wrap, id };
+    };
+    const titleField = field("Title");
+    const title = titleField.wrap.createEl("input", { attr: { id: titleField.id, type: "text", autocomplete: "off" } });
+    title.value = (task == null ? void 0 : task.title) || "";
+    const error = form.createDiv({ cls: "belki-editor-error" });
+    error.hide();
+    let result;
+    if (planning) {
+      result = this.renderPlanningFields(form, field, title);
+    } else {
+      result = this.renderTaskFields(form, field, title);
+    }
+    const actions = form.createDiv({ cls: "modal-button-container" });
+    actions.createEl("button", { text: "Cancel", attr: { type: "button" } }).addEventListener("click", () => this.close());
+    actions.createEl("button", { cls: "mod-cta", text: task ? "Save" : "Add", attr: { type: "submit" } });
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const value = result();
+      if (typeof value === "string") {
+        error.setText(value);
+        error.show();
+        return;
+      }
+      this.finish(value);
+      this.close();
+    });
+    form.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+    window.setTimeout(() => {
+      title.focus();
+      title.setSelectionRange(title.value.length, title.value.length);
+    }, 0);
+  }
+  renderTaskFields(form, field, title) {
+    var _a, _b;
+    const { options } = this;
+    const task = options.task;
+    const row = form.createDiv({ cls: "belki-editor-row" });
+    const inRow = (label) => {
+      const id = `belki-editor-${++fieldCounter}`;
+      const wrap = row.createDiv({ cls: "belki-editor-field" });
+      wrap.createEl("label", { text: label, attr: { for: id } });
+      return { wrap, id };
+    };
+    const sectorField = inRow("Sector");
+    const sector = sectorField.wrap.createEl("select", { cls: "dropdown", attr: { id: sectorField.id } });
+    sector.createEl("option", { text: "Inbox", value: "" });
+    for (const s of options.sectors) sector.createEl("option", { text: s.label, value: s.tag });
+    const currentSector = task ? task.project || "" : options.sector || "";
+    if (currentSector && !options.sectors.some((s) => s.tag.toLowerCase() === currentSector.toLowerCase())) {
+      sector.createEl("option", { text: `#${currentSector}`, value: currentSector });
+    }
+    sector.value = (_b = (_a = options.sectors.find((s) => s.tag.toLowerCase() === currentSector.toLowerCase())) == null ? void 0 : _a.tag) != null ? _b : currentSector;
+    const priorityField = inRow("Priority");
+    const priority = priorityField.wrap.createEl("select", { cls: "dropdown", attr: { id: priorityField.id } });
+    priority.createEl("option", { text: "None", value: "none" });
+    for (const p of ["P1", "P2", "P3", "P4"]) priority.createEl("option", { text: getPriorityLabel(p), value: p });
+    priority.value = (task == null ? void 0 : task.priority) || "none";
+    const dueField = field("Due date");
+    const dueRow = dueField.wrap.createDiv({ cls: "belki-editor-inline" });
+    const due = dueRow.createEl("input", { attr: { id: dueField.id, type: "date" } });
+    due.value = (task == null ? void 0 : task.due) || "";
+    for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)], ["None", ""]]) {
+      const quick = dueRow.createEl("button", { cls: "belki-editor-chip", text: label, attr: { type: "button" } });
+      quick.addEventListener("click", () => {
+        due.value = value;
+        due.dispatchEvent(new Event("change"));
+      });
+    }
+    const labelsField = field("Labels");
+    let labels = dedupeLabels((task == null ? void 0 : task.labels) || []);
+    const chips = labelsField.wrap.createDiv({ cls: "belki-editor-labels" });
+    const labelInput = labelsField.wrap.createEl("input", { attr: { id: labelsField.id, type: "text", placeholder: "Type a label, then press enter", autocomplete: "off" } });
+    const suggestions = labelsField.wrap.createDiv({ cls: "belki-editor-suggestions" });
+    const addLabel = (raw) => {
+      const name = normalizeLabelName(raw);
+      if (!name || !/^[A-Za-z0-9_\-/À-ɏ]+$/.test(name)) return;
+      labels = dedupeLabels([...labels, name]);
+      labelInput.value = "";
+      renderLabels();
+    };
+    const renderLabels = () => {
+      chips.empty();
+      for (const label of labels) {
+        const chip = chips.createSpan({ cls: "belki-editor-label", text: `#${label}` });
+        const remove = chip.createEl("button", { text: "×", attr: { type: "button", "aria-label": `Remove #${label}` } });
+        remove.addEventListener("click", () => {
+          labels = labels.filter((l) => l !== label);
+          renderLabels();
+        });
+      }
+      suggestions.empty();
+      const typed = normalizeLabelName(labelInput.value);
+      const matches = options.knownLabels.filter((l) => !labels.includes(l) && (!typed || l.startsWith(typed))).slice(0, 8);
+      for (const match of matches) {
+        const chip = suggestions.createEl("button", { cls: "belki-editor-chip", text: `#${match}`, attr: { type: "button" } });
+        chip.addEventListener("click", () => {
+          addLabel(match);
+          labelInput.focus();
+        });
+      }
+    };
+    labelInput.addEventListener("input", renderLabels);
+    labelInput.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === ",") && !(event.metaKey || event.ctrlKey)) {
+        if (!labelInput.value.trim()) return;
+        event.preventDefault();
+        addLabel(labelInput.value);
+      } else if (event.key === "Backspace" && !labelInput.value && labels.length) {
+        labels = labels.slice(0, -1);
+        renderLabels();
+      }
+    });
+    renderLabels();
+    const original = task == null ? void 0 : task.repeat;
+    let touched = false;
+    const recurrence = formFromRule(original, task == null ? void 0 : task.due);
+    if (isCustomRule(original)) recurrence.frequency = "yearly";
+    const repeatField = field("Repeat");
+    const repeatRow = repeatField.wrap.createDiv({ cls: "belki-editor-inline" });
+    const frequency = repeatRow.createEl("select", { cls: "dropdown", attr: { id: repeatField.id } });
+    for (const [value, text] of FREQUENCIES) frequency.createEl("option", { text, value });
+    frequency.value = recurrence.frequency;
+    const detail = repeatField.wrap.createDiv({ cls: "belki-editor-repeat-detail" });
+    const note = repeatField.wrap.createDiv({ cls: "belki-editor-hint" });
+    const renderDetail = () => {
+      detail.empty();
+      const f = recurrence.frequency;
+      if (f === "none") {
+        detail.hide();
+      } else {
+        detail.show();
+        if (UNIT[f]) {
+          const every = detail.createEl("label", { cls: "belki-editor-inline-label" });
+          every.appendText("Every");
+          const n = every.createEl("input", { attr: { type: "number", min: "1", step: "1" } });
+          n.value = String(recurrence.interval);
+          every.appendText(`${UNIT[f]}(s)`);
+          n.addEventListener("change", () => {
+            recurrence.interval = Math.max(1, Math.floor(Number(n.value) || 1));
+            touched = true;
+            renderNote();
+          });
+        }
+        if (f === "weekly") {
+          const on = detail.createEl("label", { cls: "belki-editor-inline-label", text: "On" });
+          const day = on.createEl("select", { cls: "dropdown" });
+          WEEKDAYS.forEach((name, i) => day.createEl("option", { text: name, value: String(i) }));
+          day.value = String(recurrence.weekday);
+          day.addEventListener("change", () => {
+            recurrence.weekday = Number(day.value);
+            touched = true;
+            renderNote();
+          });
+        }
+        if (f === "monthly") {
+          const on = detail.createEl("label", { cls: "belki-editor-inline-label", text: "On day" });
+          const day = on.createEl("input", { attr: { type: "number", min: "1", max: "31", step: "1" } });
+          day.value = String(recurrence.dayOfMonth);
+          day.addEventListener("change", () => {
+            recurrence.dayOfMonth = Math.min(31, Math.max(1, Math.floor(Number(day.value) || 1)));
+            touched = true;
+            renderNote();
+          });
+        }
+        const whenDone = detail.createEl("label", { cls: "belki-editor-inline-label" });
+        const box = whenDone.createEl("input", { attr: { type: "checkbox" } });
+        box.checked = recurrence.whenDone;
+        whenDone.appendText("Count from when it's done");
+        box.addEventListener("change", () => {
+          recurrence.whenDone = box.checked;
+          touched = true;
+          renderNote();
+        });
+      }
+      renderNote();
+    };
+    const currentRule = () => touched ? ruleFromForm(recurrence) : original;
+    const renderNote = () => {
+      const rule = currentRule();
+      note.setText(rule ? `Written as: 🔁 ${serializeTasksRecurrence(rule)}` : "");
+      note.toggle(Boolean(rule));
+    };
+    frequency.addEventListener("change", () => {
+      recurrence.frequency = frequency.value;
+      touched = true;
+      renderDetail();
+    });
+    renderDetail();
+    return () => {
+      const text = title.value.replace(/\s+/g, " ").trim();
+      if (!text) return "Enter a title.";
+      if (due.value && !isIsoDate(due.value)) return "The due date isn't a valid date.";
+      if (labelInput.value.trim()) addLabel(labelInput.value);
+      return {
+        title: text,
+        project: sector.value || void 0,
+        due: due.value || void 0,
+        priority: priority.value,
+        labels,
+        repeat: currentRule()
+      };
+    };
+  }
+  renderPlanningFields(form, field, title) {
+    const task = this.options.task;
+    const row = form.createDiv({ cls: "belki-editor-row" });
+    const inRow = (label2) => {
+      const id = `belki-editor-${++fieldCounter}`;
+      const wrap = row.createDiv({ cls: "belki-editor-field" });
+      wrap.createEl("label", { text: label2, attr: { for: id } });
+      return { wrap, id };
+    };
+    const dateField = inRow("Date");
+    const date = dateField.wrap.createEl("input", { attr: { id: dateField.id, type: "date" } });
+    date.value = task ? task.start || task.due || "" : "";
+    const untilField = inRow("Until (optional)");
+    const until = untilField.wrap.createEl("input", { attr: { id: untilField.id, type: "date" } });
+    until.value = (task == null ? void 0 : task.start) ? task.due || "" : "";
+    const msField = field("", "belki-editor-check");
+    const msLabel = msField.wrap.querySelector("label");
+    msLabel == null ? void 0 : msLabel.remove();
+    const label = msField.wrap.createEl("label");
+    const milestone = label.createEl("input", { attr: { type: "checkbox" } });
+    milestone.checked = (task == null ? void 0 : task.milestone) === true;
+    label.appendText("Milestone");
+    return () => {
+      const text = title.value.replace(/\s+/g, " ").trim();
+      if (!text) return "Enter a title.";
+      if (!isIsoDate(date.value)) return "Enter a date.";
+      if (until.value && until.value < date.value) return "“Until” must be on or after the date.";
+      const multiDay = isIsoDate(until.value) && until.value > date.value;
+      return {
+        title: text,
+        priority: "none",
+        labels: [],
+        due: multiDay ? until.value : date.value,
+        start: multiDay ? date.value : void 0,
+        milestone: milestone.checked
+      };
+    };
+  }
+  onClose() {
+    this.contentEl.empty();
+    this.finish(null);
+  }
+};
+
+// src/taskStore.ts
 var TaskStore = class {
   constructor(app, settings) {
     this.app = app;
@@ -5384,13 +5719,13 @@ var TaskStore = class {
     this.lastDeletion = null;
   }
   get filePath() {
-    return (0, import_obsidian8.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
+    return (0, import_obsidian9.normalizePath)(this.settings.tasksFilePath || "Tasks.md");
   }
   isCurrentlyWriting(path) {
-    return this.writing && (0, import_obsidian8.normalizePath)(path) === this.filePath;
+    return this.writing && (0, import_obsidian9.normalizePath)(path) === this.filePath;
   }
   isTaskStorageFile(path) {
-    return (0, import_obsidian8.normalizePath)(path) === this.filePath;
+    return (0, import_obsidian9.normalizePath)(path) === this.filePath;
   }
   /** Tasks only; year-plan entries (#planning) live in getPlanningEntries(). */
   getTasks() {
@@ -5558,28 +5893,14 @@ var TaskStore = class {
     this.insertTaskBlock(task);
     await this.save();
   }
-  async createTaskViaModal(sector) {
-    const api = getTasksApi(this.app);
-    if (!api) {
-      new import_obsidian8.Notice("Tasks plugin not available – cannot create task.");
-      return;
-    }
-    let line = await api.createTaskLineModal();
-    if (!line || !line.trim()) return;
-    line = ensureTaskMarker(line.trim());
-    line = ensureSectorInLine(line, sector);
-    const parsed = parseTaskLine(line, createId(), this.tasks.length);
-    if (!parsed) {
-      new import_obsidian8.Notice("Could not parse the task line from the Tasks modal.");
-      return;
-    }
-    const task = { ...parsed.task, sourcePath: this.filePath };
-    this.tasks.push(task);
-    this.insertTaskBlock(task);
-    await this.save();
+  /** Opens the task editor for a new task; sector "" or undefined means Inbox. */
+  async createTaskInEditor(sector) {
+    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels() });
+    if (!edit) return;
+    await this.createTask(edit);
   }
   /**
-   * Quick capture: turns typed text into a task without the Tasks modal. The
+   * Quick capture: turns typed text into a task without a dialog. The
    * text goes through the normal parser, so #labels, a #sector tag, priority
    * emojis and 📅 dates typed inline work as usual. Returns false if nothing
    * was saved (empty text, or the file changed on disk and the save was dropped).
@@ -5597,26 +5918,26 @@ var TaskStore = class {
     await this.save();
     return this.tasks.some((t) => t.id === task.id);
   }
-  async updateTaskViaModal(id) {
-    const api = getTasksApi(this.app);
-    if (!api) {
-      new import_obsidian8.Notice("Tasks plugin not available – cannot edit task.");
-      return;
-    }
+  /** Opens the editor for a task or planning entry and saves what it returns. */
+  async editTaskInEditor(id) {
     const current = this.tasks.find((t) => t.id === id);
     if (!current) return;
-    const before = serializeTaskLine(current).replace(/^\s*/, "");
-    let line = await api.editTaskLineModal(before);
-    if (!line || !line.trim()) return;
-    line = ensureTaskMarker(line.trim());
-    const parsed = parseTaskLine(line, id, current.order);
-    if (!parsed) {
-      new import_obsidian8.Notice("Could not parse the edited task line.");
-      return;
+    const edit = await openTaskEditor(this.app, {
+      task: cloneTask(current),
+      planning: current.planning === true,
+      sectors: this.settings.sectors,
+      knownLabels: this.knownLabels()
+    });
+    if (!edit) return;
+    if (current.planning) {
+      await this.updateTask(id, { title: edit.title, due: edit.due, start: edit.start, milestone: edit.milestone === true });
+    } else {
+      await this.updateTask(id, { title: edit.title, project: edit.project, due: edit.due, priority: edit.priority, labels: edit.labels, repeat: edit.repeat });
     }
-    const updated = { ...parsed.task, id, order: current.order, sourcePath: this.filePath };
-    this.tasks = this.tasks.map((t) => t.id === id ? updated : t);
-    await this.save();
+  }
+  /** Labels to suggest in the editor: the saved registry plus every label in use. */
+  knownLabels() {
+    return dedupeLabels([...this.settings.labelRegistry || [], ...this.tasks.flatMap((t) => t.labels)]).sort();
   }
   async updateTask(id, patch) {
     await this.updateManyTasks([id], patch);
@@ -5694,22 +6015,22 @@ var TaskStore = class {
         void undo();
       });
     });
-    notice = new import_obsidian8.Notice(fragment, 6e3);
+    notice = new import_obsidian9.Notice(fragment, 6e3);
   }
   /** Restores the task state captured before the most recent completion. */
   async undoLastCompletion() {
     const last = this.lastCompletion;
     if (!last) {
-      new import_obsidian8.Notice("Nothing to undo.");
+      new import_obsidian9.Notice("Nothing to undo.");
       return false;
     }
     this.lastCompletion = null;
     if (!this.tasks.some((t) => t.id === last.id)) {
-      new import_obsidian8.Notice("The completed task is no longer in the tasks file.");
+      new import_obsidian9.Notice("The completed task is no longer in the tasks file.");
       return false;
     }
     await this.updateTask(last.id, last.patch);
-    new import_obsidian8.Notice(`Restored "${last.title}".`);
+    new import_obsidian9.Notice(`Restored "${last.title}".`);
     return true;
   }
   /** Deletes one task the user chose to delete, with a notice that can undo it. */
@@ -5724,7 +6045,7 @@ var TaskStore = class {
   async undoLastDeletion() {
     const snapshot = this.lastDeletion;
     if (!snapshot) {
-      new import_obsidian8.Notice("Nothing to undo.");
+      new import_obsidian9.Notice("Nothing to undo.");
       return false;
     }
     this.lastDeletion = null;
@@ -5733,7 +6054,7 @@ var TaskStore = class {
     this.fileModel.blocks = restored.blocks;
     this.tasks = restored.tasks;
     await this.save();
-    new import_obsidian8.Notice(`Restored "${snapshot.task.title}".`);
+    new import_obsidian9.Notice(`Restored "${snapshot.task.title}".`);
     return true;
   }
   get archiveFilePath() {
@@ -5812,7 +6133,7 @@ ${lines.join("\n")}
   async save() {
     const file = await this.ensureFile(this.filePath);
     if (!file) {
-      new import_obsidian8.Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
+      new import_obsidian9.Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
       return;
     }
     const tasksById = new Map(this.tasks.map((t) => [t.id, t]));
@@ -5840,7 +6161,7 @@ ${lines.join("\n")}
       this.writing = false;
     }
     if (conflict) {
-      new import_obsidian8.Notice("Tasks file changed on disk (sync or external edit). Reloaded the latest version — your last action was not applied, please retry.");
+      new import_obsidian9.Notice("Tasks file changed on disk (sync or external edit). Reloaded the latest version — your last action was not applied, please retry.");
       await this.load();
       return;
     }
@@ -5855,9 +6176,9 @@ ${lines.join("\n")}
   }
   // --- File helpers --------------------------------------------------------
   async ensureFile(path) {
-    const normalizedPath = (0, import_obsidian8.normalizePath)(path);
+    const normalizedPath = (0, import_obsidian9.normalizePath)(path);
     const existing = this.app.vault.getAbstractFileByPath(normalizedPath);
-    if (existing instanceof import_obsidian8.TFile) return existing;
+    if (existing instanceof import_obsidian9.TFile) return existing;
     if (existing) {
       this.warnWrongType(normalizedPath, existing);
       return null;
@@ -5868,20 +6189,20 @@ ${lines.join("\n")}
       return await this.app.vault.create(normalizedPath, "");
     } catch (error) {
       const created = this.app.vault.getAbstractFileByPath(normalizedPath);
-      if (created instanceof import_obsidian8.TFile) return created;
+      if (created instanceof import_obsidian9.TFile) return created;
       console.warn("[belki] Could not create tasks file.", error, { path: normalizedPath });
       return null;
     }
   }
   async ensureParentFolders(path) {
     var _a;
-    const parts = (0, import_obsidian8.normalizePath)(path).split("/");
+    const parts = (0, import_obsidian9.normalizePath)(path).split("/");
     parts.pop();
     let current = "";
     for (const part of parts) {
       current = current ? `${current}/${part}` : part;
       const existing = this.app.vault.getAbstractFileByPath(current);
-      if (existing instanceof import_obsidian8.TFolder) continue;
+      if (existing instanceof import_obsidian9.TFolder) continue;
       if (existing) {
         this.warnWrongType(current, existing);
         return false;
@@ -5891,7 +6212,7 @@ ${lines.join("\n")}
       } catch (error) {
         const after = this.app.vault.getAbstractFileByPath(current);
         const alreadyExists = /already exists/i.test(String((_a = error == null ? void 0 : error.message) != null ? _a : error));
-        if (after instanceof import_obsidian8.TFolder || alreadyExists) {
+        if (after instanceof import_obsidian9.TFolder || alreadyExists) {
           continue;
         }
         console.warn("[belki] Could not create folder.", error, { path: current });
@@ -5904,8 +6225,8 @@ ${lines.join("\n")}
     const key = `wrong-type:${path}`;
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
-    const kind = existing instanceof import_obsidian8.TFolder ? "folder" : "something";
-    new import_obsidian8.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
+    const kind = existing instanceof import_obsidian9.TFolder ? "folder" : "something";
+    new import_obsidian9.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
   }
 };
 function sameBlock(a, b) {
@@ -5983,7 +6304,7 @@ function cloneTask(task) {
 }
 
 // src/main.ts
-var BelkiPlugin = class extends import_obsidian9.Plugin {
+var BelkiPlugin = class extends import_obsidian10.Plugin {
   constructor() {
     super(...arguments);
     this.reloadDebounceTimer = null;
@@ -5991,11 +6312,6 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
   }
   async onload() {
     const hadSettings = await this.loadSettings();
-    if (!getTasksApi(this.app)) {
-      new import_obsidian9.Notice(
-        "Sector Tasks requires the community plugin “Tasks” to be installed and enabled. Task creation and editing will not work until it is active."
-      );
-    }
     this.store = new TaskStore(this.app, this.settings);
     this.store.subscribe(() => this.syncWaitingSince());
     this.registerView(
@@ -6037,14 +6353,14 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new import_obsidian9.Notice("Sector Tasks labels normalized.");
+        new import_obsidian10.Notice("Sector Tasks labels normalized.");
       }
     });
     this.addCommand({
       id: "quick-add-task",
       name: "Quick add task (Inbox)",
       callback: () => {
-        void this.store.createTaskViaModal(void 0).then(() => this.refreshBelkiViews());
+        void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
       }
     });
     this.addCommand({
@@ -6197,7 +6513,7 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
     const entries = bundledReleaseNotes();
     const entry = entries.find((e) => e.version === this.manifest.version) || entries[0];
     if (!entry) {
-      new import_obsidian9.Notice("No release notes found.");
+      new import_obsidian10.Notice("No release notes found.");
       return;
     }
     new ReleaseNotesModal(this.app, [entry]).open();
@@ -6214,7 +6530,7 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new import_obsidian9.Notice("Sector Tasks could not reload task data.");
+      new import_obsidian10.Notice("Sector Tasks could not reload task data.");
       console.error(error);
     }
   }
@@ -6222,7 +6538,7 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) {
       if (manual) {
-        new import_obsidian9.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+        new import_obsidian10.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
       }
       return;
     }
@@ -6233,18 +6549,18 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
       if (manual) {
         const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
         const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
-        new import_obsidian9.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+        new import_obsidian10.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
       }
       return;
     }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
-      new import_obsidian9.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      new import_obsidian10.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
       return;
     }
     await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new import_obsidian9.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
+    new import_obsidian10.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -6330,10 +6646,10 @@ var BelkiPlugin = class extends import_obsidian9.Plugin {
       await this.pruneCompletedTasks();
       if (this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning((/* @__PURE__ */ new Date()).getFullYear());
-        if (moved > 0) new import_obsidian9.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+        if (moved > 0) new import_obsidian10.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }
     } catch (error) {
-      new import_obsidian9.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
+      new import_obsidian10.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath
@@ -6359,6 +6675,9 @@ var __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  formFromRule,
+  ruleFromForm,
+  ordinal,
   TaskStore,
   entriesForYear,
   upcomingEntries,

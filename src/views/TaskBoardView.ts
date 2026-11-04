@@ -348,7 +348,7 @@ export class TaskBoardView extends ItemView {
     sidebarAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       this.mobileNavOpen = false;
-      void this.store.createTaskViaModal(sector).then(() => this.render());
+      void this.store.createTaskInEditor(sector).then(() => this.render());
     });
     const tasks = this.store.getTasks();
     const active = tasks.filter((task) => !task.completed);
@@ -593,14 +593,14 @@ export class TaskBoardView extends ItemView {
     const task = this.currentReviewTask();
     if (task && sectorTag) {
       await this.store.updateTask(task.id, { project: sectorTag });
-      await this.store.updateTaskViaModal(task.id);
+      await this.store.editTaskInEditor(task.id);
     }
     await this.advanceReview();
   }
   async applyReviewDateAction(action: string) {
     const task = this.currentReviewTask();
     if (task && action === "reschedule") {
-      await this.store.updateTaskViaModal(task.id);
+      await this.store.editTaskInEditor(task.id);
     }
     await this.advanceReview();
   }
@@ -678,7 +678,7 @@ export class TaskBoardView extends ItemView {
     inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
     inlineAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
-      void this.store.createTaskViaModal(sector).then(() => this.render());
+      void this.store.createTaskInEditor(sector).then(() => this.render());
     });
     if (active.length === 0 && tasks.length === 0) {
       main.createDiv({
@@ -744,7 +744,7 @@ export class TaskBoardView extends ItemView {
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
     inlineAdd.createSpan({ cls: "belki-add-text", text: `Add to ${sectorLabel}` });
     inlineAdd.addEventListener("click", () => {
-      void this.store.createTaskViaModal(isInboxTab ? "" : this.overviewSector).then(() => this.render());
+      void this.store.createTaskInEditor(isInboxTab ? "" : this.overviewSector).then(() => this.render());
     });
 
     const sectionTasks = isInboxTab
@@ -1687,7 +1687,7 @@ export class TaskBoardView extends ItemView {
     }
   }
   openTaskDetail(task: Task) {
-    void this.store.updateTaskViaModal(task.id).then(() => this.renderPreservingMainScroll());
+    void this.store.editTaskInEditor(task.id).then(() => this.renderPreservingMainScroll());
   }
   getVisibleTasks(tasks: Task[]): Task[] {
     const archivedSet = new Set(this.settings.archivedProjects);
@@ -2095,12 +2095,12 @@ export class TaskBoardView extends ItemView {
     titleButton.setAttr("role", "button");
     titleButton.setAttr("tabindex", "0");
     titleButton.addEventListener("click", () => {
-      void this.store.updateTaskViaModal(task.id).then(() => this.render());
+      void this.store.editTaskInEditor(task.id).then(() => this.render());
     });
     titleButton.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        void this.store.updateTaskViaModal(task.id).then(() => this.render());
+        void this.store.editTaskInEditor(task.id).then(() => this.render());
       }
     });
     const meta = card.createDiv({ cls: "belki-review-task-meta" });

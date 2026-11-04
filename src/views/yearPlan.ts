@@ -279,9 +279,9 @@ export class PlanningEntryModal extends Modal {
       this.close();
       void host.openTaskInNote(entry);
     });
-    add("Edit in Tasks modal", () => {
+    add("Edit", () => {
       this.close();
-      void host.store.updateTaskViaModal(entry.id);
+      void host.store.editTaskInEditor(entry.id);
     });
     if (entry.milestone) {
       add(entry.completed ? "Mark as open" : "Mark as reached", () => {

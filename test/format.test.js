@@ -44,6 +44,9 @@ const {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  formFromRule,
+  ruleFromForm,
+  ordinal,
   TaskStore,
   entriesForYear,
   upcomingEntries,
@@ -427,4 +430,25 @@ test("year plan helpers: year, upcoming window, missed milestones", () => {
   assert.deepEqual(upcomingEntries(entries, "2026-11-04", 7).map((e) => e.id), ["d"], "running entries count as upcoming");
   assert.equal(isMissedMilestone(entries[2], "2026-11-04"), true);
   assert.equal(isMissedMilestone({ ...entries[2], completed: true }, "2026-11-04"), false);
+});
+
+test("editor recurrence: form ↔ rule round-trips through the Tasks text", () => {
+  const cases = [
+    ["- [ ] A #task 🔁 every week on monday 📅 2026-11-09", "every week on monday"],
+    ["- [ ] B #task 🔁 every 2 weeks on friday when done 📅 2026-11-13", "every 2 weeks on friday when done"],
+    ["- [ ] C #task 🔁 every month on the 1st 📅 2026-12-01", "every month on the 1st"],
+    ["- [ ] D #task 🔁 every weekday 📅 2026-11-05", "every weekday"],
+    ["- [ ] E #task 🔁 every 3 days 📅 2026-11-05", "every 3 days"]
+  ];
+  for (const [line, text] of cases) {
+    const task = parseTaskLine(line, "x", 0).task;
+    const rebuilt = ruleFromForm(formFromRule(task.repeat, task.due));
+    assert.equal(serializeTasksRecurrence(rebuilt), text, line);
+    assert.deepEqual(parseTasksRecurrence(serializeTasksRecurrence(rebuilt)).frequency, task.repeat.frequency);
+  }
+  assert.equal(ruleFromForm({ frequency: "none", interval: 1, weekday: 1, dayOfMonth: 1, whenDone: false }), undefined);
+  const fresh = formFromRule(undefined, "2026-11-04");
+  assert.equal(fresh.weekday, 3, "a new weekly rule defaults to the due date's weekday (Wednesday)");
+  assert.equal(fresh.dayOfMonth, 4);
+  assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 31].map(ordinal), ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "31st"]);
 });
