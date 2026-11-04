@@ -93,7 +93,10 @@ export const E_SCHEDULED = "\u23F3";
 export const E_START = "\u{1F6EB}";
 export const E_CANCELLED = "\u274C";
 export const ISO = "\\d{4}-\\d{2}-\\d{2}";
-export const TASK_LINE = /^(\s*)- \[( |x|X|\/|-)\]\s+(.*)$/;
+// Any whitespace counts, not just " ": copying on phones often turns spaces
+// into non-breaking ones, which Obsidian still shows as a checkbox. Lines are
+// written back with plain spaces.
+export const TASK_LINE = /^(\s*)-\s\[(\s|x|X|\/|-)\]\s+(.*)$/;
 export function dateAfter(emoji: string, text: string): string | undefined {
   const re = new RegExp(`${emoji}\\s*(${ISO})`);
   const m = text.match(re);

@@ -483,3 +483,20 @@ test("period entries are past only after their period, and stay out of day strip
   assert.deepEqual(upcomingEntries(entries, "2026-11-04", 366, true).map((e) => e.id), ["m", "d"], "the Overview list includes a running month");
   assert.deepEqual(entriesForYear(entries, 2026).map((e) => e.id), ["q", "m", "d"], "a month entry sorts before the days of its month");
 });
+
+test("lines with non-breaking spaces (copied on a phone) are still read", () => {
+  const nb = "\u00a0";
+  for (const line of [
+    `- [${nb}] Fair #task #planning 📅 2026-11-20`,
+    `-${nb}[ ] Fair #task #planning 📅 2026-11-20`,
+    `-${nb}[${nb}]${nb}Fair${nb}#task${nb}#planning${nb}📅${nb}2026-11-20`
+  ]) {
+    const parsed = parseTaskLine(line, "x", 0);
+    assert.ok(parsed, JSON.stringify(line));
+    assert.equal(parsed.task.planning, true);
+    assert.equal(parsed.task.due, "2026-11-20");
+    assert.equal(parsed.task.title, "Fair");
+    assert.equal(parsed.task.completed, false);
+    assert.match(serializeTaskLine(parsed.task), /^- \[ \] Fair #task #planning 📅 2026-11-20 🆔 /, "written back with plain spaces");
+  }
+});

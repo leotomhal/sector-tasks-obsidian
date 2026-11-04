@@ -292,7 +292,7 @@ var E_SCHEDULED = "⏳";
 var E_START = "🛫";
 var E_CANCELLED = "❌";
 var ISO = "\\d{4}-\\d{2}-\\d{2}";
-var TASK_LINE = /^(\s*)- \[( |x|X|\/|-)\]\s+(.*)$/;
+var TASK_LINE = /^(\s*)-\s\[(\s|x|X|\/|-)\]\s+(.*)$/;
 function dateAfter(emoji, text) {
   const re = new RegExp(`${emoji}\\s*(${ISO})`);
   const m = text.match(re);
@@ -2458,6 +2458,15 @@ var YearPlanState = class {
     /** Entries read from the archive note; null until loaded. */
     this.archived = null;
     this.loadingArchive = false;
+    /** Quarters the user opened or closed, keyed "2026-Q1"; others follow the default. */
+    this.collapsed = /* @__PURE__ */ new Map();
+  }
+  /** Past quarters start collapsed; the current and upcoming ones start open. */
+  isCollapsed(year, quarter, today) {
+    const stored = this.collapsed.get(`${year}-Q${quarter}`);
+    if (stored !== void 0) return stored;
+    const currentYear = Number(today.slice(0, 4));
+    return year < currentYear || year === currentYear && quarter < quarterOf(today);
   }
 };
 var MONTHS = Array.from({ length: 12 }, (_, m) => new Intl.DateTimeFormat("en-GB", { month: "long" }).format(new Date(2026, m, 1)));
@@ -2535,11 +2544,29 @@ function renderYearPlan(host, state, main) {
     const inQuarter = entries.filter((e) => quarterOf(entryFirstDay(e)) === q);
     const column = grid.createDiv({ cls: "belki-year-quarter" });
     column.toggleClass("is-current", q === currentQuarter);
-    const head = column.createDiv({ cls: "belki-year-quarter-head" });
+    const collapsed = state.addQuarter !== q && state.isCollapsed(state.year, q, today);
+    column.toggleClass("is-collapsed", collapsed);
+    const head = column.createDiv({
+      cls: "belki-year-quarter-head",
+      attr: { role: "button", tabindex: "0", "aria-expanded": String(!collapsed), "aria-label": `${collapsed ? "Expand" : "Collapse"} Q${q}` }
+    });
+    const toggle = () => {
+      state.collapsed.set(`${state.year}-Q${q}`, !collapsed);
+      host.render();
+    };
+    head.addEventListener("click", toggle);
+    head.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggle();
+      }
+    });
+    (0, import_obsidian4.setIcon)(head.createSpan({ cls: "belki-year-quarter-chevron" }), collapsed ? "chevron-right" : "chevron-down");
     head.createEl("h2", { text: `Q${q}` });
     head.createSpan({ cls: "belki-year-quarter-range", text: `${MONTHS[(q - 1) * 3].slice(0, 3)} – ${MONTHS[(q - 1) * 3 + 2].slice(0, 3)}` });
     if (q === currentQuarter) head.createSpan({ cls: "belki-year-now", text: "Now" });
     head.createSpan({ cls: "belki-section-count", text: String(inQuarter.length) });
+    if (collapsed) continue;
     const body = column.createDiv({ cls: "belki-year-quarter-body" });
     if (!inQuarter.length) body.createDiv({ cls: "belki-year-empty", text: "Nothing planned yet." });
     const anyTime = inQuarter.filter((e) => e.precision === "quarter");

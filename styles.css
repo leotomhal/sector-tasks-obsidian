@@ -2832,6 +2832,39 @@ button.belki-review-discard:hover {
   padding: 10px 12px 8px;
 }
 
+.belki-year-quarter-head {
+  cursor: pointer;
+  user-select: none;
+}
+
+.belki-year-quarter-head:hover {
+  background: var(--belki-hover);
+}
+
+.belki-year-quarter-head:focus-visible {
+  outline: 2px solid var(--belki-accent);
+  outline-offset: -2px;
+}
+
+.belki-year-quarter.is-collapsed .belki-year-quarter-head {
+  border-bottom: 0;
+}
+
+.belki-year-quarter.is-collapsed {
+  opacity: 0.8;
+}
+
+.belki-year-quarter-chevron {
+  align-self: center;
+  color: var(--belki-muted);
+  display: flex;
+}
+
+.belki-year-quarter-chevron svg {
+  height: 15px;
+  width: 15px;
+}
+
 .belki-year-quarter-head h2 {
   font-size: 19px;
   margin: 0;
