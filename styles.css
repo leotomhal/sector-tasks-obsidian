@@ -2563,7 +2563,7 @@ button.belki-review-discard:hover {
   border: 1px solid var(--belki-border);
   border-radius: 12px;
   display: grid;
-  /* Same as column-gap: 14px; the gap shorthand avoids a false "multicolumn" warning in Obsidian's review checks */
+  /* Row gap 0, column gap 14px. Written as the gap shorthand: Obsidian's review checks flag the longhand as "multicolumn" */
   gap: 0 14px;
   grid-template-columns: auto minmax(0, 1fr);
   justify-items: start;
