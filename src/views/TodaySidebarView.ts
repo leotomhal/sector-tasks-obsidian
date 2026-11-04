@@ -2,12 +2,23 @@ import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
-import { addDaysIso, compareIsoDates, formatDueDateChip, todayIso } from "../dateUtils";
+import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
 
 export const VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 export const TODAY_PRIORITY_RANK: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
+/** "Fri 6 Nov" in the user's locale; adds the year only when it differs. */
+export function formatSnoozeDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return new Intl.DateTimeFormat(void 0, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...y !== new Date().getFullYear() ? { year: "numeric" } : {}
+  }).format(date);
+}
 export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEvent) {
   const menu = new Menu();
   const currentDue = task.due;
@@ -28,6 +39,18 @@ export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEv
       void store.updateTask(task.id, { due: void 0 });
     });
   });
+  menu.addSeparator();
+  // Snooze pushes from the due date when it's still ahead, otherwise from today,
+  // so an overdue task never lands in the past again. The menu shows the result.
+  const base = currentDue && currentDue > todayIso() ? currentDue : todayIso();
+  for (const days of [1, 3, 7]) {
+    const target = shiftIsoDate(base, days);
+    menu.addItem((item) => {
+      item.setTitle(`Snooze ${days === 1 ? "1 day" : `${days} days`} \u00b7 ${formatSnoozeDate(target)}`).onClick(() => {
+        void store.updateTask(task.id, { due: target });
+      });
+    });
+  }
   menu.addSeparator();
   const currentPriority = task.priority || "none";
   for (const priority of ["P1", "P2", "P3", "P4"]) {
