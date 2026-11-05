@@ -3,6 +3,15 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.5.4
+
+### Changed
+- **Folded quarters take less room.** In the year plan on a wide screen, folded quarters now sit stacked in a narrow column on the left, and the open quarters use the rest of the width. On a phone the quarters stay in order, Q1 to Q4.
+- Reached milestones are crossed out with the title dimmed instead of a separately colored line.
+
+### Internal
+- Two CSS details changed so Obsidian's plugin review no longer reports "multicolumn" and "text-decoration" as partially supported. Nothing looks different.
+
 ## 1.5.3
 
 ### New
