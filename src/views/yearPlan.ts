@@ -113,12 +113,23 @@ export function renderYearPlan(host: PlanningHost, state: YearPlanState, main: H
   const wrap = main.createDiv({ cls: "belki-year" });
   const grid = wrap.createDiv({ cls: "belki-year-grid" });
   const currentQuarter = state.year === currentYear ? quarterOf(today) : 0;
+  // A quarter being added to stays open.
+  const collapsedQuarters = [1, 2, 3, 4].map((q) => state.addQuarter !== q && state.isCollapsed(state.year, q, today));
+  const openCount = collapsedQuarters.filter((c) => !c).length;
+  // With both folded and open quarters, the folded ones stack in a narrow first
+  // column on wide screens and the open ones share the rest. On narrow screens
+  // the stack dissolves (display: contents) and `order` keeps Q1–Q4 in sequence.
+  const stack = openCount > 0 && openCount < 4 ? grid.createDiv({ cls: "belki-year-stack" }) : null;
+  if (stack) {
+    grid.addClass("has-stack");
+    grid.setCssProps({ "--belki-year-open": String(openCount) });
+  }
   for (let q = 1; q <= 4; q++) {
     const inQuarter = entries.filter((e) => quarterOf(entryFirstDay(e)) === q);
-    const column = grid.createDiv({ cls: "belki-year-quarter" });
+    const collapsed = collapsedQuarters[q - 1];
+    const column = (collapsed && stack ? stack : grid).createDiv({ cls: "belki-year-quarter" });
+    column.setCssProps({ order: String(q) });
     column.toggleClass("is-current", q === currentQuarter);
-    // A quarter being added to stays open.
-    const collapsed = state.addQuarter !== q && state.isCollapsed(state.year, q, today);
     column.toggleClass("is-collapsed", collapsed);
     const head = column.createDiv({
       cls: "belki-year-quarter-head",

@@ -2563,11 +2563,19 @@ function renderYearPlan(host, state, main) {
   const wrap = main.createDiv({ cls: "belki-year" });
   const grid = wrap.createDiv({ cls: "belki-year-grid" });
   const currentQuarter = state.year === currentYear ? quarterOf(today) : 0;
+  const collapsedQuarters = [1, 2, 3, 4].map((q) => state.addQuarter !== q && state.isCollapsed(state.year, q, today));
+  const openCount = collapsedQuarters.filter((c) => !c).length;
+  const stack = openCount > 0 && openCount < 4 ? grid.createDiv({ cls: "belki-year-stack" }) : null;
+  if (stack) {
+    grid.addClass("has-stack");
+    grid.setCssProps({ "--belki-year-open": String(openCount) });
+  }
   for (let q = 1; q <= 4; q++) {
     const inQuarter = entries.filter((e) => quarterOf(entryFirstDay(e)) === q);
-    const column = grid.createDiv({ cls: "belki-year-quarter" });
+    const collapsed = collapsedQuarters[q - 1];
+    const column = (collapsed && stack ? stack : grid).createDiv({ cls: "belki-year-quarter" });
+    column.setCssProps({ order: String(q) });
     column.toggleClass("is-current", q === currentQuarter);
-    const collapsed = state.addQuarter !== q && state.isCollapsed(state.year, q, today);
     column.toggleClass("is-collapsed", collapsed);
     const head = column.createDiv({
       cls: "belki-year-quarter-head",

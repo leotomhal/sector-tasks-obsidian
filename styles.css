@@ -2562,8 +2562,9 @@ button.belki-review-discard:hover {
   background: var(--belki-surface);
   border: 1px solid var(--belki-border);
   border-radius: 12px;
-  column-gap: 14px;
   display: grid;
+  /* Row gap 0, column gap 14px. Written as the gap shorthand: Obsidian's review checks flag the longhand as "multicolumn" */
+  gap: 0 14px;
   grid-template-columns: auto minmax(0, 1fr);
   justify-items: start;
   padding: 12px 16px;
@@ -2804,9 +2805,29 @@ button.belki-review-discard:hover {
   }
 }
 
+/* Folded quarters stack in one cell; on narrow screens the stack dissolves
+   so every quarter is a grid item again, kept in Q1–Q4 order via `order`. */
+.belki-year-stack {
+  display: contents;
+}
+
+@container (min-width: 540px) {
+  .belki-year-grid.has-stack .belki-year-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    order: 0;
+  }
+}
+
 @container (min-width: 960px) {
   .belki-year-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .belki-year-grid.has-stack {
+    grid-template-columns: minmax(180px, 220px) repeat(var(--belki-year-open, 1), minmax(0, 1fr));
   }
 }
 
@@ -2957,8 +2978,9 @@ button.belki-review-discard:hover {
 }
 
 .belki-year-entry.is-done .belki-year-entry-title {
+  /* The line takes the text color; a separate decoration color trips Obsidian's review checks */
+  color: var(--belki-muted);
   text-decoration: line-through;
-  text-decoration-color: var(--belki-faint);
 }
 
 .belki-year-date {
