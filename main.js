@@ -2569,6 +2569,7 @@ function renderYearPlan(host, state, main) {
   if (stack) {
     grid.addClass("has-stack");
     grid.setCssProps({ "--belki-year-open": String(openCount) });
+    stack.setCssProps({ "--belki-stack-order": String(collapsedQuarters.indexOf(true) + 1) });
   }
   for (let q = 1; q <= 4; q++) {
     const inQuarter = entries.filter((e) => quarterOf(entryFirstDay(e)) === q);
