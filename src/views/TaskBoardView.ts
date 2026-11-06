@@ -681,7 +681,8 @@ export class TaskBoardView extends ItemView {
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
-    inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
+    // In the Inbox the capture field above is the quick way; this button opens the full editor.
+    inlineAdd.createSpan({ cls: "belki-add-text", text: this.mode === "inbox" ? "Add with details\u2026" : "Add task" });
     inlineAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       void this.store.createTaskInEditor(sector).then(() => this.render());
@@ -748,7 +749,7 @@ export class TaskBoardView extends ItemView {
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
-    inlineAdd.createSpan({ cls: "belki-add-text", text: `Add to ${sectorLabel}` });
+    inlineAdd.createSpan({ cls: "belki-add-text", text: isInboxTab ? "Add with details\u2026" : `Add to ${sectorLabel}` });
     inlineAdd.addEventListener("click", () => {
       void this.store.createTaskInEditor(isInboxTab ? "" : this.overviewSector).then(() => this.render());
     });
