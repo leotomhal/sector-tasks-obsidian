@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   waitingSince: {},
   waitingHighlightDays: 7,
   reviewNotes: false,
+  focusSection: false,
   planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
@@ -333,6 +334,11 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
+        name: "Focus in today (2+8)",
+        desc: "Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.",
+        control: { type: "toggle", key: "focusSection" }
+      },
+      {
         name: "Year plan",
         desc: "Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.",
         control: { type: "toggle", key: "planningEnabled" }
@@ -394,6 +400,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "focusSection") {
+      settings.focusSection = value === true;
     } else if (key === "planningEnabled") {
       settings.planningEnabled = value === true;
       await this.plugin.saveSettings();
@@ -947,6 +955,13 @@ export class BelkiSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
         this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    new Setting(containerEl).setName("Focus in today (2+8)").setDesc("Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.focusSection === true).onChange(async (value) => {
+        this.plugin.settings.focusSection = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });

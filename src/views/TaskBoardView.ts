@@ -681,7 +681,8 @@ export class TaskBoardView extends ItemView {
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
-    inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
+    // In the Inbox the capture field above is the quick way; this button opens the full editor.
+    inlineAdd.createSpan({ cls: "belki-add-text", text: this.mode === "inbox" ? "Add with details\u2026" : "Add task" });
     inlineAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       void this.store.createTaskInEditor(sector).then(() => this.render());
@@ -748,7 +749,7 @@ export class TaskBoardView extends ItemView {
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
-    inlineAdd.createSpan({ cls: "belki-add-text", text: `Add to ${sectorLabel}` });
+    inlineAdd.createSpan({ cls: "belki-add-text", text: isInboxTab ? "Add with details\u2026" : `Add to ${sectorLabel}` });
     inlineAdd.addEventListener("click", () => {
       void this.store.createTaskInEditor(isInboxTab ? "" : this.overviewSector).then(() => this.render());
     });
@@ -921,13 +922,26 @@ export class TaskBoardView extends ItemView {
     parent.empty();
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
-      const todayTasks = this.sortTasks(active.filter((task) => isToday(task.due)));
+      // Focus (Pullein's 2+8): P1 = must do, P2 = next, from any sector and
+      // whatever their date. They're shown once, so the date sections skip them.
+      const focusIds = new Set<string>();
+      if (this.settings.focusSection) {
+        const mustDo = this.sortTasks(active.filter((task) => task.priority === "P1"));
+        const next = this.sortTasks(active.filter((task) => task.priority === "P2"));
+        if (mustDo.length || next.length) {
+          this.renderFocusSection(parent, "Must do", mustDo, 2, "Give up to two tasks priority 1.");
+          this.renderFocusSection(parent, "Next", next, 8, "Give up to eight tasks priority 2.");
+          for (const task of [...mustDo, ...next]) focusIds.add(task.id);
+        }
+      }
+      const notInFocus = active.filter((task) => !focusIds.has(task.id));
+      const todayTasks = this.sortTasks(notInFocus.filter((task) => isToday(task.due)));
       // The page is already titled "Today", so the section names the date only.
       const todaySection = this.createSection(parent, formatGroupHeader(todayIso(), false), todayTasks.length);
       this.enableTodayDrop(todaySection);
       this.renderTaskList(todaySection, todayTasks);
-      const overdue = this.sortTasks(this.getOverdueTasks(active));
-      const hasAnyOverdue = active.some((task) => task.due && task.due < todayIso());
+      const overdue = this.sortTasks(this.getOverdueTasks(notInFocus));
+      const hasAnyOverdue = notInFocus.some((task) => task.due && task.due < todayIso());
       if (hasAnyOverdue) {
         const section2 = this.createSection(parent, "Overdue", overdue.length, (header) => {
           this.renderOverdueRangeSelect(header);
@@ -1414,6 +1428,22 @@ export class TaskBoardView extends ItemView {
     ]).some((project) => project !== currentProject);
     if (canMoveToProject) return true;
     return this.mode === "upcoming" && this.getUpcomingDropDates().some((date) => date !== task.due);
+  }
+  /** One focus group in Today: its tasks and "n/limit", marked once over the limit. */
+  renderFocusSection(parent: HTMLElement, title: string, tasks: Task[], limit: number, emptyText: string) {
+    const section = this.createSection(parent, title, tasks.length);
+    section.addClass("is-focus-section");
+    const count = section.querySelector(".belki-section-count");
+    if (count) {
+      count.setText(`${tasks.length}/${limit}`);
+      count.toggleClass("is-over-limit", tasks.length > limit);
+      if (tasks.length > limit) count.setAttr("aria-label", `More than ${limit}`);
+    }
+    if (tasks.length === 0) {
+      section.createDiv({ cls: "belki-empty belki-empty-small", text: emptyText });
+      return;
+    }
+    this.renderTaskList(section, tasks);
   }
   renderEmptySection(parent: HTMLElement, text: string) {
     const section = parent.createDiv({ cls: "belki-section" });

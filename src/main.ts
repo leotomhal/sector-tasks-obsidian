@@ -177,6 +177,7 @@ export default class BelkiPlugin extends Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      focusSection: (saved == null ? void 0 : saved.focusSection) === true,
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)

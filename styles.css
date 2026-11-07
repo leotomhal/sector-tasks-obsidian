@@ -2805,18 +2805,19 @@ button.belki-review-discard:hover {
   }
 }
 
-/* Folded quarters stack in one cell; on narrow screens the stack dissolves
-   so every quarter is a grid item again, kept in Q1–Q4 order via `order`. */
+/* Folded quarters stack in one cell. On one column it sits where its first
+   quarter would be (`order` set from the code); wider, it moves to the front. */
 .belki-year-stack {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  order: var(--belki-stack-order, 0);
 }
 
 @container (min-width: 540px) {
   .belki-year-grid.has-stack .belki-year-stack {
-    display: flex;
-    flex-direction: column;
     gap: 8px;
-    min-width: 0;
     order: 0;
   }
 }
@@ -3382,4 +3383,10 @@ button.belki-editor-chip {
   .belki-editor-row {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Focus in Today (2+8): the count turns red past the limit */
+.belki-section-count.is-over-limit {
+  color: var(--belki-danger);
+  font-weight: 700;
 }

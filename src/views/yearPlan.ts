@@ -117,12 +117,14 @@ export function renderYearPlan(host: PlanningHost, state: YearPlanState, main: H
   const collapsedQuarters = [1, 2, 3, 4].map((q) => state.addQuarter !== q && state.isCollapsed(state.year, q, today));
   const openCount = collapsedQuarters.filter((c) => !c).length;
   // With both folded and open quarters, the folded ones stack in a narrow first
-  // column on wide screens and the open ones share the rest. On narrow screens
-  // the stack dissolves (display: contents) and `order` keeps Q1–Q4 in sequence.
+  // column on wide screens and the open ones share the rest. On one column the
+  // stack takes the place of its first quarter, so the usual case (past
+  // quarters folded) still reads Q1–Q4 top to bottom.
   const stack = openCount > 0 && openCount < 4 ? grid.createDiv({ cls: "belki-year-stack" }) : null;
   if (stack) {
     grid.addClass("has-stack");
     grid.setCssProps({ "--belki-year-open": String(openCount) });
+    stack.setCssProps({ "--belki-stack-order": String(collapsedQuarters.indexOf(true) + 1) });
   }
   for (let q = 1; q <= 4; q++) {
     const inQuarter = entries.filter((e) => quarterOf(entryFirstDay(e)) === q);
