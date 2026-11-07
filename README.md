@@ -24,6 +24,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 
 ### Overview
 - An **Overview** dashboard in the sidebar: two progress rings (Today, plus whichever sector tab is selected), Overdue / Done today / Done this week counters, a sector tab bar (Inbox first, then your sectors), and a quick-add + compact task list scoped to the selected tab
+- **Focus in Today (2+8)** (optional, off by default): following Carl Pullein's 2+8 method, Today opens with **Must do** (your priority 1 tasks, up to 2) and **Next** (priority 2, up to 8), from any sector and whatever their date; the count turns red past the limit, and these tasks aren't repeated in the date sections below. Pick them in the evening with right-click → priority. Settings → Focus in today (2+8)
 - **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today)
 
 ### Board & sectors

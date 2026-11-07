@@ -1104,6 +1104,7 @@ var DEFAULT_SETTINGS = {
   waitingSince: {},
   waitingHighlightDays: 7,
   reviewNotes: false,
+  focusSection: false,
   planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
@@ -1385,6 +1386,11 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
+        name: "Focus in today (2+8)",
+        desc: "Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.",
+        control: { type: "toggle", key: "focusSection" }
+      },
+      {
         name: "Year plan",
         desc: "Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.",
         control: { type: "toggle", key: "planningEnabled" }
@@ -1446,6 +1452,8 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "focusSection") {
+      settings.focusSection = value === true;
     } else if (key === "planningEnabled") {
       settings.planningEnabled = value === true;
       await this.plugin.saveSettings();
@@ -1997,6 +2005,13 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
     new import_obsidian3.Setting(containerEl).setName("Search excludes completed tasks").setDesc("When on, search only matches open tasks. Completed tasks never show up in results.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.searchExcludeCompleted === true).onChange(async (value) => {
         this.plugin.settings.searchExcludeCompleted = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    new import_obsidian3.Setting(containerEl).setName("Focus in today (2+8)").setDesc("Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.focusSection === true).onChange(async (value) => {
+        this.plugin.settings.focusSection = value;
         await this.plugin.saveSettings();
         this.plugin.refreshBelkiViews();
       });
@@ -3791,12 +3806,23 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     parent.empty();
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
-      const todayTasks = this.sortTasks(active.filter((task) => isToday(task.due)));
+      const focusIds = /* @__PURE__ */ new Set();
+      if (this.settings.focusSection) {
+        const mustDo = this.sortTasks(active.filter((task) => task.priority === "P1"));
+        const next = this.sortTasks(active.filter((task) => task.priority === "P2"));
+        if (mustDo.length || next.length) {
+          this.renderFocusSection(parent, "Must do", mustDo, 2, "Give up to two tasks priority 1.");
+          this.renderFocusSection(parent, "Next", next, 8, "Give up to eight tasks priority 2.");
+          for (const task of [...mustDo, ...next]) focusIds.add(task.id);
+        }
+      }
+      const notInFocus = active.filter((task) => !focusIds.has(task.id));
+      const todayTasks = this.sortTasks(notInFocus.filter((task) => isToday(task.due)));
       const todaySection = this.createSection(parent, formatGroupHeader(todayIso(), false), todayTasks.length);
       this.enableTodayDrop(todaySection);
       this.renderTaskList(todaySection, todayTasks);
-      const overdue = this.sortTasks(this.getOverdueTasks(active));
-      const hasAnyOverdue = active.some((task) => task.due && task.due < todayIso());
+      const overdue = this.sortTasks(this.getOverdueTasks(notInFocus));
+      const hasAnyOverdue = notInFocus.some((task) => task.due && task.due < todayIso());
       if (hasAnyOverdue) {
         const section2 = this.createSection(parent, "Overdue", overdue.length, (header) => {
           this.renderOverdueRangeSelect(header);
@@ -4282,6 +4308,22 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     ]).some((project) => project !== currentProject);
     if (canMoveToProject) return true;
     return this.mode === "upcoming" && this.getUpcomingDropDates().some((date) => date !== task.due);
+  }
+  /** One focus group in Today: its tasks and "n/limit", marked once over the limit. */
+  renderFocusSection(parent, title, tasks, limit, emptyText) {
+    const section = this.createSection(parent, title, tasks.length);
+    section.addClass("is-focus-section");
+    const count = section.querySelector(".belki-section-count");
+    if (count) {
+      count.setText(`${tasks.length}/${limit}`);
+      count.toggleClass("is-over-limit", tasks.length > limit);
+      if (tasks.length > limit) count.setAttr("aria-label", `More than ${limit}`);
+    }
+    if (tasks.length === 0) {
+      section.createDiv({ cls: "belki-empty belki-empty-small", text: emptyText });
+      return;
+    }
+    this.renderTaskList(section, tasks);
   }
   renderEmptySection(parent, text) {
     const section = parent.createDiv({ cls: "belki-section" });
@@ -6637,6 +6679,7 @@ var BelkiPlugin = class extends import_obsidian10.Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
+      focusSection: (saved == null ? void 0 : saved.focusSection) === true,
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)

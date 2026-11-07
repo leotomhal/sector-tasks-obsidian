@@ -3384,3 +3384,9 @@ button.belki-editor-chip {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Focus in Today (2+8): the count turns red past the limit */
+.belki-section-count.is-over-limit {
+  color: var(--belki-danger);
+  font-weight: 700;
+}
