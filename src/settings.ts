@@ -48,6 +48,8 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   lastSeenVersion: "",
   waitingSince: {},
   waitingHighlightDays: 7,
+  sectorSince: {},
+  stuckWeeks: 3,
   reviewNotes: false,
   focusSection: false,
   planningEnabled: true,
@@ -134,6 +136,21 @@ export function normalizeAutoDeleteDays(value?: number | string): number {
 export function normalizeWaitingHighlightDays(value?: number | string): number {
   if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.waitingHighlightDays;
   return normalizeAutoDeleteDays(value);
+}
+export function normalizeStuckWeeks(value?: number | string): number {
+  if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.stuckWeeks;
+  return normalizeAutoDeleteDays(value);
+}
+export function normalizeSectorSince(value?: unknown): Record<string, { sector: string; since: string }> {
+  const out: Record<string, { sector: string; since: string }> = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+    const e = entry as { sector?: unknown; since?: unknown } | null;
+    if (e && typeof e.sector === "string" && typeof e.since === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.since)) {
+      out[id] = { sector: e.sector, since: e.since };
+    }
+  }
+  return out;
 }
 export function normalizeWaitingSince(value?: unknown): Record<string, string> {
   const out: Record<string, string> = {};
@@ -410,6 +427,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
+    } else if (key === "stuckWeeks") {
+      settings.stuckWeeks = normalizeAutoDeleteDays(value as number);
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value as number);
     } else if (key === "reviewNotesFolder") {
@@ -472,6 +491,11 @@ export class BelkiSettingTab extends PluginSettingTab {
           name: "Mark long waits",
           desc: "Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.",
           control: { type: "number", key: "waitingHighlightDays", min: 0, step: 1, placeholder: "7" }
+        },
+        {
+          name: "Mark stuck tasks",
+          desc: "Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.",
+          control: { type: "number", key: "stuckWeeks", min: 0, step: 1, placeholder: "3" }
         }
       ]
     };
@@ -1029,6 +1053,14 @@ export class BelkiSettingTab extends PluginSettingTab {
         text.inputEl.type = "number";
         text.setPlaceholder("7").setValue(String(this.plugin.settings.waitingHighlightDays)).onChange(async (value) => {
           this.plugin.settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
+      new Setting(sectorsSection).setName("Mark stuck tasks").setDesc("Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.").addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder("3").setValue(String(this.plugin.settings.stuckWeeks)).onChange(async (value) => {
+          this.plugin.settings.stuckWeeks = normalizeAutoDeleteDays(value);
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
         });

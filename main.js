@@ -1103,6 +1103,8 @@ var DEFAULT_SETTINGS = {
   lastSeenVersion: "",
   waitingSince: {},
   waitingHighlightDays: 7,
+  sectorSince: {},
+  stuckWeeks: 3,
   reviewNotes: false,
   focusSection: false,
   planningEnabled: true,
@@ -1189,6 +1191,21 @@ function normalizeAutoDeleteDays(value) {
 function normalizeWaitingHighlightDays(value) {
   if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.waitingHighlightDays;
   return normalizeAutoDeleteDays(value);
+}
+function normalizeStuckWeeks(value) {
+  if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.stuckWeeks;
+  return normalizeAutoDeleteDays(value);
+}
+function normalizeSectorSince(value) {
+  const out = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [id, entry] of Object.entries(value)) {
+    const e = entry;
+    if (e && typeof e.sector === "string" && typeof e.since === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.since)) {
+      out[id] = { sector: e.sector, since: e.since };
+    }
+  }
+  return out;
 }
 function normalizeWaitingSince(value) {
   const out = {};
@@ -1462,6 +1479,8 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
       return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
+    } else if (key === "stuckWeeks") {
+      settings.stuckWeeks = normalizeAutoDeleteDays(value);
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
     } else if (key === "reviewNotesFolder") {
@@ -1524,6 +1543,11 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
           name: "Mark long waits",
           desc: "Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.",
           control: { type: "number", key: "waitingHighlightDays", min: 0, step: 1, placeholder: "7" }
+        },
+        {
+          name: "Mark stuck tasks",
+          desc: "Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.",
+          control: { type: "number", key: "stuckWeeks", min: 0, step: 1, placeholder: "3" }
         }
       ]
     };
@@ -2083,6 +2107,14 @@ var BelkiSettingTab = class extends import_obsidian3.PluginSettingTab {
           this.plugin.refreshBelkiViews();
         });
       });
+      new import_obsidian3.Setting(sectorsSection).setName("Mark stuck tasks").setDesc("Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.").addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder("3").setValue(String(this.plugin.settings.stuckWeeks)).onChange(async (value) => {
+          this.plugin.settings.stuckWeeks = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
     } finally {
       this.containerEl = sectorsRoot;
     }
@@ -2439,6 +2471,31 @@ function formatWaitingAge(since, today) {
 }
 function waitingDays(since, today) {
   return Math.max(0, daysBetweenIso(since, today));
+}
+
+// src/stale.ts
+function reconcileSectorSince(current, tasks, today) {
+  if (tasks.length === 0) return null;
+  const next = {};
+  for (const task of tasks) {
+    const sector = normalizeTaskProject(task.project);
+    if (task.completed || !sector) continue;
+    const known = current[task.id];
+    next[task.id] = known && known.sector.toLowerCase() === sector.toLowerCase() && isIsoDate(known.since) ? known : { sector, since: today };
+  }
+  const before = Object.keys(current);
+  const after = Object.keys(next);
+  const same = before.length === after.length && after.every((id) => current[id] === next[id]);
+  return same ? null : next;
+}
+function stuckWeeks(task, stay, sectors, today, thresholdWeeks) {
+  if (!stay || thresholdWeeks <= 0 || task.completed || task.repeat) return 0;
+  const sector = normalizeTaskProject(task.project);
+  if (!sector || sector.toLowerCase() !== stay.sector.toLowerCase()) return 0;
+  const config = sectors.find((s) => s.tag.toLowerCase() === sector.toLowerCase());
+  if (!config || !config.inWeekly || config.isWaiting) return 0;
+  const weeks = Math.floor(Math.max(0, daysBetweenIso(stay.since, today)) / 7);
+  return weeks >= thresholdWeeks ? weeks : 0;
 }
 
 // src/planning.ts
@@ -2876,6 +2933,11 @@ function buildReviewSummary(input) {
   section("Done recently", done.map((t) => `${t.title} · ${sectorName(sectorOf(t))}`), "Nothing completed.");
   section("Moved during the review", moved, "Nothing moved.");
   if (deleted.length) section("Deleted during the review", deleted, "");
+  const stuck = open.map((t) => {
+    var _a, _b;
+    return { task: t, weeks: stuckWeeks(t, (_a = input.sectorSince) == null ? void 0 : _a[t.id], sectors, today, (_b = input.stuckThresholdWeeks) != null ? _b : 0) };
+  }).filter((s) => s.weeks > 0).sort((a, b) => b.weeks - a.weeks);
+  if (stuck.length) section("Stuck", stuck.map(({ task, weeks }) => `${task.title} · ${weeks} weeks in ${sectorName(sectorOf(task))}`), "");
   section("New recently", added.map((t) => `${t.title} · ${sectorName(sectorOf(t))}${t.completed ? " (done)" : ""}`), "Nothing new.");
   if (waitingSector) {
     section(
@@ -2914,7 +2976,9 @@ async function writeReviewSummaryNote(app, settings, session, tasks) {
     tasks,
     sectors: settings.sectors,
     snapshot: session.startSnapshot || {},
-    waitingSince: settings.waitingSince
+    waitingSince: settings.waitingSince,
+    sectorSince: settings.sectorSince,
+    stuckThresholdWeeks: settings.stuckWeeks
   });
   try {
     const folder = (0, import_obsidian5.normalizePath)(settings.reviewNotesFolder || "Reviews");
@@ -4438,6 +4502,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
       }
     }
     this.renderWaitingAge(meta, task);
+    this.renderStuck(meta, task, false);
     if (task.deadline) {
       meta.createSpan({
         cls: `belki-task-deadline${isBeforeToday(task.deadline) ? " is-overdue" : ""}`,
@@ -4557,6 +4622,19 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
         this.render();
       });
     });
+  }
+  /** "3 wk" on the board, "3 weeks in This week" in the review, once a task is stuck in its sector. */
+  renderStuck(parent, task, long) {
+    const stay = this.settings.sectorSince[task.id];
+    const weeks = stuckWeeks(task, stay, this.settings.sectors, todayIso(), this.settings.stuckWeeks);
+    if (!weeks) return;
+    const sector = this.settings.sectors.find((s) => s.tag.toLowerCase() === stay.sector.toLowerCase());
+    const where = sector ? sector.label : projectDisplayName(stay.sector);
+    const chip = parent.createSpan({
+      cls: "belki-task-stuck",
+      text: long ? `${weeks} weeks in ${where}` : `${weeks} wk`
+    });
+    chip.setAttr("aria-label", `In ${where} since ${formatShortDate(stay.since)}`);
   }
   /** "Waiting 12 d" on open tasks in the waiting sector; marked once it passes the threshold. */
   renderWaitingAge(parent, task) {
@@ -5030,6 +5108,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     }
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
     if (step.kind === "waiting") this.renderWaitingAge(meta, task);
+    if (step.kind === "sector") this.renderStuck(meta, task, true);
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
     const withHotkey = (el, letter) => {
@@ -6678,6 +6757,8 @@ var BelkiPlugin = class extends import_obsidian10.Plugin {
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession),
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
+      sectorSince: normalizeSectorSince(saved == null ? void 0 : saved.sectorSince),
+      stuckWeeks: normalizeStuckWeeks(saved == null ? void 0 : saved.stuckWeeks),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
       focusSection: (saved == null ? void 0 : saved.focusSection) === true,
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
@@ -6703,8 +6784,10 @@ var BelkiPlugin = class extends import_obsidian10.Plugin {
       this.seedWaitingFromCreated
     );
     if (this.store.getTasks().length > 0) this.seedWaitingFromCreated = false;
-    if (!next) return;
-    this.settings.waitingSince = next;
+    const stays = reconcileSectorSince(this.settings.sectorSince, this.store.getTasks(), todayIso());
+    if (stays) this.settings.sectorSince = stays;
+    if (!next && !stays) return;
+    if (next) this.settings.waitingSince = next;
     void this.saveSettings();
   }
   async saveSettings() {
@@ -6892,6 +6975,8 @@ var __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  reconcileSectorSince,
+  stuckWeeks,
   formFromRule,
   ruleFromForm,
   ordinal,

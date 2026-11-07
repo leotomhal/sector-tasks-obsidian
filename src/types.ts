@@ -145,6 +145,10 @@ export interface BelkiSettings {
   lastSeenVersion: string;
   /** Task id → ISO date the task entered the waiting sector. */
   waitingSince: Record<string, string>;
+  /** Task id → the sector it is in and since when, to spot tasks stuck in a sector. */
+  sectorSince: Record<string, { sector: string; since: string }>;
+  /** Mark tasks that sat this many weeks in a weekly-review sector; 0 turns it off. */
+  stuckWeeks: number;
   /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
   waitingHighlightDays: number;
   reviewNotes: boolean;

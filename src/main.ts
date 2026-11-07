@@ -8,10 +8,11 @@ import { cleanProjectName, uniqueRealProjects } from "./projects";
 import { nextOccurrence } from "./repeatUtils";
 import { findWaitingSector, normalizeReviewSession } from "./review";
 import { reconcileWaitingSince } from "./waiting";
+import { reconcileSectorSince, stuckWeeks } from "./stale";
 import { entriesForYear, isMissedMilestone, upcomingEntries } from "./planning";
 import { formFromRule, ruleFromForm } from "./recurrenceForm";
 import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince } from "./settings";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { TaskStore, completionUndoPatch, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
@@ -176,6 +177,8 @@ export default class BelkiPlugin extends Plugin {
       reviewSession: normalizeReviewSession(saved == null ? void 0 : saved.reviewSession),
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
+      sectorSince: normalizeSectorSince(saved == null ? void 0 : saved.sectorSince),
+      stuckWeeks: normalizeStuckWeeks(saved == null ? void 0 : saved.stuckWeeks),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
       focusSection: (saved == null ? void 0 : saved.focusSection) === true,
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
@@ -205,8 +208,10 @@ export default class BelkiPlugin extends Plugin {
       this.seedWaitingFromCreated
     );
     if (this.store.getTasks().length > 0) this.seedWaitingFromCreated = false;
-    if (!next) return;
-    this.settings.waitingSince = next;
+    const stays = reconcileSectorSince(this.settings.sectorSince, this.store.getTasks(), todayIso());
+    if (stays) this.settings.sectorSince = stays;
+    if (!next && !stays) return;
+    if (next) this.settings.waitingSince = next;
     void this.saveSettings();
   }
   async saveSettings() {
@@ -403,6 +408,8 @@ export const __testables = {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  reconcileSectorSince,
+  stuckWeeks,
   formFromRule,
   ruleFromForm,
   ordinal,

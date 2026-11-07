@@ -3,6 +3,8 @@ import type { BelkiSettings, ReviewSession, ReviewSnapshotEntry, SectorConfig, T
 import { currentIsoWeekKey, currentMonthKey, daysBetweenIso, isIsoDate, todayIso } from "./dateUtils";
 import { normalizeTaskProject } from "./projects";
 import { findWaitingSector } from "./review";
+import { stuckWeeks } from "./stale";
+import type { SectorStay } from "./stale";
 
 export interface ReviewSummaryInput {
   type: string;
@@ -13,6 +15,9 @@ export interface ReviewSummaryInput {
   sectors: SectorConfig[];
   snapshot: Record<string, ReviewSnapshotEntry>;
   waitingSince: Record<string, string>;
+  /** Optional: to list tasks still stuck in their sector after the review. */
+  sectorSince?: Record<string, SectorStay>;
+  stuckThresholdWeeks?: number;
 }
 
 export function reviewNoteTitle(type: string, periodKey: string): string {
@@ -76,6 +81,11 @@ export function buildReviewSummary(input: ReviewSummaryInput): string {
   section("Done recently", done.map((t) => `${t.title} · ${sectorName(sectorOf(t))}`), "Nothing completed.");
   section("Moved during the review", moved, "Nothing moved.");
   if (deleted.length) section("Deleted during the review", deleted, "");
+  const stuck = open
+    .map((t) => ({ task: t, weeks: stuckWeeks(t, input.sectorSince?.[t.id], sectors, today, input.stuckThresholdWeeks ?? 0) }))
+    .filter((s) => s.weeks > 0)
+    .sort((a, b) => b.weeks - a.weeks);
+  if (stuck.length) section("Stuck", stuck.map(({ task, weeks }) => `${task.title} \u00b7 ${weeks} weeks in ${sectorName(sectorOf(task))}`), "");
   section("New recently", added.map((t) => `${t.title} · ${sectorName(sectorOf(t))}${t.completed ? " (done)" : ""}`), "Nothing new.");
   if (waitingSector) {
     section(
@@ -119,7 +129,9 @@ export async function writeReviewSummaryNote(app: App, settings: BelkiSettings, 
     tasks,
     sectors: settings.sectors,
     snapshot: session.startSnapshot || {},
-    waitingSince: settings.waitingSince
+    waitingSince: settings.waitingSince,
+    sectorSince: settings.sectorSince,
+    stuckThresholdWeeks: settings.stuckWeeks
   });
   try {
     const folder = normalizePath(settings.reviewNotesFolder || "Reviews");

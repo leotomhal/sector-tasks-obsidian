@@ -44,6 +44,8 @@ const {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  reconcileSectorSince,
+  stuckWeeks,
   formFromRule,
   ruleFromForm,
   ordinal,
@@ -499,4 +501,47 @@ test("lines with non-breaking spaces (copied on a phone) are still read", () => 
     assert.equal(parsed.task.completed, false);
     assert.match(serializeTaskLine(parsed.task), /^- \[ \] Fair #task #planning 📅 2026-11-20 🆔 /, "written back with plain spaces");
   }
+});
+
+test("sector stays: new and moved tasks restart, others keep their date", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const tasks = [t("- [ ] Report #task #01this-week 🆔 a"), t("- [ ] Idea #task #05longterm 🆔 b"), t("- [ ] Inbox item #task 🆔 c")];
+  const first = reconcileSectorSince({}, tasks, "2026-11-01");
+  assert.deepEqual(first, { a: { sector: "01this-week", since: "2026-11-01" }, b: { sector: "05longterm", since: "2026-11-01" } }, "Inbox tasks have no sector and aren't tracked");
+  assert.equal(reconcileSectorSince(first, tasks, "2026-11-08"), null, "nothing changes while tasks stay put");
+  const moved = [t("- [ ] Report #task #02next-week 🆔 a"), tasks[1]];
+  assert.deepEqual(reconcileSectorSince(first, moved, "2026-11-08").a, { sector: "02next-week", since: "2026-11-08" }, "a move restarts the clock");
+  assert.equal(reconcileSectorSince(first, [], "2026-11-08"), null, "an empty file never wipes the record");
+});
+
+test("stuck weeks: only weekly-review sectors, not recurring, from the threshold on", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const sectors = [
+    { tag: "01this-week", label: "This week", inWeekly: true },
+    { tag: "05longterm", label: "Long term", inWeekly: false },
+    { tag: "waiting", label: "Waiting", isWaiting: true, inWeekly: true }
+  ];
+  const report = t("- [ ] Report #task #01this-week 🆔 a");
+  const stay = { sector: "01this-week", since: "2026-10-01" };
+  assert.equal(stuckWeeks(report, stay, sectors, "2026-10-21", 3), 0, "2 weeks and 6 days is not 3 weeks");
+  assert.equal(stuckWeeks(report, stay, sectors, "2026-10-22", 3), 3);
+  assert.equal(stuckWeeks(report, stay, sectors, "2026-10-22", 0), 0, "0 turns it off");
+  const idea = t("- [ ] Idea #task #05longterm 🆔 b");
+  assert.equal(stuckWeeks(idea, { sector: "05longterm", since: "2026-01-01" }, sectors, "2026-10-22", 3), 0, "long term isn't in the weekly review");
+  const routine = t("- [ ] Water plants #task #01this-week 🔁 every week 📅 2026-10-23 🆔 r");
+  assert.equal(stuckWeeks(routine, stay, sectors, "2026-10-22", 3), 0, "recurring tasks never count");
+  const waiting = t("- [ ] Reply #task #waiting 🆔 w");
+  assert.equal(stuckWeeks(waiting, { sector: "waiting", since: "2026-01-01" }, sectors, "2026-10-22", 3), 0, "the waiting sector has its own age");
+});
+
+test("review summary lists tasks still stuck after the review", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const sectors = [{ tag: "01this-week", label: "This week", inWeekly: true }];
+  const tasks = [t("- [ ] Report #task #01this-week 🆔 a"), t("- [ ] Fresh #task #01this-week 🆔 b")];
+  const md = buildReviewSummary({
+    type: "weekly", periodKey: "2026-W45", today: "2026-11-07", tasks, sectors, snapshot: {}, waitingSince: {},
+    sectorSince: { a: { sector: "01this-week", since: "2026-10-10" }, b: { sector: "01this-week", since: "2026-11-05" } },
+    stuckThresholdWeeks: 3
+  });
+  assert.match(md, /## Stuck \(1\)\n- Report · 4 weeks in This week/);
 });

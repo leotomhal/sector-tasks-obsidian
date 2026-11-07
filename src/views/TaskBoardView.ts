@@ -13,6 +13,7 @@ import { OVERDUE_RANGES } from "../types";
 import type { BelkiSettings, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
+import { stuckWeeks } from "../stale";
 import { upcomingEntries } from "../planning";
 import { YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
@@ -1557,6 +1558,7 @@ export class TaskBoardView extends ItemView {
       }
     }
     this.renderWaitingAge(meta, task);
+    this.renderStuck(meta, task, false);
     if (task.deadline) {
       meta.createSpan({
         cls: `belki-task-deadline${isBeforeToday(task.deadline) ? " is-overdue" : ""}`,
@@ -1678,6 +1680,19 @@ export class TaskBoardView extends ItemView {
         this.render();
       });
     });
+  }
+  /** "3 wk" on the board, "3 weeks in This week" in the review, once a task is stuck in its sector. */
+  renderStuck(parent: HTMLElement, task: Task, long: boolean) {
+    const stay = this.settings.sectorSince[task.id];
+    const weeks = stuckWeeks(task, stay, this.settings.sectors, todayIso(), this.settings.stuckWeeks);
+    if (!weeks) return;
+    const sector = this.settings.sectors.find((s) => s.tag.toLowerCase() === stay.sector.toLowerCase());
+    const where = sector ? sector.label : projectDisplayName(stay.sector);
+    const chip = parent.createSpan({
+      cls: "belki-task-stuck",
+      text: long ? `${weeks} weeks in ${where}` : `${weeks} wk`
+    });
+    chip.setAttr("aria-label", `In ${where} since ${formatShortDate(stay.since)}`);
   }
   /** "Waiting 12 d" on open tasks in the waiting sector; marked once it passes the threshold. */
   renderWaitingAge(parent: HTMLElement, task: Task) {
@@ -2146,6 +2161,7 @@ export class TaskBoardView extends ItemView {
     }
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
     if (step.kind === "waiting") this.renderWaitingAge(meta, task);
+    if (step.kind === "sector") this.renderStuck(meta, task, true);
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
     const withHotkey = (el: HTMLElement, letter: string) => {
