@@ -46,6 +46,7 @@ const {
   reconcileWaitingSince,
   reconcileSectorSince,
   stuckWeeks,
+  stripListMarker,
   formFromRule,
   ruleFromForm,
   ordinal,
@@ -544,4 +545,14 @@ test("review summary lists tasks still stuck after the review", () => {
     stuckThresholdWeeks: 3
   });
   assert.match(md, /## Stuck \(1\)\n- Report · 4 weeks in This week/);
+});
+
+test("pasted list lines lose their list markers", () => {
+  assert.equal(stripListMarker("- Buy milk"), "Buy milk");
+  assert.equal(stripListMarker("  * Call Ben #work"), "Call Ben #work");
+  assert.equal(stripListMarker("3. Draft agenda"), "Draft agenda");
+  assert.equal(stripListMarker("2) Book room"), "Book room");
+  assert.equal(stripListMarker("- [ ] Send slides 📅 2026-11-10"), "Send slides 📅 2026-11-10");
+  assert.equal(stripListMarker("Plain line"), "Plain line");
+  assert.equal(stripListMarker("-3 degrees tomorrow"), "-3 degrees tomorrow", "a dash without a space is text");
 });

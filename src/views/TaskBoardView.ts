@@ -1,6 +1,6 @@
 import { App, ItemView, MarkdownView, Modal, Notice, Platform, WorkspaceLeaf, setIcon } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
-import { showTaskContextMenu } from "./TodaySidebarView";
+import { showSelectionContextMenu, showTaskContextMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
 import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isIsoDate, isToday, startOfIsoWeekIso, todayIso, yesterdayIso } from "../dateUtils";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "../labels";
@@ -82,6 +82,7 @@ export class TaskBoardView extends ItemView {
   /** Sector tab selected in the "overview" mode's Ring 2 / mini-list (INBOX_SECTOR or a sector tag). */
   overviewSector: string;
   yearPlan = new YearPlanState();
+  reviewComingUpOpen = true;
   searchQuery: string;
   searchOpen: boolean;
   composerOpen: boolean;
@@ -1468,6 +1469,15 @@ export class TaskBoardView extends ItemView {
     if (!task.completed) {
       row.addEventListener("contextmenu", (event) => {
         event.preventDefault();
+        // Right-click on a selected row acts on the whole selection.
+        if (this.selectedTaskIds.size > 1 && this.selectedTaskIds.has(task.id)) {
+          const selected = this.store.getTasks().filter((t) => this.selectedTaskIds.has(t.id) && !t.completed);
+          showSelectionContextMenu(this.store, selected, event, () => {
+            this.selectedTaskIds.clear();
+            this.render();
+          });
+          return;
+        }
         showTaskContextMenu(this.store, task, event);
       });
     }
@@ -1678,6 +1688,17 @@ export class TaskBoardView extends ItemView {
         // Not written (e.g. the file changed on disk): give the text back.
         this.captureDraft = text;
         this.render();
+      });
+    });
+    // A pasted list becomes one task per line instead of one long task.
+    input.addEventListener("paste", (event) => {
+      const pasted = event.clipboardData?.getData("text/plain") || "";
+      const lines = pasted.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) return;
+      event.preventDefault();
+      void this.store.createTasksFromLines(lines).then((count) => {
+        if (count) new Notice(`Added ${count} task${count === 1 ? "" : "s"} to the inbox.`);
+        else new Notice("Couldn't add the pasted tasks. The tasks file changed on disk; please paste again.");
       });
     });
   }
@@ -2139,6 +2160,22 @@ export class TaskBoardView extends ItemView {
     });
     const closeButton = header.createEl("button", { cls: "belki-review-close", attr: { type: "button", "aria-label": "Close" } });
     setIcon(closeButton, "x");
+    // Monthly review: what's coming up from the year plan, to plan tasks around it.
+    if (session.type === "monthly" && this.settings.planningEnabled) {
+      const coming = upcomingEntries(this.store.getPlanningEntries(), todayIso(), 61, true);
+      if (coming.length) {
+        const box = modal.createEl("details", { cls: "belki-review-coming-up" });
+        if (this.reviewComingUpOpen) box.setAttr("open", "");
+        box.addEventListener("toggle", () => {
+          this.reviewComingUpOpen = box.open;
+        });
+        box.createEl("summary", { text: `Coming up in the next two months (${coming.length})` });
+        renderPlanningStrip(this, box, "From the year plan", coming, () => {
+          this.reviewOpen = false;
+          this.openYearPlan();
+        });
+      }
+    }
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });

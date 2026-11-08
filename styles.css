@@ -3408,3 +3408,46 @@ button.belki-editor-chip {
 .belki-review-task-meta .belki-task-stuck {
   font-weight: 600;
 }
+
+/* Monthly review: upcoming year-plan entries */
+.belki-review-coming-up {
+  margin: 0 0 12px;
+}
+
+.belki-review-coming-up > summary {
+  color: var(--belki-muted);
+  cursor: pointer;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.belki-review-coming-up .belki-planning-strip {
+  margin-bottom: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Today sidebar: year-plan entries for today and tomorrow */
+.belki-today-planning-row {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+}
+
+.belki-today-planning-when {
+  color: var(--text-muted);
+  flex: none;
+  font-size: var(--font-ui-smaller);
+  min-width: 58px;
+}
+
+.belki-today-planning-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.belki-today-panel .belki-year-diamond {
+  background: var(--interactive-accent);
+  flex: none;
+}

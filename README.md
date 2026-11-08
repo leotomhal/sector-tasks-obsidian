@@ -31,7 +31,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - Board view grouped by sectors (default: `#01this-week` → `#02next-week` → `#03this-month` → `#04next-month` → `#05longterm` → `#routines` → `#waiting`), plus an **Inbox** for tasks without a sector tag
 - **Combine sectors:** Ctrl/Cmd+click a sector in the sidebar to view several sectors together (e.g. This Week + Next Week); a plain click still shows just one
 - Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic). They live on their own **Sectors** settings page (a collapsible group on Obsidian before 1.13), and renaming a tag or removing a sector first asks for confirmation and tells you how many tasks are affected
-- Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
+- Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox); right-click the selection to set the due date, snooze or priority for all of them at once
 - Sort modes: smart, due date, priority, deadline, created, project
 - Full-text search across all tasks; the **Open search** command jumps straight to it — assign a hotkey under Obsidian's Settings → Hotkeys — and an optional setting excludes completed tasks from results
 - Jump button per task: opens the underlying note at the matching `🆔` line
@@ -39,7 +39,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 ### Capturing & editing
 - **Own task editor:** "+ Add task" and clicking a task open a dialog with title, sector, priority, due date (with Today / Tomorrow / Next week shortcuts), labels (with suggestions from the ones you already use) and repeat (every day / weekday / week on a weekday / month on a day / year, every N, optionally counted from completion). `Cmd/Ctrl+Enter` saves. A free-text recurrence written earlier, like `every 15 july`, is kept exactly as written unless you change the repeat settings
 - Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
-- **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
+- **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Paste a list (from a note or an email) and each line becomes its own task; list markers like `-`, `*` or `1.` are dropped. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
 - **Quick add task (Inbox)** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), or set the priority (P1–P4 / none), without opening the editor
 - **Undo:** checking a task off shows a short notice with an **Undo** link that restores the exact previous state — including recurring tasks that were rescheduled. Also available as the **Undo last completed task** command for a hotkey
@@ -50,7 +50,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - They never show up as tasks: not in the Inbox, sectors, reviews, search or counts. The plugin files new ones under a `## Planning` heading at the end of the tasks file, sorted by date
 - **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. Click a quarter's header to fold it; past quarters start folded, the current and upcoming ones open. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it, jump to its line, or delete it
 - Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**
-- **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), and the **Overview** lists the next events
+- **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), the **Overview** lists the next events, the **Today sidebar** shows today's and tomorrow's, and the **Monthly Review** opens with what's coming up in the next two months
 - **Turn it off** under Settings → Year plan if you don't use it: the view, the strips and the Overview list disappear, and any `#planning` lines stay in the file untouched
 - **Past years** move to the archive note on startup once they're over (Settings → Archive past years' planning, on by default), so the tasks file only holds this year and the years ahead. The year plan still shows archived years, read-only
 

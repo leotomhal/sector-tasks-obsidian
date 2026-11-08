@@ -572,6 +572,51 @@ function uniqueRealProjects(projects) {
   return [...new Set(projects.map(normalizeTaskProject).filter(Boolean))].sort((a, b) => sectorRank(a) - sectorRank(b) || a.localeCompare(b));
 }
 
+// src/planning.ts
+function entryFirstDay(entry) {
+  return entry.start && isIsoDate(entry.start) ? entry.start : entry.due || "";
+}
+function quarterOf(iso) {
+  return Math.floor((Number(iso.slice(5, 7)) - 1) / 3) + 1;
+}
+function entryDays(entry) {
+  if (!entry.start || !entry.due) return 1;
+  return Math.max(1, daysBetweenIso(entry.start, entry.due) + 1);
+}
+function entryLastDay(entry) {
+  const due = entry.due || "";
+  if (!entry.precision || !isIsoDate(due)) return due;
+  const y = Number(due.slice(0, 4));
+  const m = Number(due.slice(5, 7));
+  const lastMonth = entry.precision === "quarter" ? Math.floor((m - 1) / 3) * 3 + 3 : m;
+  const lastDay = new Date(y, lastMonth, 0).getDate();
+  return `${y}-${String(lastMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+}
+function isPastEntry(entry, today) {
+  return Boolean(entry.due) && entryLastDay(entry) < today;
+}
+function isEntryOn(entry, day) {
+  if (entry.precision) return false;
+  return entryFirstDay(entry) <= day && (entry.due || "") >= day;
+}
+function isMissedMilestone(entry, today) {
+  return entry.milestone === true && !entry.completed && isPastEntry(entry, today);
+}
+function entriesForYear(entries, year) {
+  const y = String(year);
+  return entries.filter((e) => isIsoDate(e.due) && (e.due.startsWith(y) || entryFirstDay(e).startsWith(y))).sort(compareEntries);
+}
+function upcomingEntries(entries, today, days, includePeriods = false) {
+  const until = shiftIsoDate(today, days);
+  return entries.filter((e) => (includePeriods || !e.precision) && isIsoDate(e.due) && entryLastDay(e) >= today && entryFirstDay(e) <= until).sort(compareEntries);
+}
+function precisionRank(entry) {
+  return entry.precision === "quarter" ? 0 : entry.precision === "month" ? 1 : 2;
+}
+function compareEntries(a, b) {
+  return entryFirstDay(a).localeCompare(entryFirstDay(b)) || precisionRank(a) - precisionRank(b) || (a.due || "").localeCompare(b.due || "") || a.title.localeCompare(b.title);
+}
+
 // src/views/TodaySidebarView.ts
 var VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 var TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
@@ -584,6 +629,35 @@ function formatSnoozeDate(iso) {
     month: "short",
     ...y !== (/* @__PURE__ */ new Date()).getFullYear() ? { year: "numeric" } : {}
   }).format(date);
+}
+function showSelectionContextMenu(store, tasks, event, onDone) {
+  const menu = new import_obsidian2.Menu();
+  const ids = tasks.map((t) => t.id);
+  const apply = (patches) => {
+    void store.updateEachTask(patches).then(onDone);
+  };
+  const same = (patch) => apply(new Map(ids.map((id) => [id, patch])));
+  menu.addItem((item) => item.setTitle(`${tasks.length} tasks selected`).setDisabled(true));
+  menu.addSeparator();
+  for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)]]) {
+    menu.addItem((item) => item.setTitle(`Due: ${label}`).onClick(() => same({ due: value })));
+  }
+  menu.addItem((item) => item.setTitle("Remove due date").onClick(() => same({ due: void 0 })));
+  menu.addSeparator();
+  for (const days of [1, 3, 7]) {
+    menu.addItem((item) => item.setTitle(`Snooze ${days === 1 ? "1 day" : `${days} days`} each`).onClick(() => {
+      apply(new Map(tasks.map((t) => {
+        const base = t.due && t.due > todayIso() ? t.due : todayIso();
+        return [t.id, { due: shiftIsoDate(base, days) }];
+      })));
+    }));
+  }
+  menu.addSeparator();
+  for (const priority of ["P1", "P2", "P3", "P4"]) {
+    menu.addItem((item) => item.setTitle(getPriorityLabel(priority)).onClick(() => same({ priority })));
+  }
+  menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
+  menu.showAtMouseEvent(event);
 }
 function showTaskContextMenu(store, task, event) {
   const menu = new import_obsidian2.Menu();
@@ -719,6 +793,8 @@ var TodaySidebarView = class extends import_obsidian2.ItemView {
     const dueToday = open.filter((t) => t.due === today).sort(byPriority);
     const dueTomorrow = open.filter((t) => t.due === tomorrow).sort(byPriority);
     this.updateTabBadge(overdue.length + dueToday.length);
+    const planning = this.settings.planningEnabled ? upcomingEntries(this.store.getPlanningEntries(), today, 1) : [];
+    if (planning.length) this.renderPlanning(container, planning, today);
     if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
       container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
@@ -731,6 +807,21 @@ var TodaySidebarView = class extends import_obsidian2.ItemView {
     }
     if (dueTomorrow.length) {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
+    }
+  }
+  renderPlanning(container, entries, today) {
+    const section = container.createDiv({ cls: "belki-today-section belki-today-planning" });
+    const head = section.createDiv({ cls: "belki-today-section-label" });
+    head.createSpan({ text: "Planning" });
+    head.createSpan({ cls: "belki-today-section-count", text: String(entries.length) });
+    for (const entry of entries) {
+      const row = section.createDiv({ cls: "belki-today-row belki-today-planning-row" });
+      row.addEventListener("click", () => {
+        void this.store.editTaskInEditor(entry.id);
+      });
+      row.createSpan({ cls: "belki-today-planning-when", text: isEntryOn(entry, today) ? "Today" : "Tomorrow" });
+      if (entry.milestone) row.createSpan({ cls: "belki-year-diamond", attr: { "aria-label": "Milestone" } });
+      row.createSpan({ cls: "belki-today-planning-title", text: entry.title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target, _a, alias) => alias || target) });
     }
   }
   updateTabBadge(count) {
@@ -2498,51 +2589,6 @@ function stuckWeeks(task, stay, sectors, today, thresholdWeeks) {
   return weeks >= thresholdWeeks ? weeks : 0;
 }
 
-// src/planning.ts
-function entryFirstDay(entry) {
-  return entry.start && isIsoDate(entry.start) ? entry.start : entry.due || "";
-}
-function quarterOf(iso) {
-  return Math.floor((Number(iso.slice(5, 7)) - 1) / 3) + 1;
-}
-function entryDays(entry) {
-  if (!entry.start || !entry.due) return 1;
-  return Math.max(1, daysBetweenIso(entry.start, entry.due) + 1);
-}
-function entryLastDay(entry) {
-  const due = entry.due || "";
-  if (!entry.precision || !isIsoDate(due)) return due;
-  const y = Number(due.slice(0, 4));
-  const m = Number(due.slice(5, 7));
-  const lastMonth = entry.precision === "quarter" ? Math.floor((m - 1) / 3) * 3 + 3 : m;
-  const lastDay = new Date(y, lastMonth, 0).getDate();
-  return `${y}-${String(lastMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-}
-function isPastEntry(entry, today) {
-  return Boolean(entry.due) && entryLastDay(entry) < today;
-}
-function isEntryOn(entry, day) {
-  if (entry.precision) return false;
-  return entryFirstDay(entry) <= day && (entry.due || "") >= day;
-}
-function isMissedMilestone(entry, today) {
-  return entry.milestone === true && !entry.completed && isPastEntry(entry, today);
-}
-function entriesForYear(entries, year) {
-  const y = String(year);
-  return entries.filter((e) => isIsoDate(e.due) && (e.due.startsWith(y) || entryFirstDay(e).startsWith(y))).sort(compareEntries);
-}
-function upcomingEntries(entries, today, days, includePeriods = false) {
-  const until = shiftIsoDate(today, days);
-  return entries.filter((e) => (includePeriods || !e.precision) && isIsoDate(e.due) && entryLastDay(e) >= today && entryFirstDay(e) <= until).sort(compareEntries);
-}
-function precisionRank(entry) {
-  return entry.precision === "quarter" ? 0 : entry.precision === "month" ? 1 : 2;
-}
-function compareEntries(a, b) {
-  return entryFirstDay(a).localeCompare(entryFirstDay(b)) || precisionRank(a) - precisionRank(b) || (a.due || "").localeCompare(b.due || "") || a.title.localeCompare(b.title);
-}
-
 // src/views/yearPlan.ts
 var import_obsidian4 = require("obsidian");
 var YearPlanState = class {
@@ -3066,6 +3112,7 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
   constructor(leaf, store, settings, saveSettings) {
     super(leaf);
     this.yearPlan = new YearPlanState();
+    this.reviewComingUpOpen = true;
     this.captureDraft = "";
     this.captureInputEl = null;
     this.store = store;
@@ -4411,6 +4458,14 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     if (!task.completed) {
       row.addEventListener("contextmenu", (event) => {
         event.preventDefault();
+        if (this.selectedTaskIds.size > 1 && this.selectedTaskIds.has(task.id)) {
+          const selected = this.store.getTasks().filter((t) => this.selectedTaskIds.has(t.id) && !t.completed);
+          showSelectionContextMenu(this.store, selected, event, () => {
+            this.selectedTaskIds.clear();
+            this.render();
+          });
+          return;
+        }
         showTaskContextMenu(this.store, task, event);
       });
     }
@@ -4620,6 +4675,17 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
         if (saved) return;
         this.captureDraft = text;
         this.render();
+      });
+    });
+    input.addEventListener("paste", (event) => {
+      var _a;
+      const pasted = ((_a = event.clipboardData) == null ? void 0 : _a.getData("text/plain")) || "";
+      const lines = pasted.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) return;
+      event.preventDefault();
+      void this.store.createTasksFromLines(lines).then((count) => {
+        if (count) new import_obsidian6.Notice(`Added ${count} task${count === 1 ? "" : "s"} to the inbox.`);
+        else new import_obsidian6.Notice("Couldn't add the pasted tasks. The tasks file changed on disk; please paste again.");
       });
     });
   }
@@ -5086,6 +5152,21 @@ var TaskBoardView = class extends import_obsidian6.ItemView {
     });
     const closeButton = header.createEl("button", { cls: "belki-review-close", attr: { type: "button", "aria-label": "Close" } });
     (0, import_obsidian6.setIcon)(closeButton, "x");
+    if (session.type === "monthly" && this.settings.planningEnabled) {
+      const coming = upcomingEntries(this.store.getPlanningEntries(), todayIso(), 61, true);
+      if (coming.length) {
+        const box = modal.createEl("details", { cls: "belki-review-coming-up" });
+        if (this.reviewComingUpOpen) box.setAttr("open", "");
+        box.addEventListener("toggle", () => {
+          this.reviewComingUpOpen = box.open;
+        });
+        box.createEl("summary", { text: `Coming up in the next two months (${coming.length})` });
+        renderPlanningStrip(this, box, "From the year plan", coming, () => {
+          this.reviewOpen = false;
+          this.openYearPlan();
+        });
+      }
+    }
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });
@@ -6199,17 +6280,30 @@ var TaskStore = class {
    * was saved (empty text, or the file changed on disk and the save was dropped).
    */
   async createTaskFromText(text, sector) {
-    const trimmed = text.replace(/\s+/g, " ").trim();
-    if (!trimmed) return false;
-    let line = ensureTaskMarker(`- [ ] ${trimmed}`);
-    line = ensureSectorInLine(line, sector);
-    const parsed = parseTaskLine(line, createId(), this.tasks.length);
-    if (!parsed) return false;
-    const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
-    this.tasks.push(task);
-    this.insertTaskBlock(task);
+    return await this.createTasksFromLines([text], sector) === 1;
+  }
+  /**
+   * Several quick-capture lines at once (e.g. a pasted list), saved together.
+   * List markers ("- ", "* ", "1. ", "- [ ] ") are stripped; empty lines skipped.
+   * Returns how many tasks were saved (0 if the save was dropped).
+   */
+  async createTasksFromLines(lines, sector) {
+    const created = [];
+    for (const raw of lines) {
+      const trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
+      if (!trimmed) continue;
+      let line = ensureTaskMarker(`- [ ] ${trimmed}`);
+      line = ensureSectorInLine(line, sector);
+      const parsed = parseTaskLine(line, createId(), this.tasks.length);
+      if (!parsed) continue;
+      const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
+      this.tasks.push(task);
+      this.insertTaskBlock(task);
+      created.push(task);
+    }
+    if (!created.length) return 0;
     await this.save();
-    return this.tasks.some((t) => t.id === task.id);
+    return created.filter((task) => this.tasks.some((t) => t.id === task.id)).length;
   }
   /** Opens the editor for a task or planning entry and saves what it returns. */
   async editTaskInEditor(id) {
@@ -6236,11 +6330,15 @@ var TaskStore = class {
     await this.updateManyTasks([id], patch);
   }
   async updateManyTasks(ids, patch) {
-    const idSet = new Set(ids);
-    if (idSet.size === 0) return;
+    await this.updateEachTask(new Map(ids.map((id) => [id, patch])));
+  }
+  /** Applies a separate patch per task (e.g. snoozing each from its own date) in one save. */
+  async updateEachTask(patches) {
+    if (patches.size === 0) return;
     let changed = false;
     this.tasks = this.tasks.map((candidate) => {
-      if (!idSet.has(candidate.id)) return candidate;
+      const patch = patches.get(candidate.id);
+      if (!patch) return candidate;
       changed = true;
       return {
         ...candidate,
@@ -6553,6 +6651,9 @@ function reinsertDeletedTask(blocks, tasks, snapshot) {
   const ti = Math.min(snapshot.taskIndex, tasks.length);
   const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
   return { blocks: nextBlocks, tasks: nextTasks };
+}
+function stripListMarker(line) {
+  return line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").replace(/^\s*\[[ xX]\]\s+/, "");
 }
 function isPlanningHeading(line) {
   return /^##\s+planning\s*$/i.test((line || "").trim());
@@ -6977,6 +7078,7 @@ var __testables = {
   reconcileWaitingSince,
   reconcileSectorSince,
   stuckWeeks,
+  stripListMarker,
   formFromRule,
   ruleFromForm,
   ordinal,

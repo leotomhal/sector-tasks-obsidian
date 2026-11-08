@@ -5,6 +5,7 @@ import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
+import { isEntryOn, upcomingEntries } from "../planning";
 
 export const VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 export const TODAY_PRIORITY_RANK: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
@@ -18,6 +19,39 @@ export function formatSnoozeDate(iso: string): string {
     month: "short",
     ...y !== new Date().getFullYear() ? { year: "numeric" } : {}
   }).format(date);
+}
+/**
+ * Right-click menu for a multi-selection: due date, snooze and priority for all
+ * selected tasks at once, in one save. Snooze moves each task from its own date.
+ */
+export function showSelectionContextMenu(store: TaskStore, tasks: Task[], event: MouseEvent, onDone: () => void) {
+  const menu = new Menu();
+  const ids = tasks.map((t) => t.id);
+  const apply = (patches: Map<string, Partial<Task>>) => {
+    void store.updateEachTask(patches).then(onDone);
+  };
+  const same = (patch: Partial<Task>) => apply(new Map(ids.map((id) => [id, patch])));
+  menu.addItem((item) => item.setTitle(`${tasks.length} tasks selected`).setDisabled(true));
+  menu.addSeparator();
+  for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)]]) {
+    menu.addItem((item) => item.setTitle(`Due: ${label}`).onClick(() => same({ due: value })));
+  }
+  menu.addItem((item) => item.setTitle("Remove due date").onClick(() => same({ due: void 0 })));
+  menu.addSeparator();
+  for (const days of [1, 3, 7]) {
+    menu.addItem((item) => item.setTitle(`Snooze ${days === 1 ? "1 day" : `${days} days`} each`).onClick(() => {
+      apply(new Map(tasks.map((t) => {
+        const base = t.due && t.due > todayIso() ? t.due : todayIso();
+        return [t.id, { due: shiftIsoDate(base, days) }];
+      })));
+    }));
+  }
+  menu.addSeparator();
+  for (const priority of ["P1", "P2", "P3", "P4"]) {
+    menu.addItem((item) => item.setTitle(getPriorityLabel(priority)).onClick(() => same({ priority })));
+  }
+  menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
+  menu.showAtMouseEvent(event);
 }
 export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEvent) {
   const menu = new Menu();
@@ -155,6 +189,9 @@ export class TodaySidebarView extends ItemView {
     const dueToday = open.filter((t) => t.due === today).sort(byPriority);
     const dueTomorrow = open.filter((t) => t.due === tomorrow).sort(byPriority);
     this.updateTabBadge(overdue.length + dueToday.length);
+    // Year-plan entries running today or starting tomorrow (not counted in the badge).
+    const planning = this.settings.planningEnabled ? upcomingEntries(this.store.getPlanningEntries(), today, 1) : [];
+    if (planning.length) this.renderPlanning(container, planning, today);
     if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
       container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
@@ -167,6 +204,21 @@ export class TodaySidebarView extends ItemView {
     }
     if (dueTomorrow.length) {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
+    }
+  }
+  renderPlanning(container: HTMLElement, entries: Task[], today: string) {
+    const section = container.createDiv({ cls: "belki-today-section belki-today-planning" });
+    const head = section.createDiv({ cls: "belki-today-section-label" });
+    head.createSpan({ text: "Planning" });
+    head.createSpan({ cls: "belki-today-section-count", text: String(entries.length) });
+    for (const entry of entries) {
+      const row = section.createDiv({ cls: "belki-today-row belki-today-planning-row" });
+      row.addEventListener("click", () => {
+        void this.store.editTaskInEditor(entry.id);
+      });
+      row.createSpan({ cls: "belki-today-planning-when", text: isEntryOn(entry, today) ? "Today" : "Tomorrow" });
+      if (entry.milestone) row.createSpan({ cls: "belki-year-diamond", attr: { "aria-label": "Milestone" } });
+      row.createSpan({ cls: "belki-today-planning-title", text: entry.title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target: string, _a, alias?: string) => alias || target) });
     }
   }
   updateTabBadge(count: number) {

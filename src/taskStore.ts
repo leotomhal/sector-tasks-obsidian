@@ -220,17 +220,30 @@ export class TaskStore {
    * was saved (empty text, or the file changed on disk and the save was dropped).
    */
   async createTaskFromText(text: string, sector?: string): Promise<boolean> {
-    const trimmed = text.replace(/\s+/g, " ").trim();
-    if (!trimmed) return false;
-    let line = ensureTaskMarker(`- [ ] ${trimmed}`);
-    line = ensureSectorInLine(line, sector);
-    const parsed = parseTaskLine(line, createId(), this.tasks.length);
-    if (!parsed) return false;
-    const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
-    this.tasks.push(task);
-    this.insertTaskBlock(task);
+    return (await this.createTasksFromLines([text], sector)) === 1;
+  }
+  /**
+   * Several quick-capture lines at once (e.g. a pasted list), saved together.
+   * List markers ("- ", "* ", "1. ", "- [ ] ") are stripped; empty lines skipped.
+   * Returns how many tasks were saved (0 if the save was dropped).
+   */
+  async createTasksFromLines(lines: string[], sector?: string): Promise<number> {
+    const created: Task[] = [];
+    for (const raw of lines) {
+      const trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
+      if (!trimmed) continue;
+      let line = ensureTaskMarker(`- [ ] ${trimmed}`);
+      line = ensureSectorInLine(line, sector);
+      const parsed = parseTaskLine(line, createId(), this.tasks.length);
+      if (!parsed) continue;
+      const task = { ...parsed.task, created: parsed.task.created || todayIso(), sourcePath: this.filePath };
+      this.tasks.push(task);
+      this.insertTaskBlock(task);
+      created.push(task);
+    }
+    if (!created.length) return 0;
     await this.save();
-    return this.tasks.some((t) => t.id === task.id);
+    return created.filter((task) => this.tasks.some((t) => t.id === task.id)).length;
   }
   /** Opens the editor for a task or planning entry and saves what it returns. */
   async editTaskInEditor(id: string) {
@@ -257,11 +270,15 @@ export class TaskStore {
     await this.updateManyTasks([id], patch);
   }
   async updateManyTasks(ids: string[], patch: Partial<Task>) {
-    const idSet = new Set(ids);
-    if (idSet.size === 0) return;
+    await this.updateEachTask(new Map(ids.map((id) => [id, patch])));
+  }
+  /** Applies a separate patch per task (e.g. snoozing each from its own date) in one save. */
+  async updateEachTask(patches: Map<string, Partial<Task>>) {
+    if (patches.size === 0) return;
     let changed = false;
     this.tasks = this.tasks.map((candidate) => {
-      if (!idSet.has(candidate.id)) return candidate;
+      const patch = patches.get(candidate.id);
+      if (!patch) return candidate;
       changed = true;
       return {
         ...candidate,
@@ -587,6 +604,10 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
   const ti = Math.min(snapshot.taskIndex, tasks.length);
   const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
   return { blocks: nextBlocks, tasks: nextTasks };
+}
+/** "- [ ] Buy milk", "* Buy milk", "3. Buy milk" → "Buy milk". */
+export function stripListMarker(line: string): string {
+  return line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").replace(/^\s*\[[ xX]\]\s+/, "");
 }
 export function isPlanningHeading(line?: string): boolean {
   return /^##\s+planning\s*$/i.test((line || "").trim());
