@@ -1,1 +1,8 @@
 node_modules/
+
+# Local Claude Code settings can hold tokens from approved commands
+.claude/settings.local.json
+
+# Environment files
+.env
+.env.*
