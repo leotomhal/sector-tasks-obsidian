@@ -3,6 +3,24 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.6.0
+
+### New
+- **Calendars (optional, off by default).** Show events from one or more online calendars next to your tasks, read-only. Turn it on under Settings → Calendars and add a calendar's iCal address (for Google Calendar: the calendar's settings → *Secret address in iCal format*). Events appear in a **Day plan** at the top of Today, in Upcoming for the next 14 days and in the Today sidebar. Recurring events, moved or cancelled occurrences and time zones are handled. Each calendar gets its own color and a switch to also show its events in the year plan. Click an event for its details. Calendars refresh every 30 minutes (adjustable) and with the **Refresh calendars** command; the last good copy is kept, so the day plan works offline. The plugin only downloads the addresses you enter and never writes to your calendar.
+- **Time blocking (optional, off by default).** Turn on **Time blocking in today** in the settings, and Today gets a timeline, 8:00 to 18:00 unless you change it. Drag a task onto a slot, or choose **Plan a time today…** in its context menu and tap a slot. Click a block to change its length or remove it. Blocks sit next to your calendar events, are marked when they overlap one, and show as a small time on the task row. They're kept in the plugin's data, not in your tasks file, and expire the next day. On a phone, switch between List and Timeline at the top.
+- **Focus in Today (optional, off by default).** Today can start with "Must do" (your P1 tasks, up to 2) and "Next" (your P2 tasks, up to 8), from any sector and whatever their date. The count turns red when there are more. Turn it on with **Focus in today** in the settings.
+- **Stuck tasks.** A task that sits 3 weeks in the same sector gets a note on its weekly-review card and a small "3 wk" on the board, and the review summary note gets a "Stuck" list. Only sectors in the weekly review count, recurring tasks never do, and moving a task restarts the count. Change the weeks or turn it off (0) under Settings → Sectors.
+- **Paste a list into the Inbox.** Pasting several lines into the capture field creates one task per line; list markers and checkboxes are dropped.
+- **Edit a selection at once.** Right-click a multi-selection to set the due date, snooze or set the priority for all selected tasks.
+- **Year plan in more places.** The Monthly Review shows what's coming up in the next two months, and the Today sidebar shows entries running today or starting tomorrow.
+
+### Changed
+- The bottom button in the Inbox now reads **Add with details…**.
+
+### Internal
+- The stacked quarters in the year plan no longer use `display: contents`, which Obsidian's plugin review reported. Nothing looks different.
+- Calendar files are read with ical.js (MPL-2.0), which makes the plugin file larger.
+
 ## 1.5.4
 
 ### Changed
