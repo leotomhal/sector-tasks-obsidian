@@ -17,5 +17,8 @@
     "obsidian": "^1.14.4",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.65.0"
+  },
+  "dependencies": {
+    "ical.js": "2.2.1"
   }
 }

@@ -24,13 +24,14 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 
 ### Overview
 - An **Overview** dashboard in the sidebar: two progress rings (Today, plus whichever sector tab is selected), Overdue / Done today / Done this week counters, a sector tab bar (Inbox first, then your sectors), and a quick-add + compact task list scoped to the selected tab
+- **Focus in Today (2+8)** (optional, off by default): following Carl Pullein's 2+8 method, Today opens with **Must do** (your priority 1 tasks, up to 2) and **Next** (priority 2, up to 8), from any sector and whatever their date; the count turns red past the limit, and these tasks aren't repeated in the date sections below. Pick them in the evening with right-click → priority. Settings → Focus in today (2+8)
 - **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today)
 
 ### Board & sectors
 - Board view grouped by sectors (default: `#01this-week` → `#02next-week` → `#03this-month` → `#04next-month` → `#05longterm` → `#routines` → `#waiting`), plus an **Inbox** for tasks without a sector tag
 - **Combine sectors:** Ctrl/Cmd+click a sector in the sidebar to view several sectors together (e.g. This Week + Next Week); a plain click still shows just one
 - Sectors are fully configurable: tag text, display name, order, and count can all be adjusted, including automatic migration of already-tagged tasks when renaming; one sector can be marked **Waiting for** (its own review handling instead of the sector logic). They live on their own **Sectors** settings page (a collapsible group on Obsidian before 1.13), and renaming a tag or removing a sector first asks for confirmation and tells you how many tasks are affected
-- Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox)
+- Multi-select (Ctrl/Cmd+click) with shared drag-and-drop (sector, due date, Inbox); right-click the selection to set the due date, snooze or priority for all of them at once
 - Sort modes: smart, due date, priority, deadline, created, project
 - Full-text search across all tasks; the **Open search** command jumps straight to it — assign a hotkey under Obsidian's Settings → Hotkeys — and an optional setting excludes completed tasks from results
 - Jump button per task: opens the underlying note at the matching `🆔` line
@@ -38,7 +39,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 ### Capturing & editing
 - **Own task editor:** "+ Add task" and clicking a task open a dialog with title, sector, priority, due date (with Today / Tomorrow / Next week shortcuts), labels (with suggestions from the ones you already use) and repeat (every day / weekday / week on a weekday / month on a day / year, every N, optionally counted from completion). `Cmd/Ctrl+Enter` saves. A free-text recurrence written earlier, like `every 15 july`, is kept exactly as written unless you change the repeat settings
 - Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
-- **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
+- **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Paste a list (from a note or an email) and each line becomes its own task; list markers like `-`, `*` or `1.` are dropped. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
 - **Quick add task (Inbox)** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), or set the priority (P1–P4 / none), without opening the editor
 - **Undo:** checking a task off shows a short notice with an **Undo** link that restores the exact previous state — including recurring tasks that were rescheduled. Also available as the **Undo last completed task** command for a hotkey
@@ -49,7 +50,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - They never show up as tasks: not in the Inbox, sectors, reviews, search or counts. The plugin files new ones under a `## Planning` heading at the end of the tasks file, sorted by date
 - **Year plan** view: the four quarters as columns, months inside, the current quarter highlighted; past entries turn grey. Click a quarter's header to fold it; past quarters start folded, the current and upcoming ones open. **+ Add** in a quarter creates an entry without a dialog; click an entry to edit it, jump to its line, or delete it
 - Appointments aren't checked off. Milestones are ("Mark as reached"); one still open after its date shows **Not reached**
-- **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), and the **Overview** lists the next events
+- **Today** and **Upcoming** show a small Planning strip above your tasks (today plus the next 7 days / next 2 weeks), the **Overview** lists the next events, the **Today sidebar** shows today's and tomorrow's, and the **Monthly Review** opens with what's coming up in the next two months
 - **Turn it off** under Settings → Year plan if you don't use it: the view, the strips and the Overview list disappear, and any `#planning` lines stay in the file untouched
 - **Past years** move to the archive note on startup once they're over (Settings → Archive past years' planning, on by default), so the tasks file only holds this year and the years ahead. The year plan still shows archived years, read-only
 
@@ -57,6 +58,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - Each sector can be independently included in **Weekly** and/or **Monthly Review** — no fixed positional assumption about which sectors belong where
 - **Weekly/Monthly Review**: a guided, sector-by-sector walkthrough (Inbox → configured sectors → Waiting), with Stay/Up/Down/Inbox per task, or Follow up/Keep waiting for Waiting-tagged tasks; progress persists across interruptions
 - **Waiting age:** tasks in the Waiting sector show how long they've been waiting ("Waiting 12 d"), on the board and in the review. After a configurable number of days (Settings → Sectors, default 7) the count turns red as a nudge to follow up. The date is kept in the plugin's data, not in your tasks file
+- **Stuck tasks:** a task that sits 3 weeks (configurable under Settings → Sectors, 0 turns it off) in the same sector gets a note: "3 weeks in This week" on its weekly-review card, a small "3 wk" on the board, and a "Stuck" list in the review summary note. Only sectors in the weekly review count, recurring tasks never do, and moving a task restarts the count. The dates are kept in the plugin's data, not in your tasks file
 - **Review summary note** (optional, off by default): after a Weekly or Monthly Review, a note like `Reviews/Weekly review 2026-W45.md` lists what you finished recently, what moved or was deleted during the review, what's new, the waiting list with ages, and open/overdue counts per sector
 - **Daily Review**: a shorter, date-based walkthrough (Inbox → due today → due tomorrow or overdue), with Reschedule/Next per task instead of sector logic
 - **PROCESS button** in the Inbox: runs the review workflow for the Inbox only
@@ -66,6 +68,11 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 ### Today sidebar
 - The **Open Today sidebar** command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in
 - The tab shows a badge with the count of overdue + due-today tasks; header buttons quick-add to the Inbox and jump to the full board
+
+### Calendars and time blocking (optional, both off by default)
+- **Calendars:** show events from one or more online calendars next to your tasks, read-only. Add a calendar's iCal address under Settings → Calendars (for Google Calendar: the calendar's settings → *Secret address in iCal format*). Events appear in a **Day plan** at the top of Today, in Upcoming (next 14 days) and in the Today sidebar; recurring events, moved occurrences and time zones are handled. Each calendar has its own color and an optional switch to also show its events in the year plan. Clicking an event shows its details; nothing is ever written back to the calendar or to your tasks file. Feeds refresh every 30 minutes (configurable) and with the **Refresh calendars** command; the last good copy is kept, so the day plan still works offline
+- **Time blocking:** Today gets a timeline (8:00–18:00 by default, adjustable). Drag a task onto a slot, or use **Plan a time today…** in a task's context menu and tap a slot. Blocks show next to calendar events, are marked when they overlap one, and appear as a small time on the task row. Blocks are only for today: they're kept in the plugin's data, not in your tasks file, and expire the next day
+- **Network and privacy:** the calendars module is the only part of the plugin that uses the network. It only downloads (GET) the addresses you enter and sends nothing anywhere else. A Google "secret address" gives read access to that calendar to anyone who has it; it's stored in the plugin's `data.json` inside your vault, so keep that in mind if you share or sync your vault publicly. Parsed events are cached in `calendar-cache.json` in the plugin folder
 
 ### Housekeeping & appearance
 - **Release notes after updates:** the first time Obsidian starts after the plugin updated, a short "What's new" dialog lists the changes since the version you last saw (skipped versions included). It never appears on a fresh install, can be turned off in the settings, and the **Show release notes** command opens it any time

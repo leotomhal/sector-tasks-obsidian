@@ -4,6 +4,7 @@ import type { TaskStore } from "../taskStore";
 import { isIsoDate, todayIso } from "../dateUtils";
 import { entriesForYear, entryDays, entryFirstDay, isEntryOn, isMissedMilestone, isPastEntry, quarterOf } from "../planning";
 import { ConfirmModal } from "./ConfirmModal";
+import type { CalEvent } from "../calendar";
 
 /** What the year plan needs from the board view; avoids importing the view class here. */
 export interface PlanningHost {
@@ -14,6 +15,9 @@ export interface PlanningHost {
   renderEyebrow(parent: HTMLElement): void;
   openTaskInNote(task: Task): Promise<void>;
   renderLinkedTitle(text: string, el: HTMLElement): void;
+  /** Calendar events from feeds shown in the year plan, as read-only cards. */
+  calendarEntries(): Task[];
+  openEvent(event: CalEvent): void;
 }
 
 /** View state for the year plan; lives on the board view across re-renders. */
@@ -71,7 +75,7 @@ export function renderYearPlan(host: PlanningHost, state: YearPlanState, main: H
   const fileIds = new Set(fromFile.map((e) => e.id));
   const archived = (state.archived || []).filter((e) => !fileIds.has(e.id));
   const archivedIds = new Set(archived.map((e) => e.id));
-  let entries = entriesForYear([...fromFile, ...archived], state.year);
+  let entries = entriesForYear([...fromFile, ...archived, ...host.calendarEntries()], state.year);
   if (!state.showPast) entries = entries.filter((e) => !isPastEntry(e, today));
 
   const header = main.createDiv({ cls: "belki-main-header" });
@@ -117,12 +121,14 @@ export function renderYearPlan(host: PlanningHost, state: YearPlanState, main: H
   const collapsedQuarters = [1, 2, 3, 4].map((q) => state.addQuarter !== q && state.isCollapsed(state.year, q, today));
   const openCount = collapsedQuarters.filter((c) => !c).length;
   // With both folded and open quarters, the folded ones stack in a narrow first
-  // column on wide screens and the open ones share the rest. On narrow screens
-  // the stack dissolves (display: contents) and `order` keeps Q1–Q4 in sequence.
+  // column on wide screens and the open ones share the rest. On one column the
+  // stack takes the place of its first quarter, so the usual case (past
+  // quarters folded) still reads Q1–Q4 top to bottom.
   const stack = openCount > 0 && openCount < 4 ? grid.createDiv({ cls: "belki-year-stack" }) : null;
   if (stack) {
     grid.addClass("has-stack");
     grid.setCssProps({ "--belki-year-open": String(openCount) });
+    stack.setCssProps({ "--belki-stack-order": String(collapsedQuarters.indexOf(true) + 1) });
   }
   for (let q = 1; q <= 4; q++) {
     const inQuarter = entries.filter((e) => quarterOf(entryFirstDay(e)) === q);
@@ -214,8 +220,14 @@ function renderEntryCard(host: PlanningHost, parent: HTMLElement, entry: Task, t
       pill.appendText(text);
     }
   }
+  if (entry.calendar) {
+    const source = content.createSpan({ cls: "belki-year-entry-meta" }).createSpan({ cls: "belki-year-pill" });
+    source.createSpan({ cls: "belki-agenda-dot" }).setCssStyles({ backgroundColor: entry.calendar.color });
+    source.appendText(entry.calendar.feedName);
+  }
   card.addEventListener("click", () => {
-    new PlanningEntryModal(host, entry, readOnly).open();
+    if (entry.calendar) host.openEvent(entry.calendar.event);
+    else new PlanningEntryModal(host, entry, readOnly).open();
   });
 }
 

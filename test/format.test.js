@@ -44,6 +44,11 @@ const {
   extractTags,
   completionUndoPatch,
   reconcileWaitingSince,
+  reconcileSectorSince,
+  stuckWeeks,
+  parseIcs,
+  eventsOnDay,
+  stripListMarker,
   formFromRule,
   ruleFromForm,
   ordinal,
@@ -499,4 +504,107 @@ test("lines with non-breaking spaces (copied on a phone) are still read", () => 
     assert.equal(parsed.task.completed, false);
     assert.match(serializeTaskLine(parsed.task), /^- \[ \] Fair #task #planning 📅 2026-11-20 🆔 /, "written back with plain spaces");
   }
+});
+
+test("sector stays: new and moved tasks restart, others keep their date", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const tasks = [t("- [ ] Report #task #01this-week 🆔 a"), t("- [ ] Idea #task #05longterm 🆔 b"), t("- [ ] Inbox item #task 🆔 c")];
+  const first = reconcileSectorSince({}, tasks, "2026-11-01");
+  assert.deepEqual(first, { a: { sector: "01this-week", since: "2026-11-01" }, b: { sector: "05longterm", since: "2026-11-01" } }, "Inbox tasks have no sector and aren't tracked");
+  assert.equal(reconcileSectorSince(first, tasks, "2026-11-08"), null, "nothing changes while tasks stay put");
+  const moved = [t("- [ ] Report #task #02next-week 🆔 a"), tasks[1]];
+  assert.deepEqual(reconcileSectorSince(first, moved, "2026-11-08").a, { sector: "02next-week", since: "2026-11-08" }, "a move restarts the clock");
+  assert.equal(reconcileSectorSince(first, [], "2026-11-08"), null, "an empty file never wipes the record");
+});
+
+test("stuck weeks: only weekly-review sectors, not recurring, from the threshold on", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const sectors = [
+    { tag: "01this-week", label: "This week", inWeekly: true },
+    { tag: "05longterm", label: "Long term", inWeekly: false },
+    { tag: "waiting", label: "Waiting", isWaiting: true, inWeekly: true }
+  ];
+  const report = t("- [ ] Report #task #01this-week 🆔 a");
+  const stay = { sector: "01this-week", since: "2026-10-01" };
+  assert.equal(stuckWeeks(report, stay, sectors, "2026-10-21", 3), 0, "2 weeks and 6 days is not 3 weeks");
+  assert.equal(stuckWeeks(report, stay, sectors, "2026-10-22", 3), 3);
+  assert.equal(stuckWeeks(report, stay, sectors, "2026-10-22", 0), 0, "0 turns it off");
+  const idea = t("- [ ] Idea #task #05longterm 🆔 b");
+  assert.equal(stuckWeeks(idea, { sector: "05longterm", since: "2026-01-01" }, sectors, "2026-10-22", 3), 0, "long term isn't in the weekly review");
+  const routine = t("- [ ] Water plants #task #01this-week 🔁 every week 📅 2026-10-23 🆔 r");
+  assert.equal(stuckWeeks(routine, stay, sectors, "2026-10-22", 3), 0, "recurring tasks never count");
+  const waiting = t("- [ ] Reply #task #waiting 🆔 w");
+  assert.equal(stuckWeeks(waiting, { sector: "waiting", since: "2026-01-01" }, sectors, "2026-10-22", 3), 0, "the waiting sector has its own age");
+});
+
+test("review summary lists tasks still stuck after the review", () => {
+  const t = (line) => parseTaskLine(line, "x", 0).task;
+  const sectors = [{ tag: "01this-week", label: "This week", inWeekly: true }];
+  const tasks = [t("- [ ] Report #task #01this-week 🆔 a"), t("- [ ] Fresh #task #01this-week 🆔 b")];
+  const md = buildReviewSummary({
+    type: "weekly", periodKey: "2026-W45", today: "2026-11-07", tasks, sectors, snapshot: {}, waitingSince: {},
+    sectorSince: { a: { sector: "01this-week", since: "2026-10-10" }, b: { sector: "01this-week", since: "2026-11-05" } },
+    stuckThresholdWeeks: 3
+  });
+  assert.match(md, /## Stuck \(1\)\n- Report · 4 weeks in This week/);
+});
+
+test("pasted list lines lose their list markers", () => {
+  assert.equal(stripListMarker("- Buy milk"), "Buy milk");
+  assert.equal(stripListMarker("  * Call Ben #work"), "Call Ben #work");
+  assert.equal(stripListMarker("3. Draft agenda"), "Draft agenda");
+  assert.equal(stripListMarker("2) Book room"), "Book room");
+  assert.equal(stripListMarker("- [ ] Send slides 📅 2026-11-10"), "Send slides 📅 2026-11-10");
+  assert.equal(stripListMarker("Plain line"), "Plain line");
+  assert.equal(stripListMarker("-3 degrees tomorrow"), "-3 degrees tomorrow", "a dash without a space is text");
+});
+
+const SAMPLE_ICS = [
+  "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Google Inc//Google Calendar 70.9054//EN",
+  "BEGIN:VTIMEZONE", "TZID:Europe/Berlin",
+  "BEGIN:DAYLIGHT", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0200", "TZNAME:CEST", "DTSTART:19700329T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU", "END:DAYLIGHT",
+  "BEGIN:STANDARD", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "TZNAME:CET", "DTSTART:19701025T030000", "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU", "END:STANDARD",
+  "END:VTIMEZONE",
+  // Weekly jour fixe on Wednesdays 09:00–09:30, 18 Nov skipped, 25 Nov moved to 10:00
+  "BEGIN:VEVENT", "UID:jourfixe@google.com", "SUMMARY:Jour fixe Pressestelle", "LOCATION:Raum 2.14",
+  "DTSTART;TZID=Europe/Berlin:20261104T090000", "DTEND;TZID=Europe/Berlin:20261104T093000",
+  "RRULE:FREQ=WEEKLY;BYDAY=WE", "EXDATE;TZID=Europe/Berlin:20261118T090000", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:jourfixe@google.com", "RECURRENCE-ID;TZID=Europe/Berlin:20261125T090000", "SUMMARY:Jour fixe (later)",
+  "DTSTART;TZID=Europe/Berlin:20261125T100000", "DTEND;TZID=Europe/Berlin:20261125T103000", "END:VEVENT",
+  // All-day, two days (DTEND exclusive)
+  "BEGIN:VEVENT", "UID:fair@google.com", "SUMMARY:Messe", "DTSTART;VALUE=DATE:20261112", "DTEND;VALUE=DATE:20261114", "END:VEVENT",
+  // Cancelled
+  "BEGIN:VEVENT", "UID:gone@google.com", "SUMMARY:Abgesagt", "STATUS:CANCELLED", "DTSTART:20261111T130000Z", "DTEND:20261111T140000Z", "END:VEVENT",
+  "END:VCALENDAR"
+].join("\r\n");
+
+test("iCal feed: recurring, skipped, moved, all-day and cancelled events", () => {
+  const events = parseIcs(SAMPLE_ICS, "work", "2026-11-01", "2026-11-30");
+  const jourFixe = events.filter((e) => e.title.startsWith("Jour fixe"));
+  assert.deepEqual(jourFixe.map((e) => e.startDay), ["2026-11-04", "2026-11-11", "2026-11-25"], "weekly, 18 Nov skipped (EXDATE)");
+  assert.equal(jourFixe[1].startMs, Date.UTC(2026, 10, 11, 8, 0), "09:00 Berlin is 08:00 UTC in November");
+  assert.equal(jourFixe[1].location, "Raum 2.14");
+  const moved = jourFixe[2];
+  assert.equal(moved.title, "Jour fixe (later)");
+  assert.equal(moved.startMs, Date.UTC(2026, 10, 25, 9, 0), "the moved occurrence keeps its new time");
+  const fair = events.find((e) => e.title === "Messe");
+  assert.equal(fair.allDay, true);
+  assert.deepEqual([fair.startDay, fair.endDay], ["2026-11-12", "2026-11-13"], "DTEND of all-day events is exclusive");
+  assert.ok(!events.some((e) => e.title === "Abgesagt"), "cancelled events are skipped");
+  assert.equal(new Set(events.map((e) => e.id)).size, events.length, "ids are unique per occurrence");
+  assert.deepEqual(parseIcs(SAMPLE_ICS, "work", "2026-12-01", "2026-12-31").filter((e) => e.title === "Messe"), [], "outside the range nothing of it shows");
+});
+
+test("eventsOnDay: all-day first, then by time; pieces clipped to the day", () => {
+  const day = "2026-11-12";
+  const base = new Date(2026, 10, 12).getTime();
+  const events = [
+    { id: "a", feedId: "f", title: "Late", allDay: false, startDay: day, endDay: day, startMs: base + 14 * 3600e3, endMs: base + 15 * 3600e3 },
+    { id: "b", feedId: "f", title: "Fair", allDay: true, startDay: "2026-11-12", endDay: "2026-11-13" },
+    { id: "c", feedId: "f", title: "Night", allDay: false, startDay: "2026-11-11", endDay: day, startMs: base - 2 * 3600e3, endMs: base + 1 * 3600e3 }
+  ];
+  const pieces = eventsOnDay(events, day);
+  assert.deepEqual(pieces.map((p) => p.event.title), ["Fair", "Night", "Late"]);
+  assert.deepEqual([pieces[1].startMin, pieces[1].endMin], [0, 60], "an event from the night before starts at 00:00 on this day");
+  assert.deepEqual([pieces[2].startMin, pieces[2].endMin], [840, 900]);
 });

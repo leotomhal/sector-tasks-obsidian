@@ -1,8 +1,8 @@
 import { App, ItemView, MarkdownView, Modal, Notice, Platform, WorkspaceLeaf, setIcon } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
-import { showTaskContextMenu } from "./TodaySidebarView";
+import { showSelectionContextMenu, showTaskContextMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
-import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isIsoDate, isToday, startOfIsoWeekIso, todayIso, yesterdayIso } from "../dateUtils";
+import { compareIsoDates, shiftIsoDate, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isIsoDate, isToday, startOfIsoWeekIso, todayIso, yesterdayIso } from "../dateUtils";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "../labels";
 import { getPriorityClass, getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName, uniqueRealProjects } from "../projects";
@@ -10,14 +10,24 @@ import { buildReviewSteps, findWaitingSector, pruneReviewSession, reviewSectorNe
 import { applyBelkiFontSettings, applyBelkiThemeSettings, normalizeOverdueRange, overdueRangeLabel } from "../settings";
 import { E_ID, INBOX_SECTOR, SECTOR_SET } from "../tasksFormat";
 import { OVERDUE_RANGES } from "../types";
-import type { BelkiSettings, Task } from "../types";
+import type { BelkiSettings, CalendarFeed, Task, TimeBlock } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
+import { stuckWeeks } from "../stale";
 import { upcomingEntries } from "../planning";
-import { YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
+import { PlanningEntryModal, YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
+import type { CalendarService } from "../calendarService";
+import type { CalEvent } from "../calendar";
+import { EventModal, calendarItems, planningItems, renderAgenda, renderBlockChip, renderTimeline } from "./dayPlan";
+import type { AgendaItem, TimelineHost } from "./dayPlan";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
+/** Minutes since local midnight, for the day plan and the timeline. */
+export function nowMinutes(): number {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
 export const LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
 export function renderLinkedText(text: string, el: HTMLElement, app?: App) {
   LINK_RE.lastIndex = 0;
@@ -81,6 +91,11 @@ export class TaskBoardView extends ItemView {
   /** Sector tab selected in the "overview" mode's Ring 2 / mini-list (INBOX_SECTOR or a sector tag). */
   overviewSector: string;
   yearPlan = new YearPlanState();
+  calendar: CalendarService;
+  unsubscribeCalendar?: () => void;
+  todayPane: "list" | "timeline" = "list";
+  pickedForBlock: string | null = null;
+  reviewComingUpOpen = true;
   searchQuery: string;
   searchOpen: boolean;
   composerOpen: boolean;
@@ -104,9 +119,10 @@ export class TaskBoardView extends ItemView {
   renderScheduled: boolean;
   handleRootKeyDown: (event: KeyboardEvent) => void;
   unsubscribe?: () => void;
-  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, saveSettings: () => Promise<void>) {
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, saveSettings: () => Promise<void>, calendar: CalendarService) {
     super(leaf);
     this.store = store;
+    this.calendar = calendar;
     this.settings = settings;
     this.saveSettings = saveSettings;
     this.mode = settings.startView;
@@ -206,6 +222,7 @@ export class TaskBoardView extends ItemView {
   }
   async onOpen() {
     this.unsubscribe = this.store.subscribe(() => this.renderPreservingMainScroll());
+    this.unsubscribeCalendar = this.calendar.subscribe(() => this.renderPreservingMainScroll());
     this.render();
   }
   async onClose() {
@@ -214,6 +231,7 @@ export class TaskBoardView extends ItemView {
     this.removeProjectMenu();
     this.containerEl.removeEventListener("keydown", this.handleRootKeyDown, true);
     this.unsubscribe?.();
+    this.unsubscribeCalendar?.();
   }
   removeProjectMenu() {
     this.projectMenuEl?.remove();
@@ -667,21 +685,38 @@ export class TaskBoardView extends ItemView {
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
-    if (!this.settings.planningEnabled) {
-      // No planning strips.
-    } else if (this.mode === "today") {
-      renderPlanningStrip(this, main, "Planning \u00b7 today and the next 7 days", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 7), () => this.openYearPlan());
-    } else if (this.mode === "upcoming") {
-      renderPlanningStrip(this, main, "Planning \u00b7 next 2 weeks", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 14), () => this.openYearPlan());
+    // Today with time blocking: tasks on the left, the timeline on the right
+    // (on phones: one at a time, switched by a List/Timeline toggle).
+    let column: HTMLElement = main;
+    let timelinePane: HTMLElement | null = null;
+    if (this.mode === "today" && this.settings.timeBlocking) {
+      main.addClass("has-timeline");
+      const toggle = header.createDiv({ cls: "belki-pane-toggle" });
+      for (const [pane, label] of [["list", "List"], ["timeline", "Timeline"]] as const) {
+        const button = toggle.createEl("button", { text: label, attr: { type: "button" } });
+        button.toggleClass("is-on", this.todayPane === pane);
+        button.addEventListener("click", () => {
+          this.todayPane = pane;
+          this.render();
+        });
+      }
+      const layout = main.createDiv({ cls: "belki-today-layout" });
+      layout.toggleClass("show-timeline", this.todayPane === "timeline");
+      column = layout.createDiv({ cls: "belki-today-list" });
+      timelinePane = layout.createDiv({ cls: "belki-today-timeline" });
     }
-    const sections = main.createDiv({ cls: "belki-sections" });
+    if (this.mode === "today") this.renderDayPlan(column);
+    else if (this.mode === "upcoming") this.renderUpcomingAgenda(column);
+    if (timelinePane) renderTimeline(timelinePane, this.timelineHost(), this.calendar.events(), todayIso(), nowMinutes());
+    const sections = column.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
     // With a single section its header badge already shows the same count.
     if (sections.querySelectorAll(":scope > .belki-section").length <= 1) subtitle.remove();
-    const addArea = main.createDiv({ cls: "belki-add-area" });
+    const addArea = column.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
-    inlineAdd.createSpan({ cls: "belki-add-text", text: "Add task" });
+    // In the Inbox the capture field above is the quick way; this button opens the full editor.
+    inlineAdd.createSpan({ cls: "belki-add-text", text: this.mode === "inbox" ? "Add with details\u2026" : "Add task" });
     inlineAdd.addEventListener("click", () => {
       const sector = this.selectedProjects.size === 1 ? [...this.selectedProjects][0] : (SECTOR_SET.has((this.mode || "").toLowerCase()) ? this.mode : "");
       void this.store.createTaskInEditor(sector).then(() => this.render());
@@ -748,7 +783,7 @@ export class TaskBoardView extends ItemView {
     const addArea = main.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
-    inlineAdd.createSpan({ cls: "belki-add-text", text: `Add to ${sectorLabel}` });
+    inlineAdd.createSpan({ cls: "belki-add-text", text: isInboxTab ? "Add with details\u2026" : `Add to ${sectorLabel}` });
     inlineAdd.addEventListener("click", () => {
       void this.store.createTaskInEditor(isInboxTab ? "" : this.overviewSector).then(() => this.render());
     });
@@ -921,13 +956,26 @@ export class TaskBoardView extends ItemView {
     parent.empty();
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
-      const todayTasks = this.sortTasks(active.filter((task) => isToday(task.due)));
+      // Focus (Pullein's 2+8): P1 = must do, P2 = next, from any sector and
+      // whatever their date. They're shown once, so the date sections skip them.
+      const focusIds = new Set<string>();
+      if (this.settings.focusSection) {
+        const mustDo = this.sortTasks(active.filter((task) => task.priority === "P1"));
+        const next = this.sortTasks(active.filter((task) => task.priority === "P2"));
+        if (mustDo.length || next.length) {
+          this.renderFocusSection(parent, "Must do", mustDo, 2, "Give up to two tasks priority 1.");
+          this.renderFocusSection(parent, "Next", next, 8, "Give up to eight tasks priority 2.");
+          for (const task of [...mustDo, ...next]) focusIds.add(task.id);
+        }
+      }
+      const notInFocus = active.filter((task) => !focusIds.has(task.id));
+      const todayTasks = this.sortTasks(notInFocus.filter((task) => isToday(task.due)));
       // The page is already titled "Today", so the section names the date only.
       const todaySection = this.createSection(parent, formatGroupHeader(todayIso(), false), todayTasks.length);
       this.enableTodayDrop(todaySection);
       this.renderTaskList(todaySection, todayTasks);
-      const overdue = this.sortTasks(this.getOverdueTasks(active));
-      const hasAnyOverdue = active.some((task) => task.due && task.due < todayIso());
+      const overdue = this.sortTasks(this.getOverdueTasks(notInFocus));
+      const hasAnyOverdue = notInFocus.some((task) => task.due && task.due < todayIso());
       if (hasAnyOverdue) {
         const section2 = this.createSection(parent, "Overdue", overdue.length, (header) => {
           this.renderOverdueRangeSelect(header);
@@ -1415,6 +1463,22 @@ export class TaskBoardView extends ItemView {
     if (canMoveToProject) return true;
     return this.mode === "upcoming" && this.getUpcomingDropDates().some((date) => date !== task.due);
   }
+  /** One focus group in Today: its tasks and "n/limit", marked once over the limit. */
+  renderFocusSection(parent: HTMLElement, title: string, tasks: Task[], limit: number, emptyText: string) {
+    const section = this.createSection(parent, title, tasks.length);
+    section.addClass("is-focus-section");
+    const count = section.querySelector(".belki-section-count");
+    if (count) {
+      count.setText(`${tasks.length}/${limit}`);
+      count.toggleClass("is-over-limit", tasks.length > limit);
+      if (tasks.length > limit) count.setAttr("aria-label", `More than ${limit}`);
+    }
+    if (tasks.length === 0) {
+      section.createDiv({ cls: "belki-empty belki-empty-small", text: emptyText });
+      return;
+    }
+    this.renderTaskList(section, tasks);
+  }
   renderEmptySection(parent: HTMLElement, text: string) {
     const section = parent.createDiv({ cls: "belki-section" });
     section.createDiv({ cls: "belki-empty", text });
@@ -1437,7 +1501,18 @@ export class TaskBoardView extends ItemView {
     if (!task.completed) {
       row.addEventListener("contextmenu", (event) => {
         event.preventDefault();
-        showTaskContextMenu(this.store, task, event);
+        // Right-click on a selected row acts on the whole selection.
+        if (this.selectedTaskIds.size > 1 && this.selectedTaskIds.has(task.id)) {
+          const selected = this.store.getTasks().filter((t) => this.selectedTaskIds.has(t.id) && !t.completed);
+          showSelectionContextMenu(this.store, selected, event, () => {
+            this.selectedTaskIds.clear();
+            this.render();
+          });
+          return;
+        }
+        showTaskContextMenu(this.store, task, event, this.settings.timeBlocking ? (menu) => {
+          menu.addItem((item) => item.setTitle("Plan a time today\u2026").setIcon("clock").onClick(() => this.pickTaskForBlock(task)));
+        } : void 0);
       });
     }
     row.addEventListener("click", (event) => {
@@ -1527,6 +1602,8 @@ export class TaskBoardView extends ItemView {
       }
     }
     this.renderWaitingAge(meta, task);
+    this.renderStuck(meta, task, false);
+    if (this.settings.timeBlocking) renderBlockChip(meta, this.todaysBlocks().find((b) => b.taskId === task.id));
     if (task.deadline) {
       meta.createSpan({
         cls: `belki-task-deadline${isBeforeToday(task.deadline) ? " is-overdue" : ""}`,
@@ -1606,6 +1683,114 @@ export class TaskBoardView extends ItemView {
       }).open();
     });
   }
+  feedsById(): Map<string, CalendarFeed> {
+    return new Map(this.settings.calendars.map((feed) => [feed.id, feed]));
+  }
+  calendarEntries(): Task[] {
+    if (!this.calendar.enabled || !this.settings.planningEnabled) return [];
+    const feeds = this.feedsById();
+    return this.calendar.events()
+      .filter((event) => feeds.get(event.feedId)?.inYearPlan)
+      .map((event, order): Task => {
+        const feed = feeds.get(event.feedId);
+        return {
+          id: event.id,
+          title: event.title,
+          completed: false,
+          due: event.endDay,
+          start: event.startDay !== event.endDay ? event.startDay : void 0,
+          priority: "none",
+          labels: [],
+          attachments: [],
+          extraProperties: [],
+          order,
+          planning: true,
+          calendar: { color: feed?.color || "#3d6a8c", feedName: feed?.name || "Calendar", event }
+        };
+      });
+  }
+  openEvent(event: CalEvent) {
+    new EventModal(this.app, event, this.feedsById().get(event.feedId)).open();
+  }
+  /** Today's agenda: calendar events (module on) plus planning entries for today and the next 7 days. */
+  renderDayPlan(parent: HTMLElement) {
+    const today = todayIso();
+    const items: AgendaItem[] = [];
+    if (this.calendar.enabled) items.push(...calendarItems(this.calendar.events(), [today], this.feedsById(), nowMinutes(), false, (e) => this.openEvent(e)));
+    if (this.settings.planningEnabled) {
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 7), today, (entry) => new PlanningEntryModal(this, entry, false).open()));
+    }
+    const synced = this.calendar.enabled ? this.calendarNote() : "";
+    renderAgenda(parent, this.calendar.enabled ? "Day plan" : "Planning \u00b7 today and the next 7 days", synced, items,
+      this.settings.planningEnabled ? { label: "Year plan \u2192", onClick: () => this.openYearPlan() } : void 0);
+  }
+  /** Upcoming: calendar events and planning entries for the next two weeks. */
+  renderUpcomingAgenda(parent: HTMLElement) {
+    const today = todayIso();
+    const items: AgendaItem[] = [];
+    if (this.calendar.enabled) {
+      const days = Array.from({ length: 14 }, (_, i) => shiftIsoDate(today, i + 1));
+      items.push(...calendarItems(this.calendar.events(), days, this.feedsById(), null, true, (e) => this.openEvent(e)));
+    }
+    if (this.settings.planningEnabled) {
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 14), today, (entry) => new PlanningEntryModal(this, entry, false).open()));
+    }
+    renderAgenda(parent, this.calendar.enabled ? "Coming up \u00b7 next 2 weeks" : "Planning \u00b7 next 2 weeks", this.calendar.enabled ? this.calendarNote() : "", items,
+      this.settings.planningEnabled ? { label: "Year plan \u2192", onClick: () => this.openYearPlan() } : void 0);
+  }
+  calendarNote(): string {
+    const errors = this.calendar.errors();
+    if (errors.length) return `${errors[0].feed.name}: ${errors[0].error}`;
+    const synced = this.calendar.lastSynced();
+    return synced ? `synced ${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(new Date(synced))}` : "not synced yet";
+  }
+  /** Today's time blocks; blocks saved on another day have expired. */
+  todaysBlocks(): TimeBlock[] {
+    const saved = this.settings.timeBlocks;
+    return saved.date === todayIso() ? saved.blocks : [];
+  }
+  saveBlocks(blocks: TimeBlock[]) {
+    this.settings.timeBlocks = { date: todayIso(), blocks };
+    void this.saveSettings();
+    this.render();
+  }
+  timelineHost(): TimelineHost {
+    const tasks = new Map(this.store.getTasks().map((t) => [t.id, t]));
+    return {
+      app: this.app,
+      dayStartHour: this.settings.dayStartHour,
+      dayEndHour: this.settings.dayEndHour,
+      blocks: this.todaysBlocks().filter((b) => tasks.has(b.taskId)),
+      picked: this.pickedForBlock,
+      taskTitle: (id) => tasks.get(id)?.title ?? null,
+      taskDone: (id) => tasks.get(id)?.completed === true,
+      placeBlock: (id, start) => {
+        const blocks = this.todaysBlocks().filter((b) => b.taskId !== id);
+        const previous = this.todaysBlocks().find((b) => b.taskId === id);
+        const end = Math.max(this.settings.dayEndHour, this.settings.dayStartHour + 1) * 60;
+        const duration = previous?.duration ?? 60;
+        blocks.push({ taskId: id, start: Math.max(0, Math.min(start, end - 30)), duration });
+        this.pickedForBlock = null;
+        this.draggedTaskId = null;
+        this.draggedTaskIds = null;
+        this.clearDropTargets();
+        this.saveBlocks(blocks);
+      },
+      setDuration: (id, duration) => this.saveBlocks(this.todaysBlocks().map((b) => (b.taskId === id ? { ...b, duration } : b))),
+      removeBlock: (id) => this.saveBlocks(this.todaysBlocks().filter((b) => b.taskId !== id)),
+      draggedTaskId: () => this.draggedTaskId,
+      openEvent: (event) => this.openEvent(event),
+      eventColor: (event) => this.feedsById().get(event.feedId)?.color
+    };
+  }
+  /** Context-menu entry: pick a task, then tap a time on the timeline (works without drag, e.g. on phones). */
+  pickTaskForBlock(task: Task) {
+    this.pickedForBlock = task.id;
+    this.mode = "today";
+    this.todayPane = "timeline";
+    this.render();
+    new Notice(`Tap a time on the timeline for \u201c${task.title}\u201d.`);
+  }
   openYearPlan() {
     this.mode = "year";
     this.selectedProjects = new Set();
@@ -1648,6 +1833,30 @@ export class TaskBoardView extends ItemView {
         this.render();
       });
     });
+    // A pasted list becomes one task per line instead of one long task.
+    input.addEventListener("paste", (event) => {
+      const pasted = event.clipboardData?.getData("text/plain") || "";
+      const lines = pasted.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) return;
+      event.preventDefault();
+      void this.store.createTasksFromLines(lines).then((count) => {
+        if (count) new Notice(`Added ${count} task${count === 1 ? "" : "s"} to the inbox.`);
+        else new Notice("Couldn't add the pasted tasks. The tasks file changed on disk; please paste again.");
+      });
+    });
+  }
+  /** "3 wk" on the board, "3 weeks in This week" in the review, once a task is stuck in its sector. */
+  renderStuck(parent: HTMLElement, task: Task, long: boolean) {
+    const stay = this.settings.sectorSince[task.id];
+    const weeks = stuckWeeks(task, stay, this.settings.sectors, todayIso(), this.settings.stuckWeeks);
+    if (!weeks) return;
+    const sector = this.settings.sectors.find((s) => s.tag.toLowerCase() === stay.sector.toLowerCase());
+    const where = sector ? sector.label : projectDisplayName(stay.sector);
+    const chip = parent.createSpan({
+      cls: "belki-task-stuck",
+      text: long ? `${weeks} weeks in ${where}` : `${weeks} wk`
+    });
+    chip.setAttr("aria-label", `In ${where} since ${formatShortDate(stay.since)}`);
   }
   /** "Waiting 12 d" on open tasks in the waiting sector; marked once it passes the threshold. */
   renderWaitingAge(parent: HTMLElement, task: Task) {
@@ -2094,6 +2303,22 @@ export class TaskBoardView extends ItemView {
     });
     const closeButton = header.createEl("button", { cls: "belki-review-close", attr: { type: "button", "aria-label": "Close" } });
     setIcon(closeButton, "x");
+    // Monthly review: what's coming up from the year plan, to plan tasks around it.
+    if (session.type === "monthly" && this.settings.planningEnabled) {
+      const coming = upcomingEntries(this.store.getPlanningEntries(), todayIso(), 61, true);
+      if (coming.length) {
+        const box = modal.createEl("details", { cls: "belki-review-coming-up" });
+        if (this.reviewComingUpOpen) box.setAttr("open", "");
+        box.addEventListener("toggle", () => {
+          this.reviewComingUpOpen = box.open;
+        });
+        box.createEl("summary", { text: `Coming up in the next two months (${coming.length})` });
+        renderPlanningStrip(this, box, "From the year plan", coming, () => {
+          this.reviewOpen = false;
+          this.openYearPlan();
+        });
+      }
+    }
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });
@@ -2116,6 +2341,7 @@ export class TaskBoardView extends ItemView {
     }
     if (task.due) meta.createSpan({ text: formatDueChip(task.due) });
     if (step.kind === "waiting") this.renderWaitingAge(meta, task);
+    if (step.kind === "sector") this.renderStuck(meta, task, true);
     if (task.priority && task.priority !== "none") meta.createSpan({ text: getPriorityLabel(task.priority) });
     for (const label of task.labels) meta.createSpan({ text: displayLabel(label) });
     const withHotkey = (el: HTMLElement, letter: string) => {

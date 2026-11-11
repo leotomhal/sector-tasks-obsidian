@@ -1,6 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting, TFile, normalizePath, requireApiVersion } from "obsidian";
 import type { SettingDefinitionItem, SettingGroupItem } from "obsidian";
-import type { BelkiSettings, SectorConfig } from "./types";
+import type { BelkiSettings, CalendarFeed, SectorConfig, TimeBlock } from "./types";
 import type BelkiPlugin from "./main";
 import { colorForName } from "./colors";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "./labels";
@@ -48,7 +48,17 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   lastSeenVersion: "",
   waitingSince: {},
   waitingHighlightDays: 7,
+  sectorSince: {},
+  stuckWeeks: 3,
   reviewNotes: false,
+  focusSection: false,
+  calendarsEnabled: false,
+  calendars: [],
+  calendarRefreshMinutes: 30,
+  timeBlocking: false,
+  dayStartHour: 8,
+  dayEndHour: 18,
+  timeBlocks: { date: "", blocks: [] },
   planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
@@ -133,6 +143,54 @@ export function normalizeAutoDeleteDays(value?: number | string): number {
 export function normalizeWaitingHighlightDays(value?: number | string): number {
   if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.waitingHighlightDays;
   return normalizeAutoDeleteDays(value);
+}
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+export function normalizeCalendars(value?: unknown): CalendarFeed[] {
+  if (!Array.isArray(value)) return [];
+  const out: CalendarFeed[] = [];
+  const seen = new Set<string>();
+  for (const raw of value as Partial<CalendarFeed>[]) {
+    if (!raw || typeof raw !== "object") continue;
+    const id = typeof raw.id === "string" && raw.id ? raw.id : `cal-${Math.random().toString(36).slice(2, 10)}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      id,
+      name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : "Calendar",
+      url: typeof raw.url === "string" ? raw.url.trim() : "",
+      color: typeof raw.color === "string" && HEX_COLOR.test(raw.color) ? raw.color : "#3d6a8c",
+      enabled: raw.enabled !== false,
+      inYearPlan: raw.inYearPlan === true
+    });
+  }
+  return out;
+}
+export function normalizeHour(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? Math.floor(value) : typeof value === "string" ? parseInt(value, 10) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 24 ? n : fallback;
+}
+export function normalizeTimeBlocks(value: unknown): { date: string; blocks: TimeBlock[] } {
+  const raw = value as { date?: unknown; blocks?: unknown } | null;
+  if (!raw || typeof raw.date !== "string" || !Array.isArray(raw.blocks)) return { date: "", blocks: [] };
+  const blocks = (raw.blocks as Partial<TimeBlock>[]).filter((b) =>
+    b && typeof b.taskId === "string" && Number.isInteger(b.start) && Number.isInteger(b.duration) && b.duration > 0 && b.start >= 0 && b.start < 1440
+  ) as TimeBlock[];
+  return { date: raw.date, blocks };
+}
+export function normalizeStuckWeeks(value?: number | string): number {
+  if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.stuckWeeks;
+  return normalizeAutoDeleteDays(value);
+}
+export function normalizeSectorSince(value?: unknown): Record<string, { sector: string; since: string }> {
+  const out: Record<string, { sector: string; since: string }> = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+    const e = entry as { sector?: unknown; since?: unknown } | null;
+    if (e && typeof e.sector === "string" && typeof e.since === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.since)) {
+      out[id] = { sector: e.sector, since: e.since };
+    }
+  }
+  return out;
 }
 export function normalizeWaitingSince(value?: unknown): Record<string, string> {
   const out: Record<string, string> = {};
@@ -282,6 +340,7 @@ export class BelkiSettingTab extends PluginSettingTab {
   plugin: BelkiPlugin;
   appearanceOpen?: boolean;
   sectorsOpen?: boolean;
+  calendarsOpen?: boolean;
   constructor(app: App, plugin: BelkiPlugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -333,6 +392,28 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "toggle", key: "searchExcludeCompleted" }
       },
       {
+        name: "Time blocking in today",
+        desc: "A timeline next to the today view. Drag a task onto a time, or right-click it and choose a time. Blocks are kept for that day only and never written to your tasks file.",
+        control: { type: "toggle", key: "timeBlocking" }
+      },
+      {
+        name: "Day starts at",
+        desc: "First hour on the timeline (0–23).",
+        visible: () => this.plugin.settings.timeBlocking === true,
+        control: { type: "number", key: "dayStartHour", min: 0, max: 23, step: 1, placeholder: "8" }
+      },
+      {
+        name: "Day ends at",
+        desc: "Last hour on the timeline (1–24).",
+        visible: () => this.plugin.settings.timeBlocking === true,
+        control: { type: "number", key: "dayEndHour", min: 1, max: 24, step: 1, placeholder: "18" }
+      },
+      {
+        name: "Focus in today (2+8)",
+        desc: "Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.",
+        control: { type: "toggle", key: "focusSection" }
+      },
+      {
         name: "Year plan",
         desc: "Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.",
         control: { type: "toggle", key: "planningEnabled" }
@@ -355,6 +436,7 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "text", key: "reviewNotesFolder", placeholder: "Reviews" }
       },
       this.buildSectorsPage(),
+      this.buildCalendarsPage(),
       this.buildAppearancePage()
     ];
   }
@@ -394,6 +476,26 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.visualStyle = normalizeVisualStyle(asString(value));
     } else if (key === "showReleaseNotes") {
       settings.showReleaseNotes = value === true;
+    } else if (key === "focusSection") {
+      settings.focusSection = value === true;
+    } else if (key === "timeBlocking") {
+      settings.timeBlocking = value === true;
+      await this.plugin.saveSettings();
+      this.plugin.refreshBelkiViews();
+      this.rerender();
+      return;
+    } else if (key === "dayStartHour" || key === "dayEndHour") {
+      const hour = normalizeHour(value, key === "dayStartHour" ? 8 : 18);
+      settings[key] = key === "dayStartHour" ? Math.min(hour, 23) : Math.max(hour, 1);
+    } else if (key === "calendarsEnabled") {
+      settings.calendarsEnabled = value === true;
+      await this.plugin.saveSettings();
+      if (settings.calendarsEnabled) void this.plugin.calendar.refresh();
+      this.plugin.refreshBelkiViews();
+      this.rerender();
+      return;
+    } else if (key === "calendarRefreshMinutes") {
+      settings.calendarRefreshMinutes = Math.max(5, normalizeAutoDeleteDays(value as number) || 30);
     } else if (key === "planningEnabled") {
       settings.planningEnabled = value === true;
       await this.plugin.saveSettings();
@@ -402,6 +504,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
+    } else if (key === "stuckWeeks") {
+      settings.stuckWeeks = normalizeAutoDeleteDays(value as number);
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value as number);
     } else if (key === "reviewNotesFolder") {
@@ -443,6 +547,175 @@ export class BelkiSettingTab extends PluginSettingTab {
       return `"${path}" is a folder, not a file. Enter a path ending in a Markdown file, e.g. Tasks.md.`;
     }
   }
+  buildCalendarsPage(): SettingDefinitionItem {
+    const settings = this.plugin.settings;
+    return {
+      type: "page",
+      name: "Calendars",
+      desc: "Show events from Google Calendar or any other iCal calendar next to your tasks. Read-only: nothing is written back.",
+      displayValue: () => (settings.calendarsEnabled ? `${settings.calendars.length} calendar${settings.calendars.length === 1 ? "" : "s"}` : "Off"),
+      items: [
+        {
+          name: "Show calendars",
+          desc: "Events appear in the day plan on the today view, in upcoming, in the today sidebar and, for calendars you choose, in the year plan.",
+          control: { type: "toggle", key: "calendarsEnabled" }
+        },
+        {
+          name: "Refresh every (minutes)",
+          desc: "How often calendars are fetched again. The command \"Refresh calendars\" fetches them right away.",
+          visible: () => settings.calendarsEnabled === true,
+          control: { type: "number", key: "calendarRefreshMinutes", min: 5, step: 5, placeholder: "30" }
+        },
+        {
+          name: "",
+          desc: "Use the calendar's secret address in iCal format. In Google Calendar: settings of the calendar → integrate calendar → secret address in iCal format. Anyone with this address can read the calendar; it is stored in the plugin's data and synced with it.",
+          searchable: false,
+          visible: () => settings.calendarsEnabled === true
+        },
+        {
+          type: "list",
+          heading: "Calendars",
+          emptyState: "No calendars yet.",
+          visible: () => settings.calendarsEnabled === true,
+          onDelete: (index: number) => {
+            void this.removeCalendar(index);
+          },
+          addItem: {
+            name: "Add calendar",
+            action: () => {
+              void this.addCalendar();
+            }
+          },
+          items: settings.calendars.map((feed, index) => ({
+            name: feed.name,
+            desc: this.calendarStatus(feed),
+            render: (setting: Setting) => this.renderCalendarRow(setting, feed, index)
+          }))
+        }
+      ]
+    };
+  }
+  calendarStatus(feed: CalendarFeed): string {
+    const state = this.plugin.calendar.feeds.get(feed.id);
+    if (!feed.url) return "Paste the secret iCal address, then save.";
+    if (state?.error) return `Couldn't load: ${state.error}`;
+    if (state?.fetchedAt) return `${state.events.length} events loaded`;
+    return "Not loaded yet.";
+  }
+  renderCalendarRow(setting: Setting, feed: CalendarFeed, index: number) {
+    let name = feed.name;
+    let url = feed.url;
+    setting.addText((text) => {
+      text.setPlaceholder("Name").setValue(feed.name).onChange((value) => {
+        name = value;
+      });
+    });
+    setting.addText((text) => {
+      text.inputEl.type = "password";
+      text.setPlaceholder("https://calendar.google.com/…/basic.ics").setValue(feed.url).onChange((value) => {
+        url = value;
+      });
+    });
+    setting.addColorPicker((picker) => {
+      picker.setValue(feed.color).onChange(async (value) => {
+        feed.color = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    setting.addToggle((toggle) => {
+      toggle.setTooltip("Show this calendar").setValue(feed.enabled).onChange(async (value) => {
+        feed.enabled = value;
+        await this.plugin.saveSettings();
+        void this.plugin.calendar.refresh();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    setting.addToggle((toggle) => {
+      toggle.setTooltip("Also show in the year plan").setValue(feed.inYearPlan).onChange(async (value) => {
+        feed.inYearPlan = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
+    setting.addButton((button) => {
+      button.setButtonText("Save").setTooltip("Save name and address, then load the calendar").onClick(async () => {
+        const current = this.plugin.settings.calendars[index];
+        if (!current) return;
+        current.name = name.trim() || "Calendar";
+        current.url = url.trim();
+        await this.plugin.saveSettings();
+        await this.plugin.calendar.refresh();
+        this.plugin.refreshBelkiViews();
+        const state = this.plugin.calendar.feeds.get(current.id);
+        new Notice(state?.error ? `Couldn't load ${current.name}: ${state.error}` : `${current.name}: ${state?.events.length ?? 0} events loaded.`);
+        this.rerender();
+      });
+    });
+  }
+  /** Calendars on Obsidian before 1.13: a collapsible group like Appearance. */
+  renderLegacyCalendars(containerEl: HTMLElement) {
+    const settings = this.plugin.settings;
+    const section = containerEl.createEl("details", { cls: "belki-settings-appearance" });
+    if (this.calendarsOpen === true) section.setAttr("open", "");
+    section.addEventListener("toggle", () => {
+      this.calendarsOpen = section.open;
+    });
+    section.createEl("summary", { cls: "belki-settings-appearance-summary", text: "Calendars" });
+    new Setting(section).setName("Show calendars").setDesc("Events from your online calendars, read-only, next to your tasks.").addToggle((toggle) => {
+      toggle.setValue(settings.calendarsEnabled === true).onChange(async (value) => {
+        settings.calendarsEnabled = value;
+        await this.plugin.saveSettings();
+        if (value) void this.plugin.calendar.refresh();
+        this.plugin.refreshBelkiViews();
+        this.renderLegacyTab();
+      });
+    });
+    if (!settings.calendarsEnabled) return;
+    section.createDiv({
+      cls: "setting-item-description",
+      text: "Use the calendar's secret address in iCal format (Google Calendar: settings of the calendar → integrate calendar). Anyone with this address can read the calendar; it is stored in the plugin's data and synced with it."
+    });
+    settings.calendars.forEach((feed, index) => {
+      const row = new Setting(section).setName(feed.name).setDesc(this.calendarStatus(feed));
+      this.renderCalendarRow(row, feed, index);
+      row.addExtraButton((button) => {
+        button.setIcon("trash").setTooltip("Remove calendar").onClick(() => {
+          void this.removeCalendar(index);
+        });
+      });
+    });
+    new Setting(section).addButton((button) => {
+      button.setButtonText("Add calendar").onClick(() => {
+        void this.addCalendar();
+      });
+    });
+  }
+  async addCalendar() {
+    const colors = ["#3d6a8c", "#4f7a4a", "#8e5a2c", "#6b4c8e", "#2a8a87"];
+    const settings = this.plugin.settings;
+    settings.calendars = [...settings.calendars, {
+      id: `cal-${Date.now().toString(36)}`,
+      name: settings.calendars.length ? `Calendar ${settings.calendars.length + 1}` : "Work",
+      url: "",
+      color: colors[settings.calendars.length % colors.length],
+      enabled: true,
+      inYearPlan: false
+    }];
+    await this.plugin.saveSettings();
+    this.rerender();
+  }
+  async removeCalendar(index: number) {
+    const settings = this.plugin.settings;
+    const feed = settings.calendars[index];
+    if (!feed) return;
+    settings.calendars = settings.calendars.filter((_, i) => i !== index);
+    await this.plugin.saveSettings();
+    void this.plugin.calendar.refresh();
+    this.plugin.refreshBelkiViews();
+    new Notice(`Calendar "${feed.name}" removed.`);
+    this.rerender();
+  }
   buildSectorsPage(): SettingDefinitionItem {
     const count = () => {
       const n = this.plugin.settings.sectors.length;
@@ -464,6 +737,11 @@ export class BelkiSettingTab extends PluginSettingTab {
           name: "Mark long waits",
           desc: "Waiting tasks show how long they've been waiting. After this many days the count turns red as a nudge to follow up. Set it to 0 to turn this off.",
           control: { type: "number", key: "waitingHighlightDays", min: 0, step: 1, placeholder: "7" }
+        },
+        {
+          name: "Mark stuck tasks",
+          desc: "Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.",
+          control: { type: "number", key: "stuckWeeks", min: 0, step: 1, placeholder: "3" }
         }
       ]
     };
@@ -951,6 +1229,35 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
+    new Setting(containerEl).setName("Time blocking in today").setDesc("A timeline next to the today view. Drag a task onto a time, or right-click it and choose a time. Blocks are kept for that day only and never written to your tasks file.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.timeBlocking === true).onChange(async (value) => {
+        this.plugin.settings.timeBlocking = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+        this.renderLegacyTab();
+      });
+    });
+    if (this.plugin.settings.timeBlocking) {
+      for (const [key, label, fallback] of [["dayStartHour", "Day starts at", 8], ["dayEndHour", "Day ends at", 18]] as const) {
+        new Setting(containerEl).setName(label).setDesc(key === "dayStartHour" ? "First hour on the timeline (0–23)." : "Last hour on the timeline (1–24).").addText((text) => {
+          text.inputEl.type = "number";
+          text.setValue(String(this.plugin.settings[key])).onChange(async (value) => {
+            const hour = normalizeHour(value, fallback);
+            this.plugin.settings[key] = key === "dayStartHour" ? Math.min(hour, 23) : Math.max(hour, 1);
+            await this.plugin.saveSettings();
+            this.plugin.refreshBelkiViews();
+          });
+        });
+      }
+    }
+    this.renderLegacyCalendars(containerEl);
+    new Setting(containerEl).setName("Focus in today (2+8)").setDesc("Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.focusSection === true).onChange(async (value) => {
+        this.plugin.settings.focusSection = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
     new Setting(containerEl).setName("Year plan").setDesc("Appointments and milestones tagged #planning, shown by quarter and next to your tasks. Turning it off hides them everywhere; #planning lines stay in your file untouched and never show up as tasks.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.planningEnabled !== false).onChange(async (value) => {
         this.plugin.settings.planningEnabled = value;
@@ -1014,6 +1321,14 @@ export class BelkiSettingTab extends PluginSettingTab {
         text.inputEl.type = "number";
         text.setPlaceholder("7").setValue(String(this.plugin.settings.waitingHighlightDays)).onChange(async (value) => {
           this.plugin.settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
+      new Setting(sectorsSection).setName("Mark stuck tasks").setDesc("Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.").addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder("3").setValue(String(this.plugin.settings.stuckWeeks)).onChange(async (value) => {
+          this.plugin.settings.stuckWeeks = normalizeAutoDeleteDays(value);
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
         });

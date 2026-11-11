@@ -5,6 +5,10 @@ import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
+import { upcomingEntries } from "../planning";
+import { EventModal, calendarItems, planningItems } from "./dayPlan";
+import type { AgendaItem } from "./dayPlan";
+import type { CalendarService } from "../calendarService";
 
 export const VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 export const TODAY_PRIORITY_RANK: Record<string, number> = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
@@ -19,7 +23,40 @@ export function formatSnoozeDate(iso: string): string {
     ...y !== new Date().getFullYear() ? { year: "numeric" } : {}
   }).format(date);
 }
-export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEvent) {
+/**
+ * Right-click menu for a multi-selection: due date, snooze and priority for all
+ * selected tasks at once, in one save. Snooze moves each task from its own date.
+ */
+export function showSelectionContextMenu(store: TaskStore, tasks: Task[], event: MouseEvent, onDone: () => void) {
+  const menu = new Menu();
+  const ids = tasks.map((t) => t.id);
+  const apply = (patches: Map<string, Partial<Task>>) => {
+    void store.updateEachTask(patches).then(onDone);
+  };
+  const same = (patch: Partial<Task>) => apply(new Map(ids.map((id) => [id, patch])));
+  menu.addItem((item) => item.setTitle(`${tasks.length} tasks selected`).setDisabled(true));
+  menu.addSeparator();
+  for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)]]) {
+    menu.addItem((item) => item.setTitle(`Due: ${label}`).onClick(() => same({ due: value })));
+  }
+  menu.addItem((item) => item.setTitle("Remove due date").onClick(() => same({ due: void 0 })));
+  menu.addSeparator();
+  for (const days of [1, 3, 7]) {
+    menu.addItem((item) => item.setTitle(`Snooze ${days === 1 ? "1 day" : `${days} days`} each`).onClick(() => {
+      apply(new Map(tasks.map((t) => {
+        const base = t.due && t.due > todayIso() ? t.due : todayIso();
+        return [t.id, { due: shiftIsoDate(base, days) }];
+      })));
+    }));
+  }
+  menu.addSeparator();
+  for (const priority of ["P1", "P2", "P3", "P4"]) {
+    menu.addItem((item) => item.setTitle(getPriorityLabel(priority)).onClick(() => same({ priority })));
+  }
+  menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
+  menu.showAtMouseEvent(event);
+}
+export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEvent, extra?: (menu: Menu) => void) {
   const menu = new Menu();
   const currentDue = task.due;
   const dueOptions = [
@@ -71,6 +108,7 @@ export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEv
       void store.editTaskInEditor(task.id);
     });
   });
+  if (extra) extra(menu);
   menu.showAtMouseEvent(event);
 }
 export class TodaySidebarView extends ItemView {
@@ -78,10 +116,13 @@ export class TodaySidebarView extends ItemView {
   settings: BelkiSettings;
   unsubscribe?: () => void;
   collapsedSections?: Set<string>;
-  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings) {
+  calendar: CalendarService;
+  unsubscribeCalendar?: () => void;
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, calendar: CalendarService) {
     super(leaf);
     this.store = store;
     this.settings = settings;
+    this.calendar = calendar;
     this.navigation = false;
   }
   getViewType() {
@@ -95,10 +136,12 @@ export class TodaySidebarView extends ItemView {
   }
   async onOpen() {
     this.unsubscribe = this.store.subscribe(() => this.render());
+    this.unsubscribeCalendar = this.calendar.subscribe(() => this.render());
     this.render();
   }
   async onClose() {
     this.unsubscribe?.();
+    this.unsubscribeCalendar?.();
     this.updateTabBadge(0);
   }
   refresh() {
@@ -155,6 +198,22 @@ export class TodaySidebarView extends ItemView {
     const dueToday = open.filter((t) => t.due === today).sort(byPriority);
     const dueTomorrow = open.filter((t) => t.due === tomorrow).sort(byPriority);
     this.updateTabBadge(overdue.length + dueToday.length);
+    // Year-plan entries running today or starting tomorrow (not counted in the badge).
+    // Calendar events (module on) and year-plan entries for today and tomorrow (not counted in the badge).
+    const items: AgendaItem[] = [];
+    if (this.calendar.enabled) {
+      const feeds = new Map(this.settings.calendars.map((feed) => [feed.id, feed]));
+      const now = new Date();
+      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open()));
+      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open())
+        .filter((item) => !items.some((other) => other.title === item.title && other.when === "All day"))
+        .map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
+    }
+    if (this.settings.planningEnabled) {
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 1), today, (entry) => void this.store.editTaskInEditor(entry.id))
+        .map((item) => (item.when === "Today" ? item : { ...item, when: "Tomorrow" })));
+    }
+    if (items.length) this.renderAgendaSection(container, items);
     if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
       container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
@@ -167,6 +226,21 @@ export class TodaySidebarView extends ItemView {
     }
     if (dueTomorrow.length) {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
+    }
+  }
+  renderAgendaSection(container: HTMLElement, items: AgendaItem[]) {
+    const section = container.createDiv({ cls: "belki-today-section belki-today-planning" });
+    const head = section.createDiv({ cls: "belki-today-section-label" });
+    head.createSpan({ text: this.calendar.enabled ? "Day plan" : "Planning" });
+    head.createSpan({ cls: "belki-today-section-count", text: String(items.length) });
+    for (const item of [...items].sort((a, b) => a.key.localeCompare(b.key))) {
+      const row = section.createDiv({ cls: "belki-today-row belki-today-planning-row" });
+      row.toggleClass("is-past", item.past === true);
+      row.addEventListener("click", item.onClick);
+      row.createSpan({ cls: "belki-today-planning-when", text: item.when });
+      if (item.color) row.createSpan({ cls: "belki-agenda-dot" }).setCssStyles({ backgroundColor: item.color });
+      else row.createSpan({ cls: "belki-year-diamond", attr: { "aria-label": item.source } });
+      row.createSpan({ cls: "belki-today-planning-title", text: item.title });
     }
   }
   updateTabBadge(count: number) {
