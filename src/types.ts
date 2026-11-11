@@ -1,3 +1,5 @@
+import type { CalEvent } from "./calendar";
+
 export const SORT_MODES = [
   "smart",
   "due",
@@ -67,6 +69,8 @@ export interface Task {
   sourcePath?: string;
   /** A year-plan entry (#planning), not a task: kept out of every task list, review and count. */
   planning?: boolean;
+  /** Set on year-plan cards built from a calendar event (never in the tasks file). */
+  calendar?: { color: string; feedName: string; event: CalEvent };
   /** A #planning entry that is also tagged #milestone; only these can be checked off. */
   milestone?: boolean;
   /**
@@ -74,6 +78,26 @@ export interface Task {
    * #planning/month or #planning/quarter; 📅 holds the period's first day.
    */
   precision?: string;
+}
+
+/** A read-only iCal feed (e.g. a Google Calendar "secret address in iCal format"). */
+export interface CalendarFeed {
+  id: string;
+  name: string;
+  url: string;
+  color: string;
+  enabled: boolean;
+  /** Also show this calendar's events in the year plan. */
+  inYearPlan: boolean;
+}
+
+/** A task planned into a time slot on today's timeline (plugin data only). */
+export interface TimeBlock {
+  taskId: string;
+  /** Minutes since midnight. */
+  start: number;
+  /** Length in minutes. */
+  duration: number;
 }
 
 export interface SectorConfig {
@@ -152,6 +176,16 @@ export interface BelkiSettings {
   /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
   waitingHighlightDays: number;
   reviewNotes: boolean;
+  /** Module: show events from iCal feeds in the day plan, Upcoming, the sidebar and (per feed) the year plan. */
+  calendarsEnabled: boolean;
+  calendars: CalendarFeed[];
+  calendarRefreshMinutes: number;
+  /** Module: a timeline in Today to plan tasks into time slots. */
+  timeBlocking: boolean;
+  dayStartHour: number;
+  dayEndHour: number;
+  /** Today's blocks; blocks from another day are dropped. */
+  timeBlocks: { date: string; blocks: TimeBlock[] };
   /** Today shows P1 ("Must do", 2) and P2 ("Next", 8) at the top (Pullein's 2+8). */
   focusSection: boolean;
   /** Show the year plan (view, strips, Overview list). Off hides it; #planning lines stay in the file untouched. */

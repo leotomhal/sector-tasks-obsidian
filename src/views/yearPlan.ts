@@ -4,6 +4,7 @@ import type { TaskStore } from "../taskStore";
 import { isIsoDate, todayIso } from "../dateUtils";
 import { entriesForYear, entryDays, entryFirstDay, isEntryOn, isMissedMilestone, isPastEntry, quarterOf } from "../planning";
 import { ConfirmModal } from "./ConfirmModal";
+import type { CalEvent } from "../calendar";
 
 /** What the year plan needs from the board view; avoids importing the view class here. */
 export interface PlanningHost {
@@ -14,6 +15,9 @@ export interface PlanningHost {
   renderEyebrow(parent: HTMLElement): void;
   openTaskInNote(task: Task): Promise<void>;
   renderLinkedTitle(text: string, el: HTMLElement): void;
+  /** Calendar events from feeds shown in the year plan, as read-only cards. */
+  calendarEntries(): Task[];
+  openEvent(event: CalEvent): void;
 }
 
 /** View state for the year plan; lives on the board view across re-renders. */
@@ -71,7 +75,7 @@ export function renderYearPlan(host: PlanningHost, state: YearPlanState, main: H
   const fileIds = new Set(fromFile.map((e) => e.id));
   const archived = (state.archived || []).filter((e) => !fileIds.has(e.id));
   const archivedIds = new Set(archived.map((e) => e.id));
-  let entries = entriesForYear([...fromFile, ...archived], state.year);
+  let entries = entriesForYear([...fromFile, ...archived, ...host.calendarEntries()], state.year);
   if (!state.showPast) entries = entries.filter((e) => !isPastEntry(e, today));
 
   const header = main.createDiv({ cls: "belki-main-header" });
@@ -216,8 +220,14 @@ function renderEntryCard(host: PlanningHost, parent: HTMLElement, entry: Task, t
       pill.appendText(text);
     }
   }
+  if (entry.calendar) {
+    const source = content.createSpan({ cls: "belki-year-entry-meta" }).createSpan({ cls: "belki-year-pill" });
+    source.createSpan({ cls: "belki-agenda-dot" }).setCssStyles({ backgroundColor: entry.calendar.color });
+    source.appendText(entry.calendar.feedName);
+  }
   card.addEventListener("click", () => {
-    new PlanningEntryModal(host, entry, readOnly).open();
+    if (entry.calendar) host.openEvent(entry.calendar.event);
+    else new PlanningEntryModal(host, entry, readOnly).open();
   });
 }
 

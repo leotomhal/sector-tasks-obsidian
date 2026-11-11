@@ -9,10 +9,12 @@ import { nextOccurrence } from "./repeatUtils";
 import { findWaitingSector, normalizeReviewSession } from "./review";
 import { reconcileWaitingSince } from "./waiting";
 import { reconcileSectorSince, stuckWeeks } from "./stale";
+import { eventsOnDay, parseIcs } from "./calendar";
+import { CalendarService } from "./calendarService";
 import { entriesForYear, isMissedMilestone, upcomingEntries } from "./planning";
 import { formFromRule, ruleFromForm } from "./recurrenceForm";
 import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks } from "./settings";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks, normalizeCalendars, normalizeHour, normalizeTimeBlocks } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
@@ -23,18 +25,20 @@ export default class BelkiPlugin extends Plugin {
   store: TaskStore;
   reloadDebounceTimer: number | null = null;
   seedWaitingFromCreated = false;
+  calendar: CalendarService;
   async onload() {
     const hadSettings = await this.loadSettings();
     this.store = new TaskStore(this.app, this.settings);
+    this.calendar = new CalendarService(this.app, this.settings, `${this.manifest.dir}/calendar-cache.json`);
     // Registered before any view subscribes, so views render with the updated record.
     this.store.subscribe(() => this.syncWaitingSince());
     this.registerView(
       VIEW_TYPE_BELKI,
-      (leaf) => new TaskBoardView(leaf, this.store, this.settings, () => this.saveSettings())
+      (leaf) => new TaskBoardView(leaf, this.store, this.settings, () => this.saveSettings(), this.calendar)
     );
     this.registerView(
       VIEW_TYPE_BELKI_TODAY,
-      (leaf) => new TodaySidebarView(leaf, this.store, this.settings)
+      (leaf) => new TodaySidebarView(leaf, this.store, this.settings, this.calendar)
     );
     this.addRibbonIcon("check-circle-2", "Open Sector Tasks", () => {
       void this.activateView();
@@ -48,6 +52,23 @@ export default class BelkiPlugin extends Plugin {
     });
     this.app.workspace.onLayoutReady(() => {
       void this.showReleaseNotesIfUpdated(!hadSettings);
+      // Calendars: show the cached events right away, then fetch fresh ones.
+      void this.calendar.loadCache().then(() => this.calendar.refresh());
+    });
+    // Check once a minute whether a calendar refresh is due.
+    this.registerInterval(window.setInterval(() => {
+      const last = this.calendar.lastSynced();
+      const due = !last || Date.now() - new Date(last).getTime() >= this.settings.calendarRefreshMinutes * 60000;
+      if (due) void this.calendar.refresh();
+    }, 60000));
+    this.addCommand({
+      id: "refresh-calendars",
+      name: "Refresh calendars",
+      checkCallback: (checking) => {
+        if (!this.settings.calendarsEnabled) return false;
+        if (!checking) void this.calendar.refresh();
+        return true;
+      }
     });
     this.addCommand({
       id: "open",
@@ -181,6 +202,13 @@ export default class BelkiPlugin extends Plugin {
       stuckWeeks: normalizeStuckWeeks(saved == null ? void 0 : saved.stuckWeeks),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
       focusSection: (saved == null ? void 0 : saved.focusSection) === true,
+      calendarsEnabled: (saved == null ? void 0 : saved.calendarsEnabled) === true,
+      calendars: normalizeCalendars(saved == null ? void 0 : saved.calendars),
+      calendarRefreshMinutes: Math.max(5, normalizeAutoDeleteDays(saved == null ? void 0 : saved.calendarRefreshMinutes) || 30),
+      timeBlocking: (saved == null ? void 0 : saved.timeBlocking) === true,
+      dayStartHour: normalizeHour(saved == null ? void 0 : saved.dayStartHour, 8),
+      dayEndHour: normalizeHour(saved == null ? void 0 : saved.dayEndHour, 18),
+      timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
       reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
@@ -410,6 +438,8 @@ export const __testables = {
   reconcileWaitingSince,
   reconcileSectorSince,
   stuckWeeks,
+  parseIcs,
+  eventsOnDay,
   stripListMarker,
   formFromRule,
   ruleFromForm,

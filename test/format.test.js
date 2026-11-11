@@ -46,6 +46,8 @@ const {
   reconcileWaitingSince,
   reconcileSectorSince,
   stuckWeeks,
+  parseIcs,
+  eventsOnDay,
   stripListMarker,
   formFromRule,
   ruleFromForm,
@@ -555,4 +557,54 @@ test("pasted list lines lose their list markers", () => {
   assert.equal(stripListMarker("- [ ] Send slides 📅 2026-11-10"), "Send slides 📅 2026-11-10");
   assert.equal(stripListMarker("Plain line"), "Plain line");
   assert.equal(stripListMarker("-3 degrees tomorrow"), "-3 degrees tomorrow", "a dash without a space is text");
+});
+
+const SAMPLE_ICS = [
+  "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Google Inc//Google Calendar 70.9054//EN",
+  "BEGIN:VTIMEZONE", "TZID:Europe/Berlin",
+  "BEGIN:DAYLIGHT", "TZOFFSETFROM:+0100", "TZOFFSETTO:+0200", "TZNAME:CEST", "DTSTART:19700329T020000", "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU", "END:DAYLIGHT",
+  "BEGIN:STANDARD", "TZOFFSETFROM:+0200", "TZOFFSETTO:+0100", "TZNAME:CET", "DTSTART:19701025T030000", "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU", "END:STANDARD",
+  "END:VTIMEZONE",
+  // Weekly jour fixe on Wednesdays 09:00–09:30, 18 Nov skipped, 25 Nov moved to 10:00
+  "BEGIN:VEVENT", "UID:jourfixe@google.com", "SUMMARY:Jour fixe Pressestelle", "LOCATION:Raum 2.14",
+  "DTSTART;TZID=Europe/Berlin:20261104T090000", "DTEND;TZID=Europe/Berlin:20261104T093000",
+  "RRULE:FREQ=WEEKLY;BYDAY=WE", "EXDATE;TZID=Europe/Berlin:20261118T090000", "END:VEVENT",
+  "BEGIN:VEVENT", "UID:jourfixe@google.com", "RECURRENCE-ID;TZID=Europe/Berlin:20261125T090000", "SUMMARY:Jour fixe (later)",
+  "DTSTART;TZID=Europe/Berlin:20261125T100000", "DTEND;TZID=Europe/Berlin:20261125T103000", "END:VEVENT",
+  // All-day, two days (DTEND exclusive)
+  "BEGIN:VEVENT", "UID:fair@google.com", "SUMMARY:Messe", "DTSTART;VALUE=DATE:20261112", "DTEND;VALUE=DATE:20261114", "END:VEVENT",
+  // Cancelled
+  "BEGIN:VEVENT", "UID:gone@google.com", "SUMMARY:Abgesagt", "STATUS:CANCELLED", "DTSTART:20261111T130000Z", "DTEND:20261111T140000Z", "END:VEVENT",
+  "END:VCALENDAR"
+].join("\r\n");
+
+test("iCal feed: recurring, skipped, moved, all-day and cancelled events", () => {
+  const events = parseIcs(SAMPLE_ICS, "work", "2026-11-01", "2026-11-30");
+  const jourFixe = events.filter((e) => e.title.startsWith("Jour fixe"));
+  assert.deepEqual(jourFixe.map((e) => e.startDay), ["2026-11-04", "2026-11-11", "2026-11-25"], "weekly, 18 Nov skipped (EXDATE)");
+  assert.equal(jourFixe[1].startMs, Date.UTC(2026, 10, 11, 8, 0), "09:00 Berlin is 08:00 UTC in November");
+  assert.equal(jourFixe[1].location, "Raum 2.14");
+  const moved = jourFixe[2];
+  assert.equal(moved.title, "Jour fixe (later)");
+  assert.equal(moved.startMs, Date.UTC(2026, 10, 25, 9, 0), "the moved occurrence keeps its new time");
+  const fair = events.find((e) => e.title === "Messe");
+  assert.equal(fair.allDay, true);
+  assert.deepEqual([fair.startDay, fair.endDay], ["2026-11-12", "2026-11-13"], "DTEND of all-day events is exclusive");
+  assert.ok(!events.some((e) => e.title === "Abgesagt"), "cancelled events are skipped");
+  assert.equal(new Set(events.map((e) => e.id)).size, events.length, "ids are unique per occurrence");
+  assert.deepEqual(parseIcs(SAMPLE_ICS, "work", "2026-12-01", "2026-12-31").filter((e) => e.title === "Messe"), [], "outside the range nothing of it shows");
+});
+
+test("eventsOnDay: all-day first, then by time; pieces clipped to the day", () => {
+  const day = "2026-11-12";
+  const base = new Date(2026, 10, 12).getTime();
+  const events = [
+    { id: "a", feedId: "f", title: "Late", allDay: false, startDay: day, endDay: day, startMs: base + 14 * 3600e3, endMs: base + 15 * 3600e3 },
+    { id: "b", feedId: "f", title: "Fair", allDay: true, startDay: "2026-11-12", endDay: "2026-11-13" },
+    { id: "c", feedId: "f", title: "Night", allDay: false, startDay: "2026-11-11", endDay: day, startMs: base - 2 * 3600e3, endMs: base + 1 * 3600e3 }
+  ];
+  const pieces = eventsOnDay(events, day);
+  assert.deepEqual(pieces.map((p) => p.event.title), ["Fair", "Night", "Late"]);
+  assert.deepEqual([pieces[1].startMin, pieces[1].endMin], [0, 60], "an event from the night before starts at 00:00 on this day");
+  assert.deepEqual([pieces[2].startMin, pieces[2].endMin], [840, 900]);
 });

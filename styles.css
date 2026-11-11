@@ -3451,3 +3451,261 @@ button.belki-editor-chip {
   background: var(--interactive-accent);
   flex: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Calendars: agenda (day plan / upcoming), event dialog
+   ------------------------------------------------------------------------ */
+.belki-agenda-note {
+  color: var(--belki-muted, var(--text-muted));
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.belki-agenda-dot {
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 9px;
+  width: 9px;
+}
+
+.belki-agenda-source {
+  color: var(--belki-muted, var(--text-muted));
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.belki-root button.belki-agenda-row.is-past {
+  opacity: 0.5;
+}
+
+.belki-root button.belki-agenda-row.is-now {
+  background: var(--belki-warm-soft, var(--belki-hover));
+}
+
+.belki-today-planning-row.is-past {
+  opacity: 0.5;
+}
+
+.belki-event-details {
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: 0 0 12px;
+}
+
+.belki-event-details dt {
+  color: var(--text-muted);
+}
+
+.belki-event-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.belki-event-link {
+  align-self: center;
+  margin-right: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Time blocking: Today with a timeline column
+   ------------------------------------------------------------------------ */
+.belki-main.has-timeline > * {
+  max-width: 1240px;
+}
+
+.belki-today-layout {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+}
+
+.belki-today-list {
+  min-width: 0;
+}
+
+.belki-today-timeline {
+  min-width: 0;
+  position: sticky;
+  top: 12px;
+}
+
+.belki-pane-toggle {
+  background: var(--belki-chip-bg, var(--belki-hover));
+  border-radius: 999px;
+  display: none;
+  padding: 3px;
+}
+
+.belki-root .belki-pane-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--belki-muted);
+  font-size: 13px;
+  height: auto;
+  padding: 4px 12px;
+}
+
+.belki-root .belki-pane-toggle button.is-on {
+  background: var(--belki-surface);
+  color: var(--belki-text);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .belki-pane-toggle {
+    display: flex;
+  }
+
+  .belki-today-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .belki-today-layout .belki-today-timeline {
+    display: none;
+    position: static;
+  }
+
+  .belki-today-layout.show-timeline .belki-today-timeline {
+    display: block;
+  }
+
+  .belki-today-layout.show-timeline .belki-today-list {
+    display: none;
+  }
+}
+
+.belki-timeline {
+  background: var(--belki-surface);
+  border: 1px solid var(--belki-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.belki-timeline .belki-planning-strip-head {
+  border-bottom: 1px solid var(--belki-border);
+}
+
+.belki-timeline-grid {
+  margin: 10px 10px 12px 52px;
+  position: relative;
+}
+
+.belki-timeline-hour {
+  color: var(--belki-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  left: -46px;
+  position: absolute;
+  text-align: right;
+  transform: translateY(-6px);
+  width: 40px;
+}
+
+.belki-timeline-slot {
+  border-top: 1px solid var(--belki-border);
+  cursor: pointer;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.belki-timeline-slot.is-half {
+  border-top-style: dashed;
+}
+
+.belki-timeline-slot:hover,
+.belki-timeline-slot.is-drop {
+  background: color-mix(in srgb, var(--color-orange, #c2410c) 12%, transparent);
+}
+
+.belki-root button.belki-timeline-item {
+  border: 0;
+  border-radius: 7px;
+  box-shadow: none;
+  color: var(--belki-text);
+  cursor: pointer;
+  display: block;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.25;
+  overflow: hidden;
+  padding: 3px 8px;
+  position: absolute;
+  text-align: left;
+  white-space: normal;
+}
+
+.belki-timeline-item small {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.belki-root button.belki-timeline-event {
+  background: color-mix(in srgb, var(--belki-event-color, var(--belki-muted)) 14%, var(--belki-surface));
+  border-left: 3px solid var(--belki-event-color, var(--belki-muted));
+  left: 0;
+  right: 46%;
+}
+
+.belki-root button.belki-timeline-block {
+  background: color-mix(in srgb, var(--color-orange, #c2410c) 12%, var(--belki-surface));
+  border: 1.5px dashed var(--color-orange, #c2410c);
+  left: 0;
+  right: 0;
+}
+
+.belki-root button.belki-timeline-block.has-events {
+  left: 56%;
+}
+
+.belki-root button.belki-timeline-block.is-conflict {
+  background: var(--belki-danger-light);
+  border-color: var(--belki-danger);
+}
+
+.belki-root button.belki-timeline-block.is-done {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.belki-timeline-now {
+  background: var(--belki-danger);
+  height: 2px;
+  left: -6px;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.belki-task-block {
+  align-items: center;
+  color: var(--color-orange, #c2410c);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 3px;
+}
+
+.belki-task-block .belki-chip-icon svg {
+  height: 12px;
+  width: 12px;
+}
+
+.belki-block-lengths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}

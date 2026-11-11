@@ -2,7 +2,7 @@ import { App, ItemView, MarkdownView, Modal, Notice, Platform, WorkspaceLeaf, se
 import { ConfirmModal } from "./ConfirmModal";
 import { showSelectionContextMenu, showTaskContextMenu } from "./TodaySidebarView";
 import { getLabelColor, getProjectColor } from "../colors";
-import { compareIsoDates, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isIsoDate, isToday, startOfIsoWeekIso, todayIso, yesterdayIso } from "../dateUtils";
+import { compareIsoDates, shiftIsoDate, currentIsoWeekKey, currentMonthKey, isAfterToday, isBeforeToday, isIsoDate, isToday, startOfIsoWeekIso, todayIso, yesterdayIso } from "../dateUtils";
 import { dedupeLabels, displayLabel, normalizeLabelName } from "../labels";
 import { getPriorityClass, getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName, uniqueRealProjects } from "../projects";
@@ -10,15 +10,24 @@ import { buildReviewSteps, findWaitingSector, pruneReviewSession, reviewSectorNe
 import { applyBelkiFontSettings, applyBelkiThemeSettings, normalizeOverdueRange, overdueRangeLabel } from "../settings";
 import { E_ID, INBOX_SECTOR, SECTOR_SET } from "../tasksFormat";
 import { OVERDUE_RANGES } from "../types";
-import type { BelkiSettings, Task } from "../types";
+import type { BelkiSettings, CalendarFeed, Task, TimeBlock } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
 import { stuckWeeks } from "../stale";
 import { upcomingEntries } from "../planning";
-import { YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
+import { PlanningEntryModal, YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
+import type { CalendarService } from "../calendarService";
+import type { CalEvent } from "../calendar";
+import { EventModal, calendarItems, planningItems, renderAgenda, renderBlockChip, renderTimeline } from "./dayPlan";
+import type { AgendaItem, TimelineHost } from "./dayPlan";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
+/** Minutes since local midnight, for the day plan and the timeline. */
+export function nowMinutes(): number {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
 export const LINK_RE = /(\[\[([^\]|#\n]+?)(?:#([^\]|\n]+?))?(?:\|([^\]\n]+?))?\]\])|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(https?:\/\/[^\s<>"')\]]+)|(www\.[a-zA-Z0-9][^\s<>"')\]]*)/g;
 export function renderLinkedText(text: string, el: HTMLElement, app?: App) {
   LINK_RE.lastIndex = 0;
@@ -82,6 +91,10 @@ export class TaskBoardView extends ItemView {
   /** Sector tab selected in the "overview" mode's Ring 2 / mini-list (INBOX_SECTOR or a sector tag). */
   overviewSector: string;
   yearPlan = new YearPlanState();
+  calendar: CalendarService;
+  unsubscribeCalendar?: () => void;
+  todayPane: "list" | "timeline" = "list";
+  pickedForBlock: string | null = null;
   reviewComingUpOpen = true;
   searchQuery: string;
   searchOpen: boolean;
@@ -106,9 +119,10 @@ export class TaskBoardView extends ItemView {
   renderScheduled: boolean;
   handleRootKeyDown: (event: KeyboardEvent) => void;
   unsubscribe?: () => void;
-  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, saveSettings: () => Promise<void>) {
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, saveSettings: () => Promise<void>, calendar: CalendarService) {
     super(leaf);
     this.store = store;
+    this.calendar = calendar;
     this.settings = settings;
     this.saveSettings = saveSettings;
     this.mode = settings.startView;
@@ -208,6 +222,7 @@ export class TaskBoardView extends ItemView {
   }
   async onOpen() {
     this.unsubscribe = this.store.subscribe(() => this.renderPreservingMainScroll());
+    this.unsubscribeCalendar = this.calendar.subscribe(() => this.renderPreservingMainScroll());
     this.render();
   }
   async onClose() {
@@ -216,6 +231,7 @@ export class TaskBoardView extends ItemView {
     this.removeProjectMenu();
     this.containerEl.removeEventListener("keydown", this.handleRootKeyDown, true);
     this.unsubscribe?.();
+    this.unsubscribeCalendar?.();
   }
   removeProjectMenu() {
     this.projectMenuEl?.remove();
@@ -669,18 +685,34 @@ export class TaskBoardView extends ItemView {
     if (this.mode === "completed") {
       this.renderCompletedStats(main, tasks);
     }
-    if (!this.settings.planningEnabled) {
-      // No planning strips.
-    } else if (this.mode === "today") {
-      renderPlanningStrip(this, main, "Planning \u00b7 today and the next 7 days", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 7), () => this.openYearPlan());
-    } else if (this.mode === "upcoming") {
-      renderPlanningStrip(this, main, "Planning \u00b7 next 2 weeks", upcomingEntries(this.store.getPlanningEntries(), todayIso(), 14), () => this.openYearPlan());
+    // Today with time blocking: tasks on the left, the timeline on the right
+    // (on phones: one at a time, switched by a List/Timeline toggle).
+    let column: HTMLElement = main;
+    let timelinePane: HTMLElement | null = null;
+    if (this.mode === "today" && this.settings.timeBlocking) {
+      main.addClass("has-timeline");
+      const toggle = header.createDiv({ cls: "belki-pane-toggle" });
+      for (const [pane, label] of [["list", "List"], ["timeline", "Timeline"]] as const) {
+        const button = toggle.createEl("button", { text: label, attr: { type: "button" } });
+        button.toggleClass("is-on", this.todayPane === pane);
+        button.addEventListener("click", () => {
+          this.todayPane = pane;
+          this.render();
+        });
+      }
+      const layout = main.createDiv({ cls: "belki-today-layout" });
+      layout.toggleClass("show-timeline", this.todayPane === "timeline");
+      column = layout.createDiv({ cls: "belki-today-list" });
+      timelinePane = layout.createDiv({ cls: "belki-today-timeline" });
     }
-    const sections = main.createDiv({ cls: "belki-sections" });
+    if (this.mode === "today") this.renderDayPlan(column);
+    else if (this.mode === "upcoming") this.renderUpcomingAgenda(column);
+    if (timelinePane) renderTimeline(timelinePane, this.timelineHost(), this.calendar.events(), todayIso(), nowMinutes());
+    const sections = column.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
     // With a single section its header badge already shows the same count.
     if (sections.querySelectorAll(":scope > .belki-section").length <= 1) subtitle.remove();
-    const addArea = main.createDiv({ cls: "belki-add-area" });
+    const addArea = column.createDiv({ cls: "belki-add-area" });
     const inlineAdd = addArea.createEl("button", { cls: "belki-add-inline" });
     inlineAdd.createSpan({ cls: "belki-add-plus", text: "+" });
     // In the Inbox the capture field above is the quick way; this button opens the full editor.
@@ -1478,7 +1510,9 @@ export class TaskBoardView extends ItemView {
           });
           return;
         }
-        showTaskContextMenu(this.store, task, event);
+        showTaskContextMenu(this.store, task, event, this.settings.timeBlocking ? (menu) => {
+          menu.addItem((item) => item.setTitle("Plan a time today\u2026").setIcon("clock").onClick(() => this.pickTaskForBlock(task)));
+        } : void 0);
       });
     }
     row.addEventListener("click", (event) => {
@@ -1569,6 +1603,7 @@ export class TaskBoardView extends ItemView {
     }
     this.renderWaitingAge(meta, task);
     this.renderStuck(meta, task, false);
+    if (this.settings.timeBlocking) renderBlockChip(meta, this.todaysBlocks().find((b) => b.taskId === task.id));
     if (task.deadline) {
       meta.createSpan({
         cls: `belki-task-deadline${isBeforeToday(task.deadline) ? " is-overdue" : ""}`,
@@ -1647,6 +1682,114 @@ export class TaskBoardView extends ItemView {
         void this.store.deleteTask(task.id);
       }).open();
     });
+  }
+  feedsById(): Map<string, CalendarFeed> {
+    return new Map(this.settings.calendars.map((feed) => [feed.id, feed]));
+  }
+  calendarEntries(): Task[] {
+    if (!this.calendar.enabled || !this.settings.planningEnabled) return [];
+    const feeds = this.feedsById();
+    return this.calendar.events()
+      .filter((event) => feeds.get(event.feedId)?.inYearPlan)
+      .map((event, order): Task => {
+        const feed = feeds.get(event.feedId);
+        return {
+          id: event.id,
+          title: event.title,
+          completed: false,
+          due: event.endDay,
+          start: event.startDay !== event.endDay ? event.startDay : void 0,
+          priority: "none",
+          labels: [],
+          attachments: [],
+          extraProperties: [],
+          order,
+          planning: true,
+          calendar: { color: feed?.color || "#3d6a8c", feedName: feed?.name || "Calendar", event }
+        };
+      });
+  }
+  openEvent(event: CalEvent) {
+    new EventModal(this.app, event, this.feedsById().get(event.feedId)).open();
+  }
+  /** Today's agenda: calendar events (module on) plus planning entries for today and the next 7 days. */
+  renderDayPlan(parent: HTMLElement) {
+    const today = todayIso();
+    const items: AgendaItem[] = [];
+    if (this.calendar.enabled) items.push(...calendarItems(this.calendar.events(), [today], this.feedsById(), nowMinutes(), false, (e) => this.openEvent(e)));
+    if (this.settings.planningEnabled) {
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 7), today, (entry) => new PlanningEntryModal(this, entry, false).open()));
+    }
+    const synced = this.calendar.enabled ? this.calendarNote() : "";
+    renderAgenda(parent, this.calendar.enabled ? "Day plan" : "Planning \u00b7 today and the next 7 days", synced, items,
+      this.settings.planningEnabled ? { label: "Year plan \u2192", onClick: () => this.openYearPlan() } : void 0);
+  }
+  /** Upcoming: calendar events and planning entries for the next two weeks. */
+  renderUpcomingAgenda(parent: HTMLElement) {
+    const today = todayIso();
+    const items: AgendaItem[] = [];
+    if (this.calendar.enabled) {
+      const days = Array.from({ length: 14 }, (_, i) => shiftIsoDate(today, i + 1));
+      items.push(...calendarItems(this.calendar.events(), days, this.feedsById(), null, true, (e) => this.openEvent(e)));
+    }
+    if (this.settings.planningEnabled) {
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 14), today, (entry) => new PlanningEntryModal(this, entry, false).open()));
+    }
+    renderAgenda(parent, this.calendar.enabled ? "Coming up \u00b7 next 2 weeks" : "Planning \u00b7 next 2 weeks", this.calendar.enabled ? this.calendarNote() : "", items,
+      this.settings.planningEnabled ? { label: "Year plan \u2192", onClick: () => this.openYearPlan() } : void 0);
+  }
+  calendarNote(): string {
+    const errors = this.calendar.errors();
+    if (errors.length) return `${errors[0].feed.name}: ${errors[0].error}`;
+    const synced = this.calendar.lastSynced();
+    return synced ? `synced ${new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(new Date(synced))}` : "not synced yet";
+  }
+  /** Today's time blocks; blocks saved on another day have expired. */
+  todaysBlocks(): TimeBlock[] {
+    const saved = this.settings.timeBlocks;
+    return saved.date === todayIso() ? saved.blocks : [];
+  }
+  saveBlocks(blocks: TimeBlock[]) {
+    this.settings.timeBlocks = { date: todayIso(), blocks };
+    void this.saveSettings();
+    this.render();
+  }
+  timelineHost(): TimelineHost {
+    const tasks = new Map(this.store.getTasks().map((t) => [t.id, t]));
+    return {
+      app: this.app,
+      dayStartHour: this.settings.dayStartHour,
+      dayEndHour: this.settings.dayEndHour,
+      blocks: this.todaysBlocks().filter((b) => tasks.has(b.taskId)),
+      picked: this.pickedForBlock,
+      taskTitle: (id) => tasks.get(id)?.title ?? null,
+      taskDone: (id) => tasks.get(id)?.completed === true,
+      placeBlock: (id, start) => {
+        const blocks = this.todaysBlocks().filter((b) => b.taskId !== id);
+        const previous = this.todaysBlocks().find((b) => b.taskId === id);
+        const end = Math.max(this.settings.dayEndHour, this.settings.dayStartHour + 1) * 60;
+        const duration = previous?.duration ?? 60;
+        blocks.push({ taskId: id, start: Math.max(0, Math.min(start, end - 30)), duration });
+        this.pickedForBlock = null;
+        this.draggedTaskId = null;
+        this.draggedTaskIds = null;
+        this.clearDropTargets();
+        this.saveBlocks(blocks);
+      },
+      setDuration: (id, duration) => this.saveBlocks(this.todaysBlocks().map((b) => (b.taskId === id ? { ...b, duration } : b))),
+      removeBlock: (id) => this.saveBlocks(this.todaysBlocks().filter((b) => b.taskId !== id)),
+      draggedTaskId: () => this.draggedTaskId,
+      openEvent: (event) => this.openEvent(event),
+      eventColor: (event) => this.feedsById().get(event.feedId)?.color
+    };
+  }
+  /** Context-menu entry: pick a task, then tap a time on the timeline (works without drag, e.g. on phones). */
+  pickTaskForBlock(task: Task) {
+    this.pickedForBlock = task.id;
+    this.mode = "today";
+    this.todayPane = "timeline";
+    this.render();
+    new Notice(`Tap a time on the timeline for \u201c${task.title}\u201d.`);
   }
   openYearPlan() {
     this.mode = "year";
