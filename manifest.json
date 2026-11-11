@@ -1,7 +1,7 @@
 {
   "id": "sektor-tasks",
   "name": "Sector Tasks",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "minAppVersion": "1.7.2",
   "description": "Task board and year plan over a single Markdown file, with tasks grouped by when you'll do them and guided daily, weekly and monthly reviews. Designed for Carl Pullein's Time Sector System, usable with any tag scheme.",
   "author": "Tom Leonhardt",
