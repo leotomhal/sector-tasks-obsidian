@@ -956,12 +956,13 @@ export class TaskBoardView extends ItemView {
     parent.empty();
     const active = allTasks.filter((task) => !task.completed && !task.parentId);
     if (this.mode === "today") {
-      // Focus (Pullein's 2+8): P1 = must do, P2 = next, from any sector and
-      // whatever their date. They're shown once, so the date sections skip them.
+      // Focus (Pullein's 2+8): among today's tasks (due today or overdue),
+      // P1 = must do, P2 = next. They're shown once, so the date sections skip them.
       const focusIds = new Set<string>();
       if (this.settings.focusSection) {
-        const mustDo = this.sortTasks(active.filter((task) => task.priority === "P1"));
-        const next = this.sortTasks(active.filter((task) => task.priority === "P2"));
+        const dueNow = [...active.filter((task) => isToday(task.due)), ...this.getOverdueTasks(active)];
+        const mustDo = this.sortTasks(dueNow.filter((task) => task.priority === "P1"));
+        const next = this.sortTasks(dueNow.filter((task) => task.priority === "P2"));
         if (mustDo.length || next.length) {
           this.renderFocusSection(parent, "Must do", mustDo, 2, "Give up to two tasks priority 1.");
           this.renderFocusSection(parent, "Next", next, 8, "Give up to eight tasks priority 2.");

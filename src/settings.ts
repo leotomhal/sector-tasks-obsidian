@@ -410,7 +410,7 @@ export class BelkiSettingTab extends PluginSettingTab {
       },
       {
         name: "Focus in today (2+8)",
-        desc: "Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.",
+        desc: "Of the tasks due today or overdue, lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view. The count turns red when there are more.",
         control: { type: "toggle", key: "focusSection" }
       },
       {
@@ -1251,7 +1251,7 @@ export class BelkiSettingTab extends PluginSettingTab {
       }
     }
     this.renderLegacyCalendars(containerEl);
-    new Setting(containerEl).setName("Focus in today (2+8)").setDesc("Lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view, from any sector and whatever their date. The count turns red when there are more.").addToggle((toggle) => {
+    new Setting(containerEl).setName("Focus in today (2+8)").setDesc("Of the tasks due today or overdue, lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view. The count turns red when there are more.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.focusSection === true).onChange(async (value) => {
         this.plugin.settings.focusSection = value;
         await this.plugin.saveSettings();
