@@ -3709,3 +3709,45 @@ button.belki-editor-chip {
   gap: 8px;
   margin-bottom: 12px;
 }
+
+/* Brain dump */
+.belki-brain-dump-modal .belki-brain-dump-hint {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-bottom: 8px;
+}
+
+.belki-brain-dump-input {
+  box-sizing: border-box;
+  font-size: var(--font-text-size);
+  line-height: 1.5;
+  min-height: 220px;
+  resize: vertical;
+  width: 100%;
+}
+
+.belki-brain-dump-footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.belki-brain-dump-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-right: auto;
+}
+
+.belki-brain-dump-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.belki-brain-dump-shortcut {
+  color: var(--text-faint);
+  flex-basis: 100%;
+  font-size: var(--font-ui-smaller);
+  text-align: right;
+}

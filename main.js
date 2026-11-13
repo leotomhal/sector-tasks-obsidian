@@ -34,7 +34,7 @@ __export(main_exports, {
   toSettingsData: () => toSettingsData
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/views/TaskBoardView.ts
 var import_obsidian7 = require("obsidian");
@@ -8451,6 +8451,14 @@ function showTaskContextMenu(store, task, event, extra) {
       void store.editTaskInEditor(task.id);
     });
   });
+  if (!task.planning) {
+    const hasNote = store.linkedNote(task) !== null;
+    menu.addItem((item) => {
+      item.setTitle(hasNote ? "Open note" : "Create note").setIcon("file-text").onClick(() => {
+        void store.createNoteForTask(task.id);
+      });
+    });
+  }
   if (extra) extra(menu);
   menu.showAtMouseEvent(event);
 }
@@ -8963,6 +8971,8 @@ var DEFAULT_SETTINGS = {
   planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
+  notesFolder: "",
+  noteTemplate: "",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -9104,6 +9114,10 @@ function normalizeWaitingSince(value) {
 function normalizeReviewNotesFolder(value) {
   const trimmed = (value || "").trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? (0, import_obsidian4.normalizePath)(trimmed) : DEFAULT_SETTINGS.reviewNotesFolder;
+}
+function normalizeOptionalPath(value) {
+  const trimmed = (typeof value === "string" ? value : "").trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? (0, import_obsidian4.normalizePath)(trimmed) : "";
 }
 function normalizeFontOption(value) {
   return FONT_OPTIONS.includes(value) ? value : "system";
@@ -9332,6 +9346,16 @@ var BelkiSettingTab = class extends import_obsidian4.PluginSettingTab {
         visible: () => this.plugin.settings.reviewNotes === true,
         control: { type: "text", key: "reviewNotesFolder", placeholder: "Reviews" }
       },
+      {
+        name: "Folder for task notes",
+        desc: "Where notes made from a task's menu are saved. Empty means the folder of your tasks file.",
+        control: { type: "text", key: "notesFolder", placeholder: "Same as tasks file" }
+      },
+      {
+        name: "Template for task notes",
+        desc: "Optional. Path to a note used as the starting text; {{title}}, {{date}} and {{tasks}} (a link to your tasks file) are filled in.",
+        control: { type: "text", key: "noteTemplate", placeholder: "Templates/task note" }
+      },
       this.buildSectorsPage(),
       this.buildCalendarsPage(),
       this.buildAppearancePage()
@@ -9405,6 +9429,10 @@ var BelkiSettingTab = class extends import_obsidian4.PluginSettingTab {
       settings.stuckWeeks = normalizeAutoDeleteDays(value);
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+    } else if (key === "notesFolder") {
+      settings.notesFolder = normalizeOptionalPath(asString(value));
+    } else if (key === "noteTemplate") {
+      settings.noteTemplate = normalizeOptionalPath(asString(value));
     } else if (key === "reviewNotesFolder") {
       settings.reviewNotesFolder = normalizeReviewNotesFolder(asString(value));
     } else if (key === "reviewNotes") {
@@ -10185,6 +10213,18 @@ var BelkiSettingTab = class extends import_obsidian4.PluginSettingTab {
         });
       });
     }
+    new import_obsidian4.Setting(containerEl).setName("Folder for task notes").setDesc("Where notes made from a task's menu are saved. Empty means the folder of your tasks file.").addText((text2) => {
+      text2.setPlaceholder("Same as tasks file").setValue(this.plugin.settings.notesFolder).onChange(async (value) => {
+        this.plugin.settings.notesFolder = normalizeOptionalPath(value);
+        await this.plugin.saveSettings();
+      });
+    });
+    new import_obsidian4.Setting(containerEl).setName("Template for task notes").setDesc("Optional. Path to a note used as the starting text; {{title}}, {{date}} and {{tasks}} (a link to your tasks file) are filled in.").addText((text2) => {
+      text2.setPlaceholder("Templates/task note").setValue(this.plugin.settings.noteTemplate).onChange(async (value) => {
+        this.plugin.settings.noteTemplate = normalizeOptionalPath(value);
+        await this.plugin.saveSettings();
+      });
+    });
     new import_obsidian4.Setting(containerEl).setName("Task rows").setDesc("Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.").addDropdown((dropdown) => {
       dropdown.addOption("stacked", "Stacked");
       dropdown.addOption("singleLine", "Single line");
@@ -14032,6 +14072,9 @@ var ReleaseNotesModal = class extends import_obsidian9.Modal {
   }
 };
 
+// src/views/BrainDumpModal.ts
+var import_obsidian12 = require("obsidian");
+
 // src/taskStore.ts
 var import_obsidian11 = require("obsidian");
 
@@ -14365,6 +14408,28 @@ var TaskEditModal = class extends import_obsidian10.Modal {
     this.finish(null);
   }
 };
+
+// src/notes.ts
+var INVALID_NAME_CHARS = /[\\/:*?"<>|#^[\]]/g;
+var MAX_NAME_LENGTH = 120;
+function noteNameFromTitle(title) {
+  let name = (title || "").replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2").replace(/\[\[([^\]]+)\]\]/g, "$1").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(INVALID_NAME_CHARS, " ").replace(/\s+/g, " ").trim();
+  if (name.length > MAX_NAME_LENGTH) name = name.slice(0, MAX_NAME_LENGTH).trim();
+  return name.replace(/[.\s]+$/, "").replace(/^\.+/, "");
+}
+function linkedNoteName(title) {
+  const match = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/.exec(title || "");
+  const target = match == null ? void 0 : match[1].trim();
+  return target ? target : void 0;
+}
+function titleAsLink(title, noteName) {
+  const trimmed = (title || "").trim();
+  if (trimmed === noteName || /[[\]|]/.test(trimmed)) return `[[${noteName}]]`;
+  return `[[${noteName}|${trimmed}]]`;
+}
+function fillNoteTemplate(template, values) {
+  return template.replace(/\{\{\s*title\s*\}\}/gi, values.title).replace(/\{\{\s*date\s*\}\}/gi, values.date).replace(/\{\{\s*tasks\s*\}\}/gi, values.tasks);
+}
 
 // src/taskStore.ts
 var TaskStore = class {
@@ -14855,6 +14920,70 @@ ${lines.join("\n")}
   notify() {
     for (const listener of this.listeners) listener();
   }
+  /** The note a task's title links to, if it exists. */
+  linkedNote(task) {
+    const name = linkedNoteName(task.title);
+    if (!name) return null;
+    return this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+  }
+  /**
+   * "Create note" on a task: makes a note named after the task (or reuses one
+   * with that name), turns the task title into a link to it, and opens it.
+   * When the title already links to an existing note, that note is opened.
+   */
+  async createNoteForTask(id) {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const existing = this.linkedNote(task);
+    if (existing) {
+      await this.app.workspace.getLeaf("tab").openFile(existing);
+      return;
+    }
+    const name = noteNameFromTitle(task.title);
+    if (!name) {
+      new import_obsidian11.Notice("This task's title can't be used as a note name.");
+      return;
+    }
+    let file = this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+    if (!file) {
+      const tasksFolder = this.filePath.includes("/") ? this.filePath.slice(0, this.filePath.lastIndexOf("/")) : "";
+      const folder = (this.settings.notesFolder || tasksFolder).replace(/^\/+|\/+$/g, "");
+      const path = (0, import_obsidian11.normalizePath)(folder ? `${folder}/${name}.md` : `${name}.md`);
+      const atPath = this.app.vault.getAbstractFileByPath(path);
+      if (atPath instanceof import_obsidian11.TFile) {
+        file = atPath;
+      } else {
+        if (!await this.ensureParentFolders(path)) return;
+        try {
+          file = await this.app.vault.create(path, await this.noteContent(task.title, path));
+        } catch (error) {
+          console.warn("[belki] Could not create note.", error, { path });
+          new import_obsidian11.Notice(`Could not create "${path}".`);
+          return;
+        }
+      }
+    }
+    const linkName = this.app.metadataCache.fileToLinktext(file, this.filePath, true);
+    await this.updateTask(id, { title: titleAsLink(task.title, linkName) });
+    await this.app.workspace.getLeaf("tab").openFile(file);
+  }
+  /** A new note's text: the template if one is set and readable, else a link back to the tasks file. */
+  async noteContent(title, notePath) {
+    const tasksFile = this.app.vault.getAbstractFileByPath(this.filePath);
+    const tasksLink = tasksFile instanceof import_obsidian11.TFile ? this.app.fileManager.generateMarkdownLink(tasksFile, notePath) : "";
+    const templatePath = (this.settings.noteTemplate || "").trim();
+    if (templatePath) {
+      const withExt = (0, import_obsidian11.normalizePath)(/\.md$/i.test(templatePath) ? templatePath : `${templatePath}.md`);
+      const template = this.app.vault.getAbstractFileByPath(withExt);
+      if (template instanceof import_obsidian11.TFile) {
+        return fillNoteTemplate(await this.app.vault.read(template), { title, date: todayIso(), tasks: tasksLink });
+      }
+      new import_obsidian11.Notice(`Note template "${withExt}" not found; created the note without it.`);
+    }
+    return tasksLink ? `Task in ${tasksLink}
+
+` : "";
+  }
   // --- File helpers --------------------------------------------------------
   async ensureFile(path) {
     const normalizedPath = (0, import_obsidian11.normalizePath)(path);
@@ -14988,12 +15117,85 @@ function cloneTask(task) {
   };
 }
 
+// src/views/BrainDumpModal.ts
+function brainDumpLines(text2) {
+  return text2.split(/\r?\n/).map((line) => stripListMarker(line).replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+var BrainDumpModal = class extends import_obsidian12.Modal {
+  constructor(app, draft, save, keepDraft) {
+    super(app);
+    this.saved = false;
+    this.draft = draft;
+    this.save = save;
+    this.keepDraft = keepDraft;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass("belki-brain-dump-modal");
+    this.setTitle("Brain dump");
+    contentEl.createDiv({ cls: "belki-brain-dump-hint", text: "One task per line. Everything goes to the Inbox; sort it later." });
+    this.textarea = contentEl.createEl("textarea", {
+      cls: "belki-brain-dump-input",
+      attr: { rows: "10", placeholder: "Call the printer about the flyer", "aria-label": "Tasks, one per line" }
+    });
+    this.textarea.value = this.draft;
+    const footer = contentEl.createDiv({ cls: "belki-brain-dump-footer" });
+    const count = footer.createSpan({ cls: "belki-brain-dump-count" });
+    const actions = footer.createDiv({ cls: "belki-brain-dump-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    const submit = actions.createEl("button", { cls: "mod-cta", attr: { type: "button" } });
+    const update = () => {
+      const n = brainDumpLines(this.textarea.value).length;
+      count.setText(n === 1 ? "1 task" : `${n} tasks`);
+      submit.setText("Add to inbox");
+      submit.disabled = n === 0;
+    };
+    const commit = async () => {
+      const lines = brainDumpLines(this.textarea.value);
+      if (!lines.length) return;
+      submit.disabled = true;
+      const saved = await this.save(lines);
+      if (saved > 0) {
+        this.saved = true;
+        new import_obsidian12.Notice(saved === 1 ? "1 task added to the inbox." : `${saved} tasks added to the inbox.`);
+        this.close();
+      } else {
+        submit.disabled = false;
+        new import_obsidian12.Notice("Couldn't save the tasks. Your text is still here.");
+      }
+    };
+    this.textarea.addEventListener("input", update);
+    this.textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        void commit();
+      }
+    });
+    cancel.addEventListener("click", () => this.close());
+    submit.addEventListener("click", () => void commit());
+    if (!import_obsidian12.Platform.isMobile) footer.createDiv({ cls: "belki-brain-dump-shortcut", text: import_obsidian12.Platform.isMacOS ? "⌘ + Enter to save" : "Ctrl + Enter to save" });
+    update();
+    window.setTimeout(() => {
+      this.textarea.focus();
+      const end = this.textarea.value.length;
+      this.textarea.setSelectionRange(end, end);
+    }, 0);
+  }
+  onClose() {
+    var _a;
+    this.keepDraft(this.saved ? "" : ((_a = this.textarea) == null ? void 0 : _a.value) || "");
+    this.contentEl.empty();
+  }
+};
+
 // src/main.ts
-var BelkiPlugin = class extends import_obsidian12.Plugin {
+var BelkiPlugin = class extends import_obsidian13.Plugin {
   constructor() {
     super(...arguments);
     this.reloadDebounceTimer = null;
     this.seedWaitingFromCreated = false;
+    /** Unsaved brain-dump text, kept while Obsidian runs so closing the window by accident loses nothing. */
+    this.brainDumpDraft = "";
   }
   async onload() {
     const hadSettings = await this.loadSettings();
@@ -15054,7 +15256,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new import_obsidian12.Notice("Sector Tasks labels normalized.");
+        new import_obsidian13.Notice("Sector Tasks labels normalized.");
       }
     });
     this.addCommand({
@@ -15062,6 +15264,32 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       name: "Quick add task (Inbox)",
       callback: () => {
         void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
+      }
+    });
+    this.addRibbonIcon("brain", "Brain dump to inbox", () => {
+      this.openBrainDump();
+    });
+    this.addCommand({
+      id: "brain-dump",
+      name: "Brain dump to inbox",
+      callback: () => {
+        this.openBrainDump();
+      }
+    });
+    this.addCommand({
+      id: "selection-to-inbox",
+      name: "Add selected lines to inbox",
+      editorCheckCallback: (checking, editor, ctx) => {
+        const lines = brainDumpLines(editor.getSelection());
+        const inTasksFile = ctx.file ? this.store.isTaskStorageFile(ctx.file.path) : false;
+        if (!lines.length || inTasksFile) return false;
+        if (!checking) {
+          void this.store.createTasksFromLines(lines).then((saved) => {
+            if (saved > 0) new import_obsidian13.Notice(saved === 1 ? "1 task added to the inbox." : `${saved} tasks added to the inbox.`);
+            this.refreshBelkiViews();
+          });
+        }
+        return true;
       }
     });
     this.addCommand({
@@ -15125,6 +15353,20 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     }
   }
   /** Loads settings; returns false when there was no saved data yet (a fresh install). */
+  openBrainDump() {
+    new BrainDumpModal(
+      this.app,
+      this.brainDumpDraft,
+      async (lines) => {
+        const saved = await this.store.createTasksFromLines(lines);
+        this.refreshBelkiViews();
+        return saved;
+      },
+      (text2) => {
+        this.brainDumpDraft = text2;
+      }
+    ).open();
+  }
   async loadSettings() {
     const raw = await this.loadData();
     const saved = toSettingsData(raw);
@@ -15177,7 +15419,9 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
-      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
+      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder),
+      notesFolder: normalizeOptionalPath(saved == null ? void 0 : saved.notesFolder),
+      noteTemplate: normalizeOptionalPath(saved == null ? void 0 : saved.noteTemplate)
     };
     if (!saved || saved.waitingSince === void 0) this.seedWaitingFromCreated = true;
     if (this.settings) {
@@ -15227,7 +15471,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     const entries = bundledReleaseNotes();
     const entry = entries.find((e) => e.version === this.manifest.version) || entries[0];
     if (!entry) {
-      new import_obsidian12.Notice("No release notes found.");
+      new import_obsidian13.Notice("No release notes found.");
       return;
     }
     new ReleaseNotesModal(this.app, [entry]).open();
@@ -15244,7 +15488,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new import_obsidian12.Notice("Sector Tasks could not reload task data.");
+      new import_obsidian13.Notice("Sector Tasks could not reload task data.");
       console.error(error);
     }
   }
@@ -15252,7 +15496,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) {
       if (manual) {
-        new import_obsidian12.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+        new import_obsidian13.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
       }
       return;
     }
@@ -15263,18 +15507,18 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       if (manual) {
         const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
         const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
-        new import_obsidian12.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+        new import_obsidian13.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
       }
       return;
     }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
-      new import_obsidian12.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      new import_obsidian13.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
       return;
     }
     await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new import_obsidian12.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
+    new import_obsidian13.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -15360,10 +15604,10 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       await this.pruneCompletedTasks();
       if (this.settings.planningEnabled && this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning((/* @__PURE__ */ new Date()).getFullYear());
-        if (moved > 0) new import_obsidian12.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+        if (moved > 0) new import_obsidian13.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }
     } catch (error) {
-      new import_obsidian12.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
+      new import_obsidian13.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath
@@ -15378,6 +15622,11 @@ function toSettingsData(value) {
   return value;
 }
 var __testables = {
+  noteNameFromTitle,
+  linkedNoteName,
+  titleAsLink,
+  fillNoteTemplate,
+  brainDumpLines,
   parseTaskLine,
   serializeTaskLine,
   ensureTaskMarker,

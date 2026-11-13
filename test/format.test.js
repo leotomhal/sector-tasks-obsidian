@@ -49,6 +49,11 @@ const {
   parseIcs,
   eventsOnDay,
   stripListMarker,
+  noteNameFromTitle,
+  linkedNoteName,
+  titleAsLink,
+  fillNoteTemplate,
+  brainDumpLines,
   formFromRule,
   ruleFromForm,
   ordinal,
@@ -607,4 +612,34 @@ test("eventsOnDay: all-day first, then by time; pieces clipped to the day", () =
   assert.deepEqual(pieces.map((p) => p.event.title), ["Fair", "Night", "Late"]);
   assert.deepEqual([pieces[1].startMin, pieces[1].endMin], [0, 60], "an event from the night before starts at 00:00 on this day");
   assert.deepEqual([pieces[2].startMin, pieces[2].endMin], [840, 900]);
+});
+
+test("noteNameFromTitle drops characters a file name can't have", () => {
+  assert.equal(noteNameFromTitle("Pressemitteilung GRK vorbereiten"), "Pressemitteilung GRK vorbereiten");
+  assert.equal(noteNameFromTitle("Hat der Hinderberger-Text noch Sinn?"), "Hat der Hinderberger-Text noch Sinn");
+  assert.equal(noteNameFromTitle("Q4: Budget / Plan #wichtig"), "Q4 Budget Plan wichtig");
+  assert.equal(noteNameFromTitle("Read [[Book]] and [site](https://x.org)"), "Read Book and site");
+  assert.equal(noteNameFromTitle("...."), "");
+  assert.ok(noteNameFromTitle("x".repeat(300)).length <= 120);
+});
+
+test("linkedNoteName finds the note a title links to", () => {
+  assert.equal(linkedNoteName("[[Budget 2027]]"), "Budget 2027");
+  assert.equal(linkedNoteName("Prepare [[Notes/Budget#Q1|the budget]] today"), "Notes/Budget");
+  assert.equal(linkedNoteName("No link here"), void 0);
+});
+
+test("titleAsLink keeps the wording as alias only when needed and safe", () => {
+  assert.equal(titleAsLink("Budget planen", "Budget planen"), "[[Budget planen]]");
+  assert.equal(titleAsLink("Noch Sinn?", "Noch Sinn"), "[[Noch Sinn|Noch Sinn?]]");
+  assert.equal(titleAsLink("A | B", "A B"), "[[A B]]");
+});
+
+test("fillNoteTemplate fills title, date and tasks", () => {
+  assert.equal(fillNoteTemplate("# {{title}}\n{{ date }} · {{TASKS}}", { title: "T", date: "2026-11-13", tasks: "[[Tasks]]" }), "# T\n2026-11-13 · [[Tasks]]");
+});
+
+test("brainDumpLines keeps one task per non-empty line", () => {
+  assert.deepEqual(brainDumpLines("- Call printer\n\n  * [ ] Book room  \r\n1. Mail Anna"), ["Call printer", "Book room", "Mail Anna"]);
+  assert.deepEqual(brainDumpLines("   \n"), []);
 });
