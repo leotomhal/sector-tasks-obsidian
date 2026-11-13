@@ -5,6 +5,7 @@ import { dedupeLabels } from "./labels";
 import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
+import { fillNoteTemplate, linkedNoteName, noteNameFromTitle, titleAsLink } from "./notes";
 import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
 export class TaskStore {
@@ -504,6 +505,69 @@ ${lines.join("\n")}
   }
   notify() {
     for (const listener of this.listeners) listener();
+  }
+  /** The note a task's title links to, if it exists. */
+  linkedNote(task: Task): TFile | null {
+    const name = linkedNoteName(task.title);
+    if (!name) return null;
+    return this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+  }
+  /**
+   * "Create note" on a task: makes a note named after the task (or reuses one
+   * with that name), turns the task title into a link to it, and opens it.
+   * When the title already links to an existing note, that note is opened.
+   */
+  async createNoteForTask(id: string) {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const existing = this.linkedNote(task);
+    if (existing) {
+      await this.app.workspace.getLeaf("tab").openFile(existing);
+      return;
+    }
+    const name = noteNameFromTitle(task.title);
+    if (!name) {
+      new Notice("This task's title can't be used as a note name.");
+      return;
+    }
+    let file = this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+    if (!file) {
+      const tasksFolder = this.filePath.includes("/") ? this.filePath.slice(0, this.filePath.lastIndexOf("/")) : "";
+      const folder = (this.settings.notesFolder || tasksFolder).replace(/^\/+|\/+$/g, "");
+      const path = normalizePath(folder ? `${folder}/${name}.md` : `${name}.md`);
+      const atPath = this.app.vault.getAbstractFileByPath(path);
+      if (atPath instanceof TFile) {
+        file = atPath;
+      } else {
+        if (!(await this.ensureParentFolders(path))) return;
+        try {
+          file = await this.app.vault.create(path, await this.noteContent(task.title, path));
+        } catch (error) {
+          console.warn("[belki] Could not create note.", error, { path });
+          new Notice(`Could not create "${path}".`);
+          return;
+        }
+      }
+    }
+    // Link by the name Obsidian resolves from the tasks file (shortest unique path).
+    const linkName = this.app.metadataCache.fileToLinktext(file, this.filePath, true);
+    await this.updateTask(id, { title: titleAsLink(task.title, linkName) });
+    await this.app.workspace.getLeaf("tab").openFile(file);
+  }
+  /** A new note's text: the template if one is set and readable, else a link back to the tasks file. */
+  async noteContent(title: string, notePath: string): Promise<string> {
+    const tasksFile = this.app.vault.getAbstractFileByPath(this.filePath);
+    const tasksLink = tasksFile instanceof TFile ? this.app.fileManager.generateMarkdownLink(tasksFile, notePath) : "";
+    const templatePath = (this.settings.noteTemplate || "").trim();
+    if (templatePath) {
+      const withExt = normalizePath(/\.md$/i.test(templatePath) ? templatePath : `${templatePath}.md`);
+      const template = this.app.vault.getAbstractFileByPath(withExt);
+      if (template instanceof TFile) {
+        return fillNoteTemplate(await this.app.vault.read(template), { title, date: todayIso(), tasks: tasksLink });
+      }
+      new Notice(`Note template "${withExt}" not found; created the note without it.`);
+    }
+    return tasksLink ? `Task in ${tasksLink}\n\n` : "";
   }
   // --- File helpers --------------------------------------------------------
   async ensureFile(path: string): Promise<TFile | null> {

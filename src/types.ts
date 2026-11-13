@@ -193,6 +193,9 @@ export interface BelkiSettings {
   /** Move year-plan entries of past years to the archive note on startup. */
   archivePastPlanning: boolean;
   reviewNotesFolder: string;
+  /** "Create note": folder for new notes (empty = the tasks file's folder) and an optional template. */
+  notesFolder: string;
+  noteTemplate: string;
   lastWeeklyReviewKey: string;
   lastMonthlyReviewKey: string;
 }

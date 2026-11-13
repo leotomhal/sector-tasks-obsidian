@@ -108,6 +108,14 @@ export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEv
       void store.editTaskInEditor(task.id);
     });
   });
+  if (!task.planning) {
+    const hasNote = store.linkedNote(task) !== null;
+    menu.addItem((item) => {
+      item.setTitle(hasNote ? "Open note" : "Create note").setIcon("file-text").onClick(() => {
+        void store.createNoteForTask(task.id);
+      });
+    });
+  }
   if (extra) extra(menu);
   menu.showAtMouseEvent(event);
 }

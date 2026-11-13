@@ -14,9 +14,11 @@ import { CalendarService } from "./calendarService";
 import { entriesForYear, isMissedMilestone, upcomingEntries } from "./planning";
 import { formFromRule, ruleFromForm } from "./recurrenceForm";
 import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks, normalizeCalendars, normalizeHour, normalizeTimeBlocks } from "./settings";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeOptionalPath, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks, normalizeCalendars, normalizeHour, normalizeTimeBlocks } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
+import { BrainDumpModal, brainDumpLines } from "./views/BrainDumpModal";
+import { fillNoteTemplate, linkedNoteName, noteNameFromTitle, titleAsLink } from "./notes";
 import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ordinal, ensureSectorInLine, ensureTaskMarker, extractTags, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
@@ -26,6 +28,8 @@ export default class BelkiPlugin extends Plugin {
   reloadDebounceTimer: number | null = null;
   seedWaitingFromCreated = false;
   calendar: CalendarService;
+  /** Unsaved brain-dump text, kept while Obsidian runs so closing the window by accident loses nothing. */
+  brainDumpDraft = "";
   async onload() {
     const hadSettings = await this.loadSettings();
     this.store = new TaskStore(this.app, this.settings);
@@ -98,6 +102,32 @@ export default class BelkiPlugin extends Plugin {
         void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
       }
     });
+    this.addRibbonIcon("brain", "Brain dump to inbox", () => {
+      this.openBrainDump();
+    });
+    this.addCommand({
+      id: "brain-dump",
+      name: "Brain dump to inbox",
+      callback: () => {
+        this.openBrainDump();
+      }
+    });
+    this.addCommand({
+      id: "selection-to-inbox",
+      name: "Add selected lines to inbox",
+      editorCheckCallback: (checking, editor, ctx) => {
+        const lines = brainDumpLines(editor.getSelection());
+        const inTasksFile = ctx.file ? this.store.isTaskStorageFile(ctx.file.path) : false;
+        if (!lines.length || inTasksFile) return false;
+        if (!checking) {
+          void this.store.createTasksFromLines(lines).then((saved) => {
+            if (saved > 0) new Notice(saved === 1 ? "1 task added to the inbox." : `${saved} tasks added to the inbox.`);
+            this.refreshBelkiViews();
+          });
+        }
+        return true;
+      }
+    });
     this.addCommand({
       id: "open-today-sidebar",
       name: "Open Today sidebar",
@@ -159,6 +189,20 @@ export default class BelkiPlugin extends Plugin {
     }
   }
   /** Loads settings; returns false when there was no saved data yet (a fresh install). */
+  openBrainDump() {
+    new BrainDumpModal(
+      this.app,
+      this.brainDumpDraft,
+      async (lines) => {
+        const saved = await this.store.createTasksFromLines(lines);
+        this.refreshBelkiViews();
+        return saved;
+      },
+      (text) => {
+        this.brainDumpDraft = text;
+      }
+    ).open();
+  }
   async loadSettings(): Promise<boolean> {
     const raw: unknown = await this.loadData();
     const saved = toSettingsData(raw);
@@ -211,7 +255,9 @@ export default class BelkiPlugin extends Plugin {
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
-      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
+      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder),
+      notesFolder: normalizeOptionalPath(saved == null ? void 0 : saved.notesFolder),
+      noteTemplate: normalizeOptionalPath(saved == null ? void 0 : saved.noteTemplate)
     };
     // No record yet (first run with this feature): seed tasks that are already
     // waiting from their created date instead of starting them all at today.
@@ -425,6 +471,11 @@ export function toSettingsData(value: unknown): Partial<BelkiSettings> {
 // Pure helpers exposed for the test suite as a named export. Obsidian only
 // reads the default export (the plugin class), so this has no runtime effect.
 export const __testables = {
+  noteNameFromTitle,
+  linkedNoteName,
+  titleAsLink,
+  fillNoteTemplate,
+  brainDumpLines,
   parseTaskLine,
   serializeTaskLine,
   ensureTaskMarker,
