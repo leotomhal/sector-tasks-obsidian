@@ -26,6 +26,9 @@ export interface TaskEditorOptions {
   task?: Task;
   /** Sector preselected for a new task ("" = Inbox). */
   sector?: string;
+  /** Prefilled title and due date for a new task (e.g. from a calendar event). */
+  initialTitle?: string;
+  initialDue?: string;
   /** Edit a year-plan entry: title, date, until, milestone. */
   planning?: boolean;
   sectors: SectorConfig[];
@@ -83,7 +86,7 @@ export class TaskEditModal extends Modal {
 
     const titleField = field("Title");
     const title = titleField.wrap.createEl("input", { attr: { id: titleField.id, type: "text", autocomplete: "off" } });
-    title.value = task?.title || "";
+    title.value = task?.title || options.initialTitle || "";
     const error = form.createDiv({ cls: "belki-editor-error" });
     error.hide();
 
@@ -151,7 +154,7 @@ export class TaskEditModal extends Modal {
     const dueField = field("Due date");
     const dueRow = dueField.wrap.createDiv({ cls: "belki-editor-inline" });
     const due = dueRow.createEl("input", { attr: { id: dueField.id, type: "date" } });
-    due.value = task?.due || "";
+    due.value = task?.due || options.initialDue || "";
     for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)], ["None", ""]]) {
       const quick = dueRow.createEl("button", { cls: "belki-editor-chip", text: label, attr: { type: "button" } });
       quick.addEventListener("click", () => {

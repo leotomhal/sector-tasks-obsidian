@@ -1,12 +1,13 @@
 import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
-import type { BelkiSettings, Task } from "../types";
+import type { BelkiSettings, CalendarFeed, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
 import { upcomingEntries } from "../planning";
-import { EventModal, calendarItems, planningItems } from "./dayPlan";
+import { EventModal, calendarItems, planningItems, taskDueForEvent } from "./dayPlan";
+import type { CalEvent } from "../calendar";
 import type { AgendaItem } from "./dayPlan";
 import type { CalendarService } from "../calendarService";
 
@@ -143,6 +144,8 @@ export class TodaySidebarView extends ItemView {
     return this.settings.icons.today || "calendar-check";
   }
   async onOpen() {
+    // "Linked to this note" follows the note you're looking at.
+    this.registerEvent(this.app.workspace.on("file-open", () => this.render()));
     this.unsubscribe = this.store.subscribe(() => this.render());
     this.unsubscribeCalendar = this.calendar.subscribe(() => this.render());
     this.render();
@@ -212,8 +215,8 @@ export class TodaySidebarView extends ItemView {
     if (this.calendar.enabled) {
       const feeds = new Map(this.settings.calendars.map((feed) => [feed.id, feed]));
       const now = new Date();
-      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open()));
-      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open())
+      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => this.openEvent(event, feeds)));
+      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => this.openEvent(event, feeds))
         .filter((item) => !items.some((other) => other.title === item.title && other.when === "All day"))
         .map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
     }
@@ -222,6 +225,13 @@ export class TodaySidebarView extends ItemView {
         .map((item) => (item.when === "Today" ? item : { ...item, when: "Tomorrow" })));
     }
     if (items.length) this.renderAgendaSection(container, items);
+    const note = this.app.workspace.getActiveFile();
+    if (note && note.extension === "md" && !this.store.isTaskStorageFile(note.path)) {
+      const linked = this.store.tasksLinkingTo(note.path)
+        .filter((t) => !archivedSet.has(normalizeTaskProject(t.project) || ""))
+        .sort((a, b) => (a.due ? 0 : 1) - (b.due ? 0 : 1) || byUrgency(a, b));
+      if (linked.length) this.renderSection(container, "Linked to this note", linked, true, true);
+    }
     if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
       container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
@@ -235,6 +245,11 @@ export class TodaySidebarView extends ItemView {
     if (dueTomorrow.length) {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
     }
+  }
+  openEvent(event: CalEvent, feeds: Map<string, CalendarFeed>) {
+    new EventModal(this.app, event, feeds.get(event.feedId), (e) => {
+      void this.store.createTaskInEditor("", { title: e.title, due: taskDueForEvent(e, todayIso()) });
+    }).open();
   }
   renderAgendaSection(container: HTMLElement, items: AgendaItem[]) {
     const section = container.createDiv({ cls: "belki-today-section belki-today-planning" });

@@ -5,7 +5,7 @@ import { dedupeLabels } from "./labels";
 import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
-import { fillNoteTemplate, linkedNoteName, noteNameFromTitle, titleAsLink } from "./notes";
+import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
 export class TaskStore {
@@ -209,8 +209,8 @@ export class TaskStore {
     await this.save();
   }
   /** Opens the task editor for a new task; sector "" or undefined means Inbox. */
-  async createTaskInEditor(sector?: string) {
-    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels() });
+  async createTaskInEditor(sector?: string, initial?: { title?: string; due?: string }) {
+    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels(), initialTitle: initial?.title, initialDue: initial?.due });
     if (!edit) return;
     await this.createTask(edit);
   }
@@ -511,6 +511,10 @@ ${lines.join("\n")}
     const name = linkedNoteName(task.title);
     if (!name) return null;
     return this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+  }
+  /** Open tasks whose title links to the note at `path` (for "Linked to this note"). */
+  tasksLinkingTo(path: string): Task[] {
+    return this.getTasks().filter((task) => !task.completed && linkedNoteNames(task.title).some((name) => this.app.metadataCache.getFirstLinkpathDest(name, this.filePath)?.path === path));
   }
   /**
    * "Create note" on a task: makes a note named after the task (or reuses one

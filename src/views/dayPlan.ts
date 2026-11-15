@@ -104,13 +104,21 @@ export function renderAgenda(parent: HTMLElement, heading: string, note: string,
 }
 
 /** Read-only details of a calendar event. */
+/** Due date for a task made from an event: the event's day, or today once it has started. */
+export function taskDueForEvent(event: CalEvent, today: string): string {
+  return event.startDay < today ? today : event.startDay;
+}
+
 export class EventModal extends Modal {
   event: CalEvent;
   feed?: CalendarFeed;
-  constructor(app: App, event: CalEvent, feed?: CalendarFeed) {
+  createTask?: (event: CalEvent) => void;
+  /** `createTask`: offers "Create task", e.g. to prepare for the event. */
+  constructor(app: App, event: CalEvent, feed?: CalendarFeed, createTask?: (event: CalEvent) => void) {
     super(app);
     this.event = event;
     this.feed = feed;
+    this.createTask = createTask;
   }
   onOpen() {
     const { contentEl, event, feed } = this;
@@ -139,6 +147,13 @@ export class EventModal extends Modal {
       const link = actions.createEl("a", { cls: "belki-event-link", text: "Open in your calendar", href: `https://calendar.google.com/calendar/r/day/${y}/${Number(m)}/${Number(d)}` });
       link.setAttr("target", "_blank");
       link.setAttr("rel", "noopener");
+    }
+    if (this.createTask) {
+      const create = actions.createEl("button", { text: "Create task", attr: { type: "button" } });
+      create.addEventListener("click", () => {
+        this.close();
+        this.createTask?.(event);
+      });
     }
     const close = actions.createEl("button", { cls: "mod-cta", text: "Close", attr: { type: "button" } });
     close.addEventListener("click", () => this.close());

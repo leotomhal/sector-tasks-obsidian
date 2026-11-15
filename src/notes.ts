@@ -28,6 +28,18 @@ export function linkedNoteName(title: string): string | undefined {
   return target ? target : void 0;
 }
 
+/** Every note a title links to with [[…]], without headings or aliases. */
+export function linkedNoteNames(title: string): string[] {
+  const out: string[] = [];
+  const re = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(title || "")) !== null) {
+    const target = match[1].trim();
+    if (target && !out.includes(target)) out.push(target);
+  }
+  return out;
+}
+
 /**
  * The task title rewritten as a link to the note. Keeps the original wording as
  * the alias when the note name had to drop characters, as long as the wording

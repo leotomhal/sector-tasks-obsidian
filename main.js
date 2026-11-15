@@ -8202,11 +8202,16 @@ function renderAgenda(parent, heading, note, items, more) {
     row.addEventListener("click", item.onClick);
   }
 }
+function taskDueForEvent(event, today) {
+  return event.startDay < today ? today : event.startDay;
+}
 var EventModal = class extends import_obsidian2.Modal {
-  constructor(app, event, feed) {
+  /** `createTask`: offers "Create task", e.g. to prepare for the event. */
+  constructor(app, event, feed, createTask) {
     super(app);
     this.event = event;
     this.feed = feed;
+    this.createTask = createTask;
   }
   onOpen() {
     const { contentEl, event, feed } = this;
@@ -8235,6 +8240,14 @@ var EventModal = class extends import_obsidian2.Modal {
       const link = actions.createEl("a", { cls: "belki-event-link", text: "Open in your calendar", href: `https://calendar.google.com/calendar/r/day/${y}/${Number(m)}/${Number(d)}` });
       link.setAttr("target", "_blank");
       link.setAttr("rel", "noopener");
+    }
+    if (this.createTask) {
+      const create = actions.createEl("button", { text: "Create task", attr: { type: "button" } });
+      create.addEventListener("click", () => {
+        var _a;
+        this.close();
+        (_a = this.createTask) == null ? void 0 : _a.call(this, event);
+      });
     }
     const close = actions.createEl("button", { cls: "mod-cta", text: "Close", attr: { type: "button" } });
     close.addEventListener("click", () => this.close());
@@ -8480,6 +8493,7 @@ var TodaySidebarView = class extends import_obsidian3.ItemView {
     return this.settings.icons.today || "calendar-check";
   }
   async onOpen() {
+    this.registerEvent(this.app.workspace.on("file-open", () => this.render()));
     this.unsubscribe = this.store.subscribe(() => this.render());
     this.unsubscribeCalendar = this.calendar.subscribe(() => this.render());
     this.render();
@@ -8551,13 +8565,18 @@ var TodaySidebarView = class extends import_obsidian3.ItemView {
     if (this.calendar.enabled) {
       const feeds = new Map(this.settings.calendars.map((feed) => [feed.id, feed]));
       const now = /* @__PURE__ */ new Date();
-      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open()));
-      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open()).filter((item) => !items.some((other) => other.title === item.title && other.when === "All day")).map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
+      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => this.openEvent(event, feeds)));
+      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => this.openEvent(event, feeds)).filter((item) => !items.some((other) => other.title === item.title && other.when === "All day")).map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
     }
     if (this.settings.planningEnabled) {
       items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 1), today, (entry) => void this.store.editTaskInEditor(entry.id)).map((item) => item.when === "Today" ? item : { ...item, when: "Tomorrow" }));
     }
     if (items.length) this.renderAgendaSection(container, items);
+    const note = this.app.workspace.getActiveFile();
+    if (note && note.extension === "md" && !this.store.isTaskStorageFile(note.path)) {
+      const linked = this.store.tasksLinkingTo(note.path).filter((t) => !archivedSet.has(normalizeTaskProject(t.project) || "")).sort((a, b) => (a.due ? 0 : 1) - (b.due ? 0 : 1) || byUrgency(a, b));
+      if (linked.length) this.renderSection(container, "Linked to this note", linked, true, true);
+    }
     if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
       container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
@@ -8571,6 +8590,11 @@ var TodaySidebarView = class extends import_obsidian3.ItemView {
     if (dueTomorrow.length) {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
     }
+  }
+  openEvent(event, feeds) {
+    new EventModal(this.app, event, feeds.get(event.feedId), (e) => {
+      void this.store.createTaskInEditor("", { title: e.title, due: taskDueForEvent(e, todayIso()) });
+    }).open();
   }
   renderAgendaSection(container, items) {
     const section = container.createDiv({ cls: "belki-today-section belki-today-planning" });
@@ -11188,6 +11212,7 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     this.todayPane = "list";
     this.pickedForBlock = null;
     this.reviewComingUpOpen = true;
+    this.reviewCalendarOpen = true;
     this.captureDraft = "";
     this.captureInputEl = null;
     this.store = store;
@@ -12761,7 +12786,25 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     });
   }
   openEvent(event) {
-    new EventModal(this.app, event, this.feedsById().get(event.feedId)).open();
+    new EventModal(this.app, event, this.feedsById().get(event.feedId), (e) => {
+      void this.store.createTaskInEditor("", { title: e.title, due: taskDueForEvent(e, todayIso()) }).then(() => this.render());
+    }).open();
+  }
+  /** Calendar events in a review: tomorrow (daily) or the next 7 days (weekly), to plan around them. */
+  renderReviewCalendar(modal, type) {
+    if (!this.calendar.enabled || type !== "daily" && type !== "weekly") return;
+    const today = todayIso();
+    const days = Array.from({ length: type === "daily" ? 1 : 7 }, (_, i) => shiftIsoDate(today, i + 1));
+    const items = calendarItems(this.calendar.events(), days, this.feedsById(), null, type === "weekly", (e) => this.openEvent(e));
+    if (!items.length) return;
+    const box = modal.createEl("details", { cls: "belki-review-coming-up" });
+    if (this.reviewCalendarOpen) box.setAttr("open", "");
+    box.addEventListener("toggle", () => {
+      this.reviewCalendarOpen = box.open;
+    });
+    const label = type === "daily" ? "Tomorrow in your calendar" : "Your calendar, next 7 days";
+    box.createEl("summary", { text: `${label} (${items.length})` });
+    renderAgenda(box, type === "daily" ? "Tomorrow" : "Next 7 days", this.calendarNote(), items);
   }
   /** Today's agenda: calendar events (module on) plus planning entries for today and the next 7 days. */
   renderDayPlan(parent) {
@@ -13393,6 +13436,7 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
         });
       }
     }
+    this.renderReviewCalendar(modal, session.type);
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });
@@ -14124,7 +14168,7 @@ var TaskEditModal = class extends import_obsidian10.Modal {
     };
     const titleField = field("Title");
     const title = titleField.wrap.createEl("input", { attr: { id: titleField.id, type: "text", autocomplete: "off" } });
-    title.value = (task == null ? void 0 : task.title) || "";
+    title.value = (task == null ? void 0 : task.title) || options.initialTitle || "";
     const error = form.createDiv({ cls: "belki-editor-error" });
     error.hide();
     let result;
@@ -14186,7 +14230,7 @@ var TaskEditModal = class extends import_obsidian10.Modal {
     const dueField = field("Due date");
     const dueRow = dueField.wrap.createDiv({ cls: "belki-editor-inline" });
     const due = dueRow.createEl("input", { attr: { id: dueField.id, type: "date" } });
-    due.value = (task == null ? void 0 : task.due) || "";
+    due.value = (task == null ? void 0 : task.due) || options.initialDue || "";
     for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)], ["None", ""]]) {
       const quick = dueRow.createEl("button", { cls: "belki-editor-chip", text: label, attr: { type: "button" } });
       quick.addEventListener("click", () => {
@@ -14422,6 +14466,16 @@ function linkedNoteName(title) {
   const target = match == null ? void 0 : match[1].trim();
   return target ? target : void 0;
 }
+function linkedNoteNames(title) {
+  const out = [];
+  const re = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g;
+  let match;
+  while ((match = re.exec(title || "")) !== null) {
+    const target = match[1].trim();
+    if (target && !out.includes(target)) out.push(target);
+  }
+  return out;
+}
 function titleAsLink(title, noteName) {
   const trimmed = (title || "").trim();
   if (trimmed === noteName || /[[\]|]/.test(trimmed)) return `[[${noteName}]]`;
@@ -14623,8 +14677,8 @@ var TaskStore = class {
     await this.save();
   }
   /** Opens the task editor for a new task; sector "" or undefined means Inbox. */
-  async createTaskInEditor(sector) {
-    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels() });
+  async createTaskInEditor(sector, initial) {
+    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels(), initialTitle: initial == null ? void 0 : initial.title, initialDue: initial == null ? void 0 : initial.due });
     if (!edit) return;
     await this.createTask(edit);
   }
@@ -14925,6 +14979,13 @@ ${lines.join("\n")}
     const name = linkedNoteName(task.title);
     if (!name) return null;
     return this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+  }
+  /** Open tasks whose title links to the note at `path` (for "Linked to this note"). */
+  tasksLinkingTo(path) {
+    return this.getTasks().filter((task) => !task.completed && linkedNoteNames(task.title).some((name) => {
+      var _a;
+      return ((_a = this.app.metadataCache.getFirstLinkpathDest(name, this.filePath)) == null ? void 0 : _a.path) === path;
+    }));
   }
   /**
    * "Create note" on a task: makes a note named after the task (or reuses one
@@ -15624,7 +15685,9 @@ function toSettingsData(value) {
 var __testables = {
   noteNameFromTitle,
   linkedNoteName,
+  linkedNoteNames,
   titleAsLink,
+  taskDueForEvent,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,

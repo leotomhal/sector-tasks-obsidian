@@ -18,7 +18,8 @@ import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDa
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { BrainDumpModal, brainDumpLines } from "./views/BrainDumpModal";
-import { fillNoteTemplate, linkedNoteName, noteNameFromTitle, titleAsLink } from "./notes";
+import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
+import { taskDueForEvent } from "./views/dayPlan";
 import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ordinal, ensureSectorInLine, ensureTaskMarker, extractTags, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
@@ -473,7 +474,9 @@ export function toSettingsData(value: unknown): Partial<BelkiSettings> {
 export const __testables = {
   noteNameFromTitle,
   linkedNoteName,
+  linkedNoteNames,
   titleAsLink,
+  taskDueForEvent,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,

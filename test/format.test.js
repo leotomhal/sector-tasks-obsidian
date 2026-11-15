@@ -51,7 +51,9 @@ const {
   stripListMarker,
   noteNameFromTitle,
   linkedNoteName,
+  linkedNoteNames,
   titleAsLink,
+  taskDueForEvent,
   fillNoteTemplate,
   brainDumpLines,
   formFromRule,
@@ -642,4 +644,14 @@ test("fillNoteTemplate fills title, date and tasks", () => {
 test("brainDumpLines keeps one task per non-empty line", () => {
   assert.deepEqual(brainDumpLines("- Call printer\n\n  * [ ] Book room  \r\n1. Mail Anna"), ["Call printer", "Book room", "Mail Anna"]);
   assert.deepEqual(brainDumpLines("   \n"), []);
+});
+
+test("linkedNoteNames lists every linked note once", () => {
+  assert.deepEqual(linkedNoteNames("Prep [[Budget]] with [[Team/Plan#Q1|plan]] and [[Budget|again]]"), ["Budget", "Team/Plan"]);
+  assert.deepEqual(linkedNoteNames("plain"), []);
+});
+
+test("taskDueForEvent uses the event day, or today once it has started", () => {
+  assert.equal(taskDueForEvent({ startDay: "2026-11-20" }, "2026-11-15"), "2026-11-20");
+  assert.equal(taskDueForEvent({ startDay: "2026-11-10" }, "2026-11-15"), "2026-11-15");
 });
