@@ -5,6 +5,7 @@ import { dedupeLabels } from "./labels";
 import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
+import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
 export class TaskStore {
@@ -208,8 +209,8 @@ export class TaskStore {
     await this.save();
   }
   /** Opens the task editor for a new task; sector "" or undefined means Inbox. */
-  async createTaskInEditor(sector?: string) {
-    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels() });
+  async createTaskInEditor(sector?: string, initial?: { title?: string; due?: string }) {
+    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels(), initialTitle: initial?.title, initialDue: initial?.due });
     if (!edit) return;
     await this.createTask(edit);
   }
@@ -246,9 +247,23 @@ export class TaskStore {
     return created.filter((task) => this.tasks.some((t) => t.id === task.id)).length;
   }
   /** Opens the editor for a task or planning entry and saves what it returns. */
+  /**
+   * The current version of a task shown earlier. Lines without 🆔 get a new id
+   * each time the file is read, so after a reload the old id no longer matches;
+   * then the same title and dates identify it (only if that's unambiguous).
+   */
+  findCurrent(task: Task): Task | undefined {
+    const byId = this.tasks.find((t) => t.id === task.id);
+    if (byId) return byId;
+    const same = this.tasks.filter((t) => t.title === task.title && t.due === task.due && t.start === task.start && Boolean(t.planning) === Boolean(task.planning));
+    return same.length === 1 ? same[0] : void 0;
+  }
   async editTaskInEditor(id: string) {
     const current = this.tasks.find((t) => t.id === id);
-    if (!current) return;
+    if (!current) {
+      new Notice("This entry changed in the file in the meantime. Open it again to edit it.");
+      return;
+    }
     const edit = await openTaskEditor(this.app, {
       task: cloneTask(current),
       planning: current.planning === true,
@@ -504,6 +519,73 @@ ${lines.join("\n")}
   }
   notify() {
     for (const listener of this.listeners) listener();
+  }
+  /** The note a task's title links to, if it exists. */
+  linkedNote(task: Task): TFile | null {
+    const name = linkedNoteName(task.title);
+    if (!name) return null;
+    return this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+  }
+  /** Open tasks whose title links to the note at `path` (for "Linked to this note"). */
+  tasksLinkingTo(path: string): Task[] {
+    return this.getTasks().filter((task) => !task.completed && linkedNoteNames(task.title).some((name) => this.app.metadataCache.getFirstLinkpathDest(name, this.filePath)?.path === path));
+  }
+  /**
+   * "Create note" on a task: makes a note named after the task (or reuses one
+   * with that name), turns the task title into a link to it, and opens it.
+   * When the title already links to an existing note, that note is opened.
+   */
+  async createNoteForTask(id: string) {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const existing = this.linkedNote(task);
+    if (existing) {
+      await this.app.workspace.getLeaf("tab").openFile(existing);
+      return;
+    }
+    const name = noteNameFromTitle(task.title);
+    if (!name) {
+      new Notice("This task's title can't be used as a note name.");
+      return;
+    }
+    let file = this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+    if (!file) {
+      const tasksFolder = this.filePath.includes("/") ? this.filePath.slice(0, this.filePath.lastIndexOf("/")) : "";
+      const folder = (this.settings.notesFolder || tasksFolder).replace(/^\/+|\/+$/g, "");
+      const path = normalizePath(folder ? `${folder}/${name}.md` : `${name}.md`);
+      const atPath = this.app.vault.getAbstractFileByPath(path);
+      if (atPath instanceof TFile) {
+        file = atPath;
+      } else {
+        if (!(await this.ensureParentFolders(path))) return;
+        try {
+          file = await this.app.vault.create(path, await this.noteContent(task.title, path));
+        } catch (error) {
+          console.warn("[belki] Could not create note.", error, { path });
+          new Notice(`Could not create "${path}".`);
+          return;
+        }
+      }
+    }
+    // Link by the name Obsidian resolves from the tasks file (shortest unique path).
+    const linkName = this.app.metadataCache.fileToLinktext(file, this.filePath, true);
+    await this.updateTask(id, { title: titleAsLink(task.title, linkName) });
+    await this.app.workspace.getLeaf("tab").openFile(file);
+  }
+  /** A new note's text: the template if one is set and readable, else a link back to the tasks file. */
+  async noteContent(title: string, notePath: string): Promise<string> {
+    const tasksFile = this.app.vault.getAbstractFileByPath(this.filePath);
+    const tasksLink = tasksFile instanceof TFile ? this.app.fileManager.generateMarkdownLink(tasksFile, notePath) : "";
+    const templatePath = (this.settings.noteTemplate || "").trim();
+    if (templatePath) {
+      const withExt = normalizePath(/\.md$/i.test(templatePath) ? templatePath : `${templatePath}.md`);
+      const template = this.app.vault.getAbstractFileByPath(withExt);
+      if (template instanceof TFile) {
+        return fillNoteTemplate(await this.app.vault.read(template), { title, date: todayIso(), tasks: tasksLink });
+      }
+      new Notice(`Note template "${withExt}" not found; created the note without it.`);
+    }
+    return tasksLink ? `Task in ${tasksLink}\n\n` : "";
   }
   // --- File helpers --------------------------------------------------------
   async ensureFile(path: string): Promise<TFile | null> {

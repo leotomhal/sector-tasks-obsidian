@@ -18,7 +18,7 @@ import { upcomingEntries } from "../planning";
 import { PlanningEntryModal, YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
 import type { CalendarService } from "../calendarService";
 import type { CalEvent } from "../calendar";
-import { EventModal, calendarItems, planningItems, renderAgenda, renderBlockChip, renderTimeline } from "./dayPlan";
+import { EventModal, calendarItems, taskDueForEvent, planningItems, renderAgenda, renderBlockChip, renderTimeline } from "./dayPlan";
 import type { AgendaItem, TimelineHost } from "./dayPlan";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
@@ -96,6 +96,7 @@ export class TaskBoardView extends ItemView {
   todayPane: "list" | "timeline" = "list";
   pickedForBlock: string | null = null;
   reviewComingUpOpen = true;
+  reviewCalendarOpen = true;
   searchQuery: string;
   searchOpen: boolean;
   composerOpen: boolean;
@@ -1711,7 +1712,25 @@ export class TaskBoardView extends ItemView {
       });
   }
   openEvent(event: CalEvent) {
-    new EventModal(this.app, event, this.feedsById().get(event.feedId)).open();
+    new EventModal(this.app, event, this.feedsById().get(event.feedId), (e) => {
+      void this.store.createTaskInEditor("", { title: e.title, due: taskDueForEvent(e, todayIso()) }).then(() => this.render());
+    }).open();
+  }
+  /** Calendar events in a review: tomorrow (daily) or the next 7 days (weekly), to plan around them. */
+  renderReviewCalendar(modal: HTMLElement, type: string) {
+    if (!this.calendar.enabled || (type !== "daily" && type !== "weekly")) return;
+    const today = todayIso();
+    const days = Array.from({ length: type === "daily" ? 1 : 7 }, (_, i) => shiftIsoDate(today, i + 1));
+    const items = calendarItems(this.calendar.events(), days, this.feedsById(), null, type === "weekly", (e) => this.openEvent(e));
+    if (!items.length) return;
+    const box = modal.createEl("details", { cls: "belki-review-coming-up" });
+    if (this.reviewCalendarOpen) box.setAttr("open", "");
+    box.addEventListener("toggle", () => {
+      this.reviewCalendarOpen = box.open;
+    });
+    const label = type === "daily" ? "Tomorrow in your calendar" : "Your calendar, next 7 days";
+    box.createEl("summary", { text: `${label} (${items.length})` });
+    renderAgenda(box, type === "daily" ? "Tomorrow" : "Next 7 days", this.calendarNote(), items);
   }
   /** Today's agenda: calendar events (module on) plus planning entries for today and the next 7 days. */
   renderDayPlan(parent: HTMLElement) {
@@ -2320,6 +2339,7 @@ export class TaskBoardView extends ItemView {
         });
       }
     }
+    this.renderReviewCalendar(modal, session.type);
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });

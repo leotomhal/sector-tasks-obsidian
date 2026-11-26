@@ -62,6 +62,8 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
+  notesFolder: "",
+  noteTemplate: "",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -203,6 +205,11 @@ export function normalizeWaitingSince(value?: unknown): Record<string, string> {
 export function normalizeReviewNotesFolder(value?: string): string {
   const trimmed = (value || "").trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? normalizePath(trimmed) : DEFAULT_SETTINGS.reviewNotesFolder;
+}
+/** A vault folder or file path as typed in settings: trimmed, no leading or trailing slash, may be empty. */
+export function normalizeOptionalPath(value?: unknown): string {
+  const trimmed = (typeof value === "string" ? value : "").trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? normalizePath(trimmed) : "";
 }
 export function normalizeFontOption(value?: string): string {
   return FONT_OPTIONS.includes(value) ? value : "system";
@@ -435,6 +442,16 @@ export class BelkiSettingTab extends PluginSettingTab {
         visible: () => this.plugin.settings.reviewNotes === true,
         control: { type: "text", key: "reviewNotesFolder", placeholder: "Reviews" }
       },
+      {
+        name: "Folder for task notes",
+        desc: "Where notes made from a task's menu are saved. Empty means the folder of your tasks file.",
+        control: { type: "text", key: "notesFolder", placeholder: "Same as tasks file" }
+      },
+      {
+        name: "Template for task notes",
+        desc: "Optional. Path to a note used as the starting text; {{title}}, {{date}} and {{tasks}} (a link to your tasks file) are filled in.",
+        control: { type: "text", key: "noteTemplate", placeholder: "Templates/task note" }
+      },
       this.buildSectorsPage(),
       this.buildCalendarsPage(),
       this.buildAppearancePage()
@@ -508,6 +525,10 @@ export class BelkiSettingTab extends PluginSettingTab {
       settings.stuckWeeks = normalizeAutoDeleteDays(value as number);
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value as number);
+    } else if (key === "notesFolder") {
+      settings.notesFolder = normalizeOptionalPath(asString(value));
+    } else if (key === "noteTemplate") {
+      settings.noteTemplate = normalizeOptionalPath(asString(value));
     } else if (key === "reviewNotesFolder") {
       settings.reviewNotesFolder = normalizeReviewNotesFolder(asString(value));
     } else if (key === "reviewNotes") {
@@ -1289,6 +1310,18 @@ export class BelkiSettingTab extends PluginSettingTab {
         });
       });
     }
+    new Setting(containerEl).setName("Folder for task notes").setDesc("Where notes made from a task's menu are saved. Empty means the folder of your tasks file.").addText((text) => {
+      text.setPlaceholder("Same as tasks file").setValue(this.plugin.settings.notesFolder).onChange(async (value) => {
+        this.plugin.settings.notesFolder = normalizeOptionalPath(value);
+        await this.plugin.saveSettings();
+      });
+    });
+    new Setting(containerEl).setName("Template for task notes").setDesc("Optional. Path to a note used as the starting text; {{title}}, {{date}} and {{tasks}} (a link to your tasks file) are filled in.").addText((text) => {
+      text.setPlaceholder("Templates/task note").setValue(this.plugin.settings.noteTemplate).onChange(async (value) => {
+        this.plugin.settings.noteTemplate = normalizeOptionalPath(value);
+        await this.plugin.saveSettings();
+      });
+    });
     new Setting(containerEl).setName("Task rows").setDesc('Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.').addDropdown((dropdown) => {
       dropdown.addOption("stacked", "Stacked");
       dropdown.addOption("singleLine", "Single line");

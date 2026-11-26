@@ -34,7 +34,7 @@ __export(main_exports, {
   toSettingsData: () => toSettingsData
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/views/TaskBoardView.ts
 var import_obsidian7 = require("obsidian");
@@ -8202,11 +8202,16 @@ function renderAgenda(parent, heading, note, items, more) {
     row.addEventListener("click", item.onClick);
   }
 }
+function taskDueForEvent(event, today) {
+  return event.startDay < today ? today : event.startDay;
+}
 var EventModal = class extends import_obsidian2.Modal {
-  constructor(app, event, feed) {
+  /** `createTask`: offers "Create task", e.g. to prepare for the event. */
+  constructor(app, event, feed, createTask) {
     super(app);
     this.event = event;
     this.feed = feed;
+    this.createTask = createTask;
   }
   onOpen() {
     const { contentEl, event, feed } = this;
@@ -8235,6 +8240,14 @@ var EventModal = class extends import_obsidian2.Modal {
       const link = actions.createEl("a", { cls: "belki-event-link", text: "Open in your calendar", href: `https://calendar.google.com/calendar/r/day/${y}/${Number(m)}/${Number(d)}` });
       link.setAttr("target", "_blank");
       link.setAttr("rel", "noopener");
+    }
+    if (this.createTask) {
+      const create = actions.createEl("button", { text: "Create task", attr: { type: "button" } });
+      create.addEventListener("click", () => {
+        var _a;
+        this.close();
+        (_a = this.createTask) == null ? void 0 : _a.call(this, event);
+      });
     }
     const close = actions.createEl("button", { cls: "mod-cta", text: "Close", attr: { type: "button" } });
     close.addEventListener("click", () => this.close());
@@ -8451,6 +8464,14 @@ function showTaskContextMenu(store, task, event, extra) {
       void store.editTaskInEditor(task.id);
     });
   });
+  if (!task.planning) {
+    const hasNote = store.linkedNote(task) !== null;
+    menu.addItem((item) => {
+      item.setTitle(hasNote ? "Open note" : "Create note").setIcon("file-text").onClick(() => {
+        void store.createNoteForTask(task.id);
+      });
+    });
+  }
   if (extra) extra(menu);
   menu.showAtMouseEvent(event);
 }
@@ -8472,6 +8493,7 @@ var TodaySidebarView = class extends import_obsidian3.ItemView {
     return this.settings.icons.today || "calendar-check";
   }
   async onOpen() {
+    this.registerEvent(this.app.workspace.on("file-open", () => this.render()));
     this.unsubscribe = this.store.subscribe(() => this.render());
     this.unsubscribeCalendar = this.calendar.subscribe(() => this.render());
     this.render();
@@ -8543,13 +8565,21 @@ var TodaySidebarView = class extends import_obsidian3.ItemView {
     if (this.calendar.enabled) {
       const feeds = new Map(this.settings.calendars.map((feed) => [feed.id, feed]));
       const now = /* @__PURE__ */ new Date();
-      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open()));
-      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => new EventModal(this.app, event, feeds.get(event.feedId)).open()).filter((item) => !items.some((other) => other.title === item.title && other.when === "All day")).map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
+      items.push(...calendarItems(this.calendar.events(), [today], feeds, now.getHours() * 60 + now.getMinutes(), false, (event) => this.openEvent(event, feeds)));
+      items.push(...calendarItems(this.calendar.events(), [tomorrow], feeds, null, false, (event) => this.openEvent(event, feeds)).filter((item) => !items.some((other) => other.title === item.title && other.when === "All day")).map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
     }
     if (this.settings.planningEnabled) {
-      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 1), today, (entry) => void this.store.editTaskInEditor(entry.id)).map((item) => item.when === "Today" ? item : { ...item, when: "Tomorrow" }));
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 1), today, (entry) => {
+        const found = this.store.findCurrent(entry);
+        if (found) void this.store.editTaskInEditor(found.id);
+      }).map((item) => item.when === "Today" ? item : { ...item, when: "Tomorrow" }));
     }
     if (items.length) this.renderAgendaSection(container, items);
+    const note = this.app.workspace.getActiveFile();
+    if (note && note.extension === "md" && !this.store.isTaskStorageFile(note.path)) {
+      const linked = this.store.tasksLinkingTo(note.path).filter((t) => !archivedSet.has(normalizeTaskProject(t.project) || "")).sort((a, b) => (a.due ? 0 : 1) - (b.due ? 0 : 1) || byUrgency(a, b));
+      if (linked.length) this.renderSection(container, "Linked to this note", linked, true, true);
+    }
     if (overdue.length === 0 && dueToday.length === 0 && dueTomorrow.length === 0) {
       container.createDiv({ cls: "belki-today-empty", text: "Nothing due today or tomorrow." });
       return;
@@ -8563,6 +8593,11 @@ var TodaySidebarView = class extends import_obsidian3.ItemView {
     if (dueTomorrow.length) {
       this.renderSection(container, "Due tomorrow", dueTomorrow, false, true);
     }
+  }
+  openEvent(event, feeds) {
+    new EventModal(this.app, event, feeds.get(event.feedId), (e) => {
+      void this.store.createTaskInEditor("", { title: e.title, due: taskDueForEvent(e, todayIso()) });
+    }).open();
   }
   renderAgendaSection(container, items) {
     const section = container.createDiv({ cls: "belki-today-section belki-today-planning" });
@@ -8963,6 +8998,8 @@ var DEFAULT_SETTINGS = {
   planningEnabled: true,
   archivePastPlanning: true,
   reviewNotesFolder: "Reviews",
+  notesFolder: "",
+  noteTemplate: "",
   lastWeeklyReviewKey: "",
   lastMonthlyReviewKey: ""
 };
@@ -9104,6 +9141,10 @@ function normalizeWaitingSince(value) {
 function normalizeReviewNotesFolder(value) {
   const trimmed = (value || "").trim().replace(/^\/+|\/+$/g, "");
   return trimmed ? (0, import_obsidian4.normalizePath)(trimmed) : DEFAULT_SETTINGS.reviewNotesFolder;
+}
+function normalizeOptionalPath(value) {
+  const trimmed = (typeof value === "string" ? value : "").trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? (0, import_obsidian4.normalizePath)(trimmed) : "";
 }
 function normalizeFontOption(value) {
   return FONT_OPTIONS.includes(value) ? value : "system";
@@ -9332,6 +9373,16 @@ var BelkiSettingTab = class extends import_obsidian4.PluginSettingTab {
         visible: () => this.plugin.settings.reviewNotes === true,
         control: { type: "text", key: "reviewNotesFolder", placeholder: "Reviews" }
       },
+      {
+        name: "Folder for task notes",
+        desc: "Where notes made from a task's menu are saved. Empty means the folder of your tasks file.",
+        control: { type: "text", key: "notesFolder", placeholder: "Same as tasks file" }
+      },
+      {
+        name: "Template for task notes",
+        desc: "Optional. Path to a note used as the starting text; {{title}}, {{date}} and {{tasks}} (a link to your tasks file) are filled in.",
+        control: { type: "text", key: "noteTemplate", placeholder: "Templates/task note" }
+      },
       this.buildSectorsPage(),
       this.buildCalendarsPage(),
       this.buildAppearancePage()
@@ -9405,6 +9456,10 @@ var BelkiSettingTab = class extends import_obsidian4.PluginSettingTab {
       settings.stuckWeeks = normalizeAutoDeleteDays(value);
     } else if (key === "waitingHighlightDays") {
       settings.waitingHighlightDays = normalizeAutoDeleteDays(value);
+    } else if (key === "notesFolder") {
+      settings.notesFolder = normalizeOptionalPath(asString(value));
+    } else if (key === "noteTemplate") {
+      settings.noteTemplate = normalizeOptionalPath(asString(value));
     } else if (key === "reviewNotesFolder") {
       settings.reviewNotesFolder = normalizeReviewNotesFolder(asString(value));
     } else if (key === "reviewNotes") {
@@ -10185,6 +10240,18 @@ var BelkiSettingTab = class extends import_obsidian4.PluginSettingTab {
         });
       });
     }
+    new import_obsidian4.Setting(containerEl).setName("Folder for task notes").setDesc("Where notes made from a task's menu are saved. Empty means the folder of your tasks file.").addText((text2) => {
+      text2.setPlaceholder("Same as tasks file").setValue(this.plugin.settings.notesFolder).onChange(async (value) => {
+        this.plugin.settings.notesFolder = normalizeOptionalPath(value);
+        await this.plugin.saveSettings();
+      });
+    });
+    new import_obsidian4.Setting(containerEl).setName("Template for task notes").setDesc("Optional. Path to a note used as the starting text; {{title}}, {{date}} and {{tasks}} (a link to your tasks file) are filled in.").addText((text2) => {
+      text2.setPlaceholder("Templates/task note").setValue(this.plugin.settings.noteTemplate).onChange(async (value) => {
+        this.plugin.settings.noteTemplate = normalizeOptionalPath(value);
+        await this.plugin.saveSettings();
+      });
+    });
     new import_obsidian4.Setting(containerEl).setName("Task rows").setDesc("Stacked shows title, description, and due date/labels/project on their own lines below the title. Single line keeps everything on one row (title truncates, description is hidden) for a much shorter list.").addDropdown((dropdown) => {
       dropdown.addOption("stacked", "Stacked");
       dropdown.addOption("singleLine", "Single line");
@@ -10908,6 +10975,7 @@ var PlanningEntryModal = class extends import_obsidian5.Modal {
     const today = todayIso();
     contentEl.empty();
     contentEl.addClass("belki-planning-modal");
+    this.modalEl.addClass("belki-planning-entry-modal");
     this.setTitle(entry.title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target, _a, alias) => alias || target));
     const status = this.readOnly ? "Archived" : entry.milestone ? entry.completed ? "Reached" : isMissedMilestone(entry, today) ? "Not reached, the date has passed" : "Open" : isPastEntry(entry, today) ? "Past" : isEntryOn(entry, today) ? "Today" : "Upcoming";
     const first = entryFirstDay(entry);
@@ -10922,6 +10990,22 @@ var PlanningEntryModal = class extends import_obsidian5.Modal {
       const button = actions.createEl("button", { cls, text: text2, attr: { type: "button" } });
       button.addEventListener("click", onClick);
     };
+    const current = () => {
+      const found = host.store.findCurrent(entry);
+      if (!found) new import_obsidian5.Notice("This entry changed in the file in the meantime. Open it again from the year plan.");
+      return found;
+    };
+    const edit = () => {
+      this.close();
+      const found = current();
+      if (found) void host.store.editTaskInEditor(found.id);
+    };
+    const whenEl = contentEl.querySelector(".belki-planning-modal-when");
+    for (const el of whenEl ? [this.titleEl, whenEl] : [this.titleEl]) {
+      el.addClass("is-editable");
+      el.setAttr("title", "Edit");
+      el.addEventListener("click", edit);
+    }
     add("Delete", () => {
       this.close();
       new ConfirmModal(host.app, {
@@ -10931,22 +11015,22 @@ var PlanningEntryModal = class extends import_obsidian5.Modal {
         confirmText: "Delete",
         destructive: true
       }, () => {
-        void host.store.deleteTask(entry.id);
+        const found = current();
+        if (found) void host.store.deleteTask(found.id);
       }).open();
     }, "mod-warning");
     add("Show in file", () => {
       this.close();
       void host.openTaskInNote(entry);
     });
-    add("Edit", () => {
-      this.close();
-      void host.store.editTaskInEditor(entry.id);
-    });
+    add("Edit", edit, entry.milestone ? "" : "mod-cta");
     if (entry.milestone) {
       add(entry.completed ? "Mark as open" : "Mark as reached", () => {
         this.close();
-        const reached = !entry.completed;
-        void host.store.updateTask(entry.id, reached ? { completed: true, completedDate: todayIso() } : { completed: false, completedDate: void 0 }).then(() => new import_obsidian5.Notice(reached ? "Milestone reached." : "Milestone open again."));
+        const found = current();
+        if (!found) return;
+        const reached = !found.completed;
+        void host.store.updateTask(found.id, reached ? { completed: true, completedDate: todayIso() } : { completed: false, completedDate: void 0 }).then(() => new import_obsidian5.Notice(reached ? "Milestone reached." : "Milestone open again."));
       }, "mod-cta");
     }
   }
@@ -11148,6 +11232,7 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     this.todayPane = "list";
     this.pickedForBlock = null;
     this.reviewComingUpOpen = true;
+    this.reviewCalendarOpen = true;
     this.captureDraft = "";
     this.captureInputEl = null;
     this.store = store;
@@ -12721,7 +12806,25 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
     });
   }
   openEvent(event) {
-    new EventModal(this.app, event, this.feedsById().get(event.feedId)).open();
+    new EventModal(this.app, event, this.feedsById().get(event.feedId), (e) => {
+      void this.store.createTaskInEditor("", { title: e.title, due: taskDueForEvent(e, todayIso()) }).then(() => this.render());
+    }).open();
+  }
+  /** Calendar events in a review: tomorrow (daily) or the next 7 days (weekly), to plan around them. */
+  renderReviewCalendar(modal, type) {
+    if (!this.calendar.enabled || type !== "daily" && type !== "weekly") return;
+    const today = todayIso();
+    const days = Array.from({ length: type === "daily" ? 1 : 7 }, (_, i) => shiftIsoDate(today, i + 1));
+    const items = calendarItems(this.calendar.events(), days, this.feedsById(), null, type === "weekly", (e) => this.openEvent(e));
+    if (!items.length) return;
+    const box = modal.createEl("details", { cls: "belki-review-coming-up" });
+    if (this.reviewCalendarOpen) box.setAttr("open", "");
+    box.addEventListener("toggle", () => {
+      this.reviewCalendarOpen = box.open;
+    });
+    const label = type === "daily" ? "Tomorrow in your calendar" : "Your calendar, next 7 days";
+    box.createEl("summary", { text: `${label} (${items.length})` });
+    renderAgenda(box, type === "daily" ? "Tomorrow" : "Next 7 days", this.calendarNote(), items);
   }
   /** Today's agenda: calendar events (module on) plus planning entries for today and the next 7 days. */
   renderDayPlan(parent) {
@@ -13353,6 +13456,7 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
         });
       }
     }
+    this.renderReviewCalendar(modal, session.type);
     closeButton.addEventListener("click", close);
     const card = modal.createDiv({ cls: "belki-review-card" });
     card.createDiv({ cls: "belki-review-task-label", text: "What do I need to do?" });
@@ -13962,7 +14066,7 @@ function isCustomRule(rule) {
 }
 
 // CHANGELOG.md
-var CHANGELOG_default = '# Changelog\n\nAll notable changes to Sector Tasks are documented here. Versions follow the\n`manifest.json` version; dates are release dates.\n\n## 1.6.1\n\n### Fixed\n- **Focus in Today showed too much.** "Must do" and "Next" listed every priority 1 and 2 task, whatever its date. They now only take tasks due today or overdue (within the overdue range you chose), so a P1 task for next month no longer crowds today.\n\n## 1.6.0\n\n### New\n- **Calendars (optional, off by default).** Show events from one or more online calendars next to your tasks, read-only. Turn it on under Settings → Calendars and add a calendar\'s iCal address (for Google Calendar: the calendar\'s settings → *Secret address in iCal format*). Events appear in a **Day plan** at the top of Today, in Upcoming for the next 14 days and in the Today sidebar. Recurring events, moved or cancelled occurrences and time zones are handled. Each calendar gets its own color and a switch to also show its events in the year plan. Click an event for its details. Calendars refresh every 30 minutes (adjustable) and with the **Refresh calendars** command; the last good copy is kept, so the day plan works offline. The plugin only downloads the addresses you enter and never writes to your calendar.\n- **Time blocking (optional, off by default).** Turn on **Time blocking in today** in the settings, and Today gets a timeline, 8:00 to 18:00 unless you change it. Drag a task onto a slot, or choose **Plan a time today…** in its context menu and tap a slot. Click a block to change its length or remove it. Blocks sit next to your calendar events, are marked when they overlap one, and show as a small time on the task row. They\'re kept in the plugin\'s data, not in your tasks file, and expire the next day. On a phone, switch between List and Timeline at the top.\n- **Focus in Today (optional, off by default).** Today can start with "Must do" (your P1 tasks, up to 2) and "Next" (your P2 tasks, up to 8). The count turns red when there are more. Turn it on with **Focus in today** in the settings.\n- **Stuck tasks.** A task that sits 3 weeks in the same sector gets a note on its weekly-review card and a small "3 wk" on the board, and the review summary note gets a "Stuck" list. Only sectors in the weekly review count, recurring tasks never do, and moving a task restarts the count. Change the weeks or turn it off (0) under Settings → Sectors.\n- **Paste a list into the Inbox.** Pasting several lines into the capture field creates one task per line; list markers and checkboxes are dropped.\n- **Edit a selection at once.** Right-click a multi-selection to set the due date, snooze or set the priority for all selected tasks.\n- **Year plan in more places.** The Monthly Review shows what\'s coming up in the next two months, and the Today sidebar shows entries running today or starting tomorrow.\n\n### Changed\n- The bottom button in the Inbox now reads **Add with details…**.\n\n### Internal\n- The stacked quarters in the year plan no longer use `display: contents`, which Obsidian\'s plugin review reported. Nothing looks different.\n- Calendar files are read with ical.js (MPL-2.0), which makes the plugin file larger.\n\n## 1.5.4\n\n### Changed\n- **Folded quarters take less room.** In the year plan on a wide screen, folded quarters now sit stacked in a narrow column on the left, and the open quarters use the rest of the width. On a phone the quarters stay in order, Q1 to Q4.\n- Reached milestones are crossed out with the title dimmed instead of a separately colored line.\n\n### Internal\n- Two CSS details changed so Obsidian\'s plugin review no longer reports "multicolumn" and "text-decoration" as partially supported. Nothing looks different.\n\n## 1.5.3\n\n### New\n- **Turn the year plan off** if you don\'t use it: Settings → Year plan. The year plan view, the planning strips on Today and Upcoming, and the Overview\'s next events disappear. Any `#planning` lines stay in your file untouched and don\'t show up as tasks.\n\n### Changed\n- Refreshed plugin description and README: what Sector Tasks does today (board, guided reviews, year plan, its own editor) and that the Tasks plugin isn\'t needed.\n\n## 1.5.2\n\n### New\n- **Fold quarters in the year plan.** Click a quarter\'s header to fold or unfold it. Past quarters start folded, so the current quarter and the ones ahead are what you see first.\n\n### Fixed\n- **Pasted lines were sometimes ignored.** Text copied on a phone can carry non-breaking spaces instead of normal ones. Obsidian still shows such a line as a checkbox, but Sector Tasks didn\'t read it, so it never appeared on the board. Those lines are read now and written back with normal spaces.\n\n## 1.5.1\n\n### New\n- **Planning entries with only a month or a quarter.** When there\'s no exact day yet, choose "Sometime in April" or "Sometime in Q2" in the editor or in the year plan\'s **+ Add** form. In the file these are tagged `#planning/month` or `#planning/quarter`, with the period\'s first day as the 📅 date. The year plan shows them at the top of their month (with the month instead of a day number) or in an "Any time in Q2" group at the top of the quarter. They count as past only once the whole month or quarter is over, and they stay out of the day-based strips on Today and Upcoming.\n\n## 1.5.0\n\n### New\n- **The Tasks plugin is no longer needed.** Sector Tasks now has its own editor for adding and editing tasks: title, sector, priority, due date (with Today / Tomorrow / Next week buttons), labels (with suggestions from the ones you already use) and repeat (every day, weekday, week on a chosen day, month on a chosen day, or year; every N; optionally counted from when it\'s done). It shows the exact `🔁` text it writes. A repeat rule you wrote earlier, like `every 15 july`, stays exactly as it is unless you change it. `Cmd/Ctrl+Enter` saves. Your file keeps the same Tasks emoji format, so you can keep the Tasks plugin installed or remove it.\n- **Year plan:** appointments and milestones as lines in your tasks file, tagged `#planning` (add `#milestone` for milestones). A new **Year plan** view in the sidebar shows the four quarters side by side with the months inside; past entries turn grey, and a milestone still open after its date says **Not reached**. Add an entry right in its quarter, and click one to edit it, jump to its line, or delete it. Multi-day entries use a start date: `🛫 2026-09-16 📅 2026-09-17`.\n- Planning entries never show up as tasks. **Today** and **Upcoming** show them in a small strip above your tasks, and the **Overview** lists the next ones.\n- New planning entries are kept together under a `## Planning` heading at the end of your tasks file, sorted by date. Once a year is over, its entries move to the archive note (Settings → Archive past years\' planning, on by default); the year plan still shows them, read-only.\n\n### Fixed\n- Monthly repeat rules are written as "on the 1st", "on the 2nd" instead of "on the 1th".\n\n## 1.4.0\n\n### New\n- **Snooze:** right-click a task and snooze it by 1, 3 or 7 days. Each entry shows the date the task moves to. It counts from the due date if that\'s still ahead, otherwise from today, so an overdue task never lands in the past again.\n- **Waiting age:** tasks in your Waiting sector show how long they\'ve been waiting ("Waiting 12 d"), on the board and in the review. After 7 days the count turns red as a nudge to follow up; change or turn off the threshold under Settings → Sectors. The date lives in the plugin\'s data, not in your tasks file. Tasks that were already waiting start from their ➕ created date.\n- **Quick capture:** the Inbox (and the Overview\'s Inbox tab) has a text field. Type a task, press Enter, done — no dialog. `#labels`, a `#sector` tag, priority emojis and `📅` dates in the text work as usual.\n- **Review summary note** (optional, off by default): after a weekly or monthly review, a note in your `Reviews` folder lists what you finished, what moved or was deleted during the review, what\'s new, who you\'re waiting on and for how long, and open/overdue tasks per sector. Turn it on under Settings → Write a review summary note.\n- **Sectors settings page:** the sector list moved from the main settings to its own "Sectors" page (a collapsible group on Obsidian before 1.13). Renaming a sector\'s tag or removing a sector now asks first and tells you how many tasks are affected.\n\n### Fixed\n- **Scheduled, start and cancelled dates are no longer lost.** Whenever the plugin saved, it rewrote every task line and dropped `⏳` scheduled, `🛫` start and `❌` cancelled dates, and turned `[/]` (in progress) and `[-]` (cancelled) back into open tasks — even on lines you never touched. These are now kept. Completing a recurring task moves `⏳`/`🛫` along with the due date.\n- **Task row buttons on phones:** the jump and delete buttons overlapped the card\'s edge and looked mismatched. They\'re now two flat icons side by side with room to tap.\n- **Today header:** the section shows "Tuesday, 4 Nov" instead of repeating "Today", and the task count isn\'t shown twice.\n\n### Internal\n- `getFileByPath`/`getFolderByPath` where only one kind of file is needed; tsconfig ready for TypeScript 7 (`moduleResolution: bundler`, no `baseUrl`).\n\n## 1.3.14\n\n### New\n- **Release notes in Obsidian:** after the plugin updates, this "What\'s new" dialog shows what changed — including every version you skipped. It doesn\'t appear on a fresh install, you can turn it off under Settings → Show release notes after updates, and the **Show release notes** command opens it again any time.\n\n## 1.3.13\n\n### New\n- **Editorial style:** a new Appearance → Theme → Style option (default unchanged). Serif page titles with a short line above them, sections as cards with a header tinted in the sector\'s color, dates and labels as pills (overdue red, today warm), and the Overview\'s rings and counters as tiles with the sector tabs as a segmented bar. It brings its own warm light and dark palette when the color scheme follows Obsidian; a fixed or custom scheme keeps its colors.\n\n### Fixed\n- **Deleting a task now asks first.** The × on a task row used to delete the line immediately, with no way back. It now opens a "Delete task?" dialog, and after deleting, a notice with **Undo** restores the task at the same place in the file — under the same heading even if the file changed in between. Deleting from the review walkthrough\'s X hotkey gets the same Undo.\n\n## 1.3.12\n\n### New\n- **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today). New board tabs start there, and the ribbon icon, the Open command, and the Today sidebar\'s board button return to it.\n\n### Fixed\n- **"Open search" after a restart:** when the board tab had been restored at startup but not shown yet, the command focused the board without opening search. The Today sidebar\'s board button had the same problem.\n- **Settings synced from another device** (e.g. via Obsidian Sync) are now picked up. Previously the plugin kept its old settings in memory and the next save on this device overwrote the synced ones — a review in progress, renamed sectors, colors.\n\n### Internal\n- Type checks and lint now run against the Obsidian 1.14.4 API and the current plugin-review rules.\n\n## 1.3.11\n\n### Internal\n- Cleared the remaining finding from Obsidian\'s plugin review: the settings tab no longer calls the deprecated `display()` from plugin code. The fallback settings tab for Obsidian < 1.13 is unchanged and `minAppVersion` stays 1.7.2.\n\n## 1.3.10\n\n### Fixed\n- **Faster board with large task files:** rendering the board no longer re-reads and copies every task once per visible row. A leftover sub-task counter did this on every row without ever showing anything (sub-tasks aren\'t supported), and the drag-target check did the same in the Upcoming view. With 1,000 tasks this saved roughly 290 ms on every re-render — i.e. on every check-off, drag, or edit.\n\n### Internal\n- CI and release builds run on Node 22 (Node 20 is end-of-life).\n- Resolved the three high-severity `npm audit` advisories in the lint tooling. None of them ever shipped in the plugin, which has no runtime dependencies.\n- README feature list and roadmap brought up to date with 1.3.4–1.3.9.\n\n## 1.3.9\n\n### New\n- **Overview:** a new sidebar entry adds a landing dashboard — two progress rings (Today, and whichever sector tab is selected below it), Overdue/Done today/Done this week counters, a sector tab bar (Inbox first, then sectors in settings order), and a quick-add + mini task list scoped to the selected tab. Built around sectors rather than due dates, since sector is the plugin\'s actual organizing concept.\n\n## 1.3.8\n\n### New\n- **Single-line task rows:** a new Appearance → Layout → Task rows setting (default "Stacked", the unchanged existing layout) offers "Single line" — title, due date, labels, and the project chip on one row instead of a title line with a meta line below it, for a noticeably shorter list. The description isn\'t shown in this mode (a full description doesn\'t fit one line without turning into unreadable fragments); the title truncates with an ellipsis instead of wrapping.\n\n## 1.3.7\n\n### New\n- **Combine sectors into one view:** Ctrl/Cmd+click a sector in the sidebar to add it to the current view instead of replacing it — see everything from "This Week" and "Next Week" together, sorted and grouped as usual, each task still carrying its sector chip. A plain click still switches to just that one sector.\n\n### Fixed\n- The plugin version in `manifest.json` had drifted out of sync with the published 1.3.6 tag/release (still said 1.3.5). Corrected here.\n\n## 1.3.6\n\n### New\n- **Completed-view stats:** two numbers at the top of the Completed view show how many tasks were finished today and this ISO week, counted from the existing `✅` dates (recurring tasks included, counted once per completion event).\n\n### Internal\n- Fixed the release workflow\'s notes fallback (`gh release edit` has no `--generate-notes` flag) and bumped the workflow actions to their current majors.\n\n## 1.3.5\n\n### New\n- **Undo after checking a task off:** completing a task now shows a short notice with an inline "Undo" that restores the state from before — completed flag, completion date, due date, repeat rule and recorded occurrences. This covers recurring tasks too, where completing silently reschedules the task to its next due date. Also available as the **"Undo last completed task"** command, so it can get a hotkey; it works from the board, the Today sidebar, and the review walkthrough\'s `D` action.\n\n### Docs\n- The README no longer hardcodes the version number (it had gone stale twice, since release commits don\'t touch it) and links to the releases page instead.\n- Backfilled the missing 1.3.3 changelog entry.\n- `package-lock.json` now tracks the released version.\n\n## 1.3.4\n\n### New\n- **Combined right-click menu:** right-clicking a task row (board or Today sidebar) now opens one menu with due date (Today/Tomorrow/Next week/Remove) and priority (P1-P4/No priority) together, instead of two separate menus split across the row and the checkbox.\n\n### Fixed\n- **Priority now visible on open board tasks:** the board\'s task checkbox only showed its priority color once a task was checked off; it now shows it while open too, matching the Today sidebar checkbox. Priority is visible directly in the sector columns, not only via the priority sort/group mode.\n\n## 1.3.3\n\n### New\n- **Right-click priority menu:** right-clicking a task\'s checkbox (board or Today sidebar) opened a menu to set P1-P4 or clear the priority, without going through the Tasks modal. Superseded in 1.3.4, which merged it into the row\'s context menu.\n\n### Docs\n- Fixed the README\'s "Current version" line, which was still showing 1.2.1.\n- Trimmed two backlog ideas from the roadmap that are no longer wanted: the "overdue → today" bulk action and the focus-timer/Pomodoro idea.\n\n## 1.3.2\n\n### Changed\n- **Search results:** completed tasks (shown when the "search excludes completed tasks" setting is off) now sort after active matches, appear italic and greyed, and carry a "Completed" badge in the result meta row.\n\n## 1.3.1\n\n### Fixed\n- Restored support for Obsidian 1.7.2: `minAppVersion` is back to 1.7.2. Obsidian 1.13+ keeps the new declarative settings tab (settings search, drag-and-drop sectors); older versions get the previous imperative settings tab as a fallback. Version 1.3.0 itself remains marked as requiring 1.13.0 in `versions.json`, since it shipped without that fallback.\n\n## 1.3.0\n\n### New\n- Settings migrated to Obsidian\'s declarative settings API (`getSettingDefinitions()`): all Sector Tasks settings now appear in Obsidian\'s settings search (Obsidian 1.13+), sectors can be reordered by drag-and-drop and deleted directly from the list, and Appearance (fonts, theme colors, icons, project/label colors) is a proper sub-page instead of a collapsible section.\n- The tasks-file path and icon-name fields now validate input inline instead of silently falling back.\n\n### Changed\n- `minAppVersion` raised from 1.7.2 to 1.13.0 — required for the declarative settings API. Users on older Obsidian versions keep their installed plugin version but won\'t receive this update until they update Obsidian.\n- Adding a sector now creates a placeholder entry (`#new-sector`) to edit in place, replacing the separate add-sector form.\n\n## 1.2.3\n\n### Internal\n- Fixed the root cause of the type-safety warnings still reported by Obsidian\'s review of 1.2.2: `tsconfig.json` declared `lib: ES5/ES6/ES7`, so under the reviewer\'s environment `padStart`, `Object.entries`, `flatMap`, and `Promise.finally` resolved as error-typed values (locally this was masked by `@types/node` pulling in newer lib definitions). The lib is now `ES2020`, matching the compile target and Obsidian 1.7.2\'s runtime. No code changes; the bundle is unchanged.\n- Replaced the deprecated `builtin-modules` dev dependency with Node\'s built-in `builtinModules` (from `node:module`) in the esbuild config, per Obsidian\'s review recommendation. Build output is unchanged.\n\n## 1.2.2\n\n### Internal\n- Type-safety cleanup for Obsidian\'s plugin review: the entire `src/` codebase now uses real TypeScript types (central `Task`/`RepeatRule`/`SectorConfig`/`BelkiSettings`/`ReviewSession` interfaces, typed class fields and method signatures, a typed minimal `TasksApiV1` interface for the Tasks plugin API). This eliminates all ~3,400 advisory `no-unsafe-*`/`no-explicit-any` warnings from the review report; the compiled `main.js` behaves identically.\n- Replaced transpiler-artifact `let _a` optional-chaining temps with native optional chaining.\n\n## 1.2.1\n\n### Fixed\n- Cleared the blocking error from Obsidian\'s plugin review: `Workspace.revealLeaf` is only supported since Obsidian 1.7.2, so `minAppVersion` is raised from 1.6.6 to 1.7.2 (revealLeaf is used to open the Today sidebar).\n\n### Internal\n- Addressed the actionable lint findings from Obsidian\'s review: `document.createElement`/`createEl("span")` → `createSpan`/`createDiv` helpers, `var` → `const`/`let`, removed unnecessary regex escapes, added the `u` flag to emoji character classes, and removed an empty catch block.\n- Added ESLint (with `eslint-plugin-obsidianmd` + `typescript-eslint`) as a dev dependency and a `lint` script, and wired it into CI so genuine review-blocking issues surface before submission. The remaining type-safety warnings on the intentionally loosely-typed reconstructed code are advisory (non-blocking), matching how Obsidian\'s review reports them.\n\n## 1.2.0\n\n### New\n- **"Open search"** command — opens the board (activating it if needed) and jumps straight to the search overlay. Assign it a hotkey under Obsidian\'s Settings → Hotkeys.\n- **"Search excludes completed tasks"** setting (off by default): when on, completed tasks are hidden from search results everywhere search runs.\n\n### Internal\n- Completed Phases 1-4 of the source-based build migration: `main.js` is now generated from real TypeScript source (`src/`) via `tsc` + esbuild, CI runs the build and fails on drift between source and the committed bundle, and releases attest build provenance for the published assets. See prior PRs (#21-24) for details.\n\n## 1.1.1\n\n### Fixed\n- Folder creation no longer logs a "Could not create folder. Error: Folder already exists." warning (and no longer aborts file setup) when a parent folder already exists but Obsidian\'s lookup doesn\'t immediately see it — the "already exists" case is now treated as success.\n\n## 1.1.0\n\n### New\n- **"Clean up completed tasks now"** command — runs the auto-delete cleanup on demand and reports the result, including why nothing was removed (e.g. completed tasks without a `✅` date, which are never deleted).\n- **Tasks-file path warning** in settings: a note appears under the "Tasks file" field when the path points to a folder or to a file that doesn\'t exist yet.\n\n## 1.0.0\n\nFirst stable release. The Time Sector workflow is complete and the file-writing\ncore is covered by tests — see the earlier entries for the full feature history.\n\n### Changed\n- Added `authorUrl` to the manifest.\n- Removed the misleading collapse chevron from the sidebar\'s "Review" heading.\n- The Today sidebar\'s "Due tomorrow" section can now be collapsed by clicking its header.\n\n## 0.27.0\n\n### Changed\n- **Auto-cleanup safety net:** completed tasks removed by the auto-delete cleanup are now appended to an archive note (`<tasks file> (archive).md`) before deletion; if the archive can\'t be written, nothing is deleted.\n\n### Internal\n- Added a test suite (`node --test`) covering the task-line parse/serialize round-trip, recurrence handling, and tag/label helpers, plus a CI workflow that runs it on every push and pull request.\n\n## 0.26.0\n\n### New\n- **Open board** button in the Today sidebar header — jump to the full task board without going through the ribbon or command palette.\n\n### Docs\n- Added this changelog.\n\n## 0.25.0\n\n### New\n- **Due tomorrow** section in the Today sidebar, below Overdue and Due today.\n- **Tab badge** on the Today sidebar showing the count of overdue + due-today tasks.\n- **Right-click due dates:** right-click any open task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal.\n\n## 0.24.0\n\n### Changed\n- Enlarged the Today sidebar entries by ~10% (font sizes, checkbox, spacing).\n\n## 0.23.0\n\n### Changed\n- Removed the "fork of belki" attribution from the manifest author and user-facing strings; the README keeps a "Based on belki" credit. (0.22.1 was rolled into this release.)\n\n## 0.22.0\n\n### New\n- **Today sidebar:** the "Open Today sidebar" command opens a compact panel in the right sidebar listing overdue and due-today tasks, with priority-colored complete buttons, click-to-edit, and Inbox quick-add. Updates live with the tasks file.\n\n### Changed\n- Grouped all cosmetic settings (fonts, theme colors, sidebar icons, project/label colors) into a collapsible "Appearance" section.\n- Removed the unused "Task Description Font" option.\n\n## 0.21.0\n\n### New\n- **Auto-delete completed tasks:** optional cleanup that removes completed tasks from the file N days after their completion date (settings, default off).\n- **Review reminders:** the Weekly and Monthly Review buttons show a dot until a review of that kind has been completed in the current ISO week / calendar month.\n\n### Removed\n- The sector rollover feature from 0.20.0.\n\n## 0.20.0\n\n### New\n- **Sector rollover** command (later removed in 0.21.0).\n\n## 0.19.0\n\n### New\n- **Quick add task (Inbox)** command for capturing tasks straight into the Inbox via a hotkey, without opening the board.\n\n### Infrastructure\n- GitHub Actions workflow to publish releases with `main.js`, `manifest.json`, and `styles.css` attached as assets.\n';
+var CHANGELOG_default = '# Changelog\n\nAll notable changes to Sector Tasks are documented here. Versions follow the\n`manifest.json` version; dates are release dates.\n\n## 1.7.0\n\n### New\n- **Brain dump.** The **Brain dump to inbox** command, or the brain icon in the ribbon (handy on a phone), opens a window from anywhere in Obsidian. Write one task per line, and `Cmd/Ctrl+Enter` saves them all to the Inbox. Text you close without saving is still there the next time you open it, until Obsidian restarts.\n- **Selected lines to the Inbox.** Select lines in any note and run **Add selected lines to inbox**: each line becomes a task, and the note stays as it is.\n- **Notes for tasks.** Right-click a task → **Create note** makes a note named after the task, turns the task\'s title into a link to it and opens it. If a note with that name already exists, it\'s linked instead of overwritten. Once linked, the menu says **Open note**. In the settings you can choose the folder (by default the tasks file\'s folder) and an optional template with `{{title}}`, `{{date}}` and `{{tasks}}`.\n- **Linked to this note.** The Today sidebar lists the open tasks that link to the note you\'re looking at.\n- **Task from a calendar event.** The event details have a **Create task** button. It opens the editor with the event\'s title and date filled in, for example to prepare for it.\n- **Calendar in the reviews.** With calendars on, the Daily Review shows tomorrow\'s events and the Weekly Review the next 7 days, so you can plan around them.\n\n### Fixed\n- **Editing year-plan entries.** Choosing Edit on an entry sometimes did nothing, so the only way to change it was in the file. This happened when the entry had no `🆔` and the tasks file had been reread in the meantime. The entry is now found again by its title and dates. Edit is also the main button in the entry dialog, and clicking the title or the date opens the editor too.\n\n## 1.6.1\n\n### Fixed\n- **Focus in Today showed too much.** "Must do" and "Next" listed every priority 1 and 2 task, whatever its date. They now only take tasks due today or overdue (within the overdue range you chose), so a P1 task for next month no longer crowds today.\n\n## 1.6.0\n\n### New\n- **Calendars (optional, off by default).** Show events from one or more online calendars next to your tasks, read-only. Turn it on under Settings → Calendars and add a calendar\'s iCal address (for Google Calendar: the calendar\'s settings → *Secret address in iCal format*). Events appear in a **Day plan** at the top of Today, in Upcoming for the next 14 days and in the Today sidebar. Recurring events, moved or cancelled occurrences and time zones are handled. Each calendar gets its own color and a switch to also show its events in the year plan. Click an event for its details. Calendars refresh every 30 minutes (adjustable) and with the **Refresh calendars** command; the last good copy is kept, so the day plan works offline. The plugin only downloads the addresses you enter and never writes to your calendar.\n- **Time blocking (optional, off by default).** Turn on **Time blocking in today** in the settings, and Today gets a timeline, 8:00 to 18:00 unless you change it. Drag a task onto a slot, or choose **Plan a time today…** in its context menu and tap a slot. Click a block to change its length or remove it. Blocks sit next to your calendar events, are marked when they overlap one, and show as a small time on the task row. They\'re kept in the plugin\'s data, not in your tasks file, and expire the next day. On a phone, switch between List and Timeline at the top.\n- **Focus in Today (optional, off by default).** Today can start with "Must do" (your P1 tasks, up to 2) and "Next" (your P2 tasks, up to 8). The count turns red when there are more. Turn it on with **Focus in today** in the settings.\n- **Stuck tasks.** A task that sits 3 weeks in the same sector gets a note on its weekly-review card and a small "3 wk" on the board, and the review summary note gets a "Stuck" list. Only sectors in the weekly review count, recurring tasks never do, and moving a task restarts the count. Change the weeks or turn it off (0) under Settings → Sectors.\n- **Paste a list into the Inbox.** Pasting several lines into the capture field creates one task per line; list markers and checkboxes are dropped.\n- **Edit a selection at once.** Right-click a multi-selection to set the due date, snooze or set the priority for all selected tasks.\n- **Year plan in more places.** The Monthly Review shows what\'s coming up in the next two months, and the Today sidebar shows entries running today or starting tomorrow.\n\n### Changed\n- The bottom button in the Inbox now reads **Add with details…**.\n\n### Internal\n- The stacked quarters in the year plan no longer use `display: contents`, which Obsidian\'s plugin review reported. Nothing looks different.\n- Calendar files are read with ical.js (MPL-2.0), which makes the plugin file larger.\n\n## 1.5.4\n\n### Changed\n- **Folded quarters take less room.** In the year plan on a wide screen, folded quarters now sit stacked in a narrow column on the left, and the open quarters use the rest of the width. On a phone the quarters stay in order, Q1 to Q4.\n- Reached milestones are crossed out with the title dimmed instead of a separately colored line.\n\n### Internal\n- Two CSS details changed so Obsidian\'s plugin review no longer reports "multicolumn" and "text-decoration" as partially supported. Nothing looks different.\n\n## 1.5.3\n\n### New\n- **Turn the year plan off** if you don\'t use it: Settings → Year plan. The year plan view, the planning strips on Today and Upcoming, and the Overview\'s next events disappear. Any `#planning` lines stay in your file untouched and don\'t show up as tasks.\n\n### Changed\n- Refreshed plugin description and README: what Sector Tasks does today (board, guided reviews, year plan, its own editor) and that the Tasks plugin isn\'t needed.\n\n## 1.5.2\n\n### New\n- **Fold quarters in the year plan.** Click a quarter\'s header to fold or unfold it. Past quarters start folded, so the current quarter and the ones ahead are what you see first.\n\n### Fixed\n- **Pasted lines were sometimes ignored.** Text copied on a phone can carry non-breaking spaces instead of normal ones. Obsidian still shows such a line as a checkbox, but Sector Tasks didn\'t read it, so it never appeared on the board. Those lines are read now and written back with normal spaces.\n\n## 1.5.1\n\n### New\n- **Planning entries with only a month or a quarter.** When there\'s no exact day yet, choose "Sometime in April" or "Sometime in Q2" in the editor or in the year plan\'s **+ Add** form. In the file these are tagged `#planning/month` or `#planning/quarter`, with the period\'s first day as the 📅 date. The year plan shows them at the top of their month (with the month instead of a day number) or in an "Any time in Q2" group at the top of the quarter. They count as past only once the whole month or quarter is over, and they stay out of the day-based strips on Today and Upcoming.\n\n## 1.5.0\n\n### New\n- **The Tasks plugin is no longer needed.** Sector Tasks now has its own editor for adding and editing tasks: title, sector, priority, due date (with Today / Tomorrow / Next week buttons), labels (with suggestions from the ones you already use) and repeat (every day, weekday, week on a chosen day, month on a chosen day, or year; every N; optionally counted from when it\'s done). It shows the exact `🔁` text it writes. A repeat rule you wrote earlier, like `every 15 july`, stays exactly as it is unless you change it. `Cmd/Ctrl+Enter` saves. Your file keeps the same Tasks emoji format, so you can keep the Tasks plugin installed or remove it.\n- **Year plan:** appointments and milestones as lines in your tasks file, tagged `#planning` (add `#milestone` for milestones). A new **Year plan** view in the sidebar shows the four quarters side by side with the months inside; past entries turn grey, and a milestone still open after its date says **Not reached**. Add an entry right in its quarter, and click one to edit it, jump to its line, or delete it. Multi-day entries use a start date: `🛫 2026-09-16 📅 2026-09-17`.\n- Planning entries never show up as tasks. **Today** and **Upcoming** show them in a small strip above your tasks, and the **Overview** lists the next ones.\n- New planning entries are kept together under a `## Planning` heading at the end of your tasks file, sorted by date. Once a year is over, its entries move to the archive note (Settings → Archive past years\' planning, on by default); the year plan still shows them, read-only.\n\n### Fixed\n- Monthly repeat rules are written as "on the 1st", "on the 2nd" instead of "on the 1th".\n\n## 1.4.0\n\n### New\n- **Snooze:** right-click a task and snooze it by 1, 3 or 7 days. Each entry shows the date the task moves to. It counts from the due date if that\'s still ahead, otherwise from today, so an overdue task never lands in the past again.\n- **Waiting age:** tasks in your Waiting sector show how long they\'ve been waiting ("Waiting 12 d"), on the board and in the review. After 7 days the count turns red as a nudge to follow up; change or turn off the threshold under Settings → Sectors. The date lives in the plugin\'s data, not in your tasks file. Tasks that were already waiting start from their ➕ created date.\n- **Quick capture:** the Inbox (and the Overview\'s Inbox tab) has a text field. Type a task, press Enter, done — no dialog. `#labels`, a `#sector` tag, priority emojis and `📅` dates in the text work as usual.\n- **Review summary note** (optional, off by default): after a weekly or monthly review, a note in your `Reviews` folder lists what you finished, what moved or was deleted during the review, what\'s new, who you\'re waiting on and for how long, and open/overdue tasks per sector. Turn it on under Settings → Write a review summary note.\n- **Sectors settings page:** the sector list moved from the main settings to its own "Sectors" page (a collapsible group on Obsidian before 1.13). Renaming a sector\'s tag or removing a sector now asks first and tells you how many tasks are affected.\n\n### Fixed\n- **Scheduled, start and cancelled dates are no longer lost.** Whenever the plugin saved, it rewrote every task line and dropped `⏳` scheduled, `🛫` start and `❌` cancelled dates, and turned `[/]` (in progress) and `[-]` (cancelled) back into open tasks — even on lines you never touched. These are now kept. Completing a recurring task moves `⏳`/`🛫` along with the due date.\n- **Task row buttons on phones:** the jump and delete buttons overlapped the card\'s edge and looked mismatched. They\'re now two flat icons side by side with room to tap.\n- **Today header:** the section shows "Tuesday, 4 Nov" instead of repeating "Today", and the task count isn\'t shown twice.\n\n### Internal\n- `getFileByPath`/`getFolderByPath` where only one kind of file is needed; tsconfig ready for TypeScript 7 (`moduleResolution: bundler`, no `baseUrl`).\n\n## 1.3.14\n\n### New\n- **Release notes in Obsidian:** after the plugin updates, this "What\'s new" dialog shows what changed — including every version you skipped. It doesn\'t appear on a fresh install, you can turn it off under Settings → Show release notes after updates, and the **Show release notes** command opens it again any time.\n\n## 1.3.13\n\n### New\n- **Editorial style:** a new Appearance → Theme → Style option (default unchanged). Serif page titles with a short line above them, sections as cards with a header tinted in the sector\'s color, dates and labels as pills (overdue red, today warm), and the Overview\'s rings and counters as tiles with the sector tabs as a segmented bar. It brings its own warm light and dark palette when the color scheme follows Obsidian; a fixed or custom scheme keeps its colors.\n\n### Fixed\n- **Deleting a task now asks first.** The × on a task row used to delete the line immediately, with no way back. It now opens a "Delete task?" dialog, and after deleting, a notice with **Undo** restores the task at the same place in the file — under the same heading even if the file changed in between. Deleting from the review walkthrough\'s X hotkey gets the same Undo.\n\n## 1.3.12\n\n### New\n- **Start view:** choose which view the board opens on — Overview, Today, Inbox, or Upcoming (Settings → Start view; default Today). New board tabs start there, and the ribbon icon, the Open command, and the Today sidebar\'s board button return to it.\n\n### Fixed\n- **"Open search" after a restart:** when the board tab had been restored at startup but not shown yet, the command focused the board without opening search. The Today sidebar\'s board button had the same problem.\n- **Settings synced from another device** (e.g. via Obsidian Sync) are now picked up. Previously the plugin kept its old settings in memory and the next save on this device overwrote the synced ones — a review in progress, renamed sectors, colors.\n\n### Internal\n- Type checks and lint now run against the Obsidian 1.14.4 API and the current plugin-review rules.\n\n## 1.3.11\n\n### Internal\n- Cleared the remaining finding from Obsidian\'s plugin review: the settings tab no longer calls the deprecated `display()` from plugin code. The fallback settings tab for Obsidian < 1.13 is unchanged and `minAppVersion` stays 1.7.2.\n\n## 1.3.10\n\n### Fixed\n- **Faster board with large task files:** rendering the board no longer re-reads and copies every task once per visible row. A leftover sub-task counter did this on every row without ever showing anything (sub-tasks aren\'t supported), and the drag-target check did the same in the Upcoming view. With 1,000 tasks this saved roughly 290 ms on every re-render — i.e. on every check-off, drag, or edit.\n\n### Internal\n- CI and release builds run on Node 22 (Node 20 is end-of-life).\n- Resolved the three high-severity `npm audit` advisories in the lint tooling. None of them ever shipped in the plugin, which has no runtime dependencies.\n- README feature list and roadmap brought up to date with 1.3.4–1.3.9.\n\n## 1.3.9\n\n### New\n- **Overview:** a new sidebar entry adds a landing dashboard — two progress rings (Today, and whichever sector tab is selected below it), Overdue/Done today/Done this week counters, a sector tab bar (Inbox first, then sectors in settings order), and a quick-add + mini task list scoped to the selected tab. Built around sectors rather than due dates, since sector is the plugin\'s actual organizing concept.\n\n## 1.3.8\n\n### New\n- **Single-line task rows:** a new Appearance → Layout → Task rows setting (default "Stacked", the unchanged existing layout) offers "Single line" — title, due date, labels, and the project chip on one row instead of a title line with a meta line below it, for a noticeably shorter list. The description isn\'t shown in this mode (a full description doesn\'t fit one line without turning into unreadable fragments); the title truncates with an ellipsis instead of wrapping.\n\n## 1.3.7\n\n### New\n- **Combine sectors into one view:** Ctrl/Cmd+click a sector in the sidebar to add it to the current view instead of replacing it — see everything from "This Week" and "Next Week" together, sorted and grouped as usual, each task still carrying its sector chip. A plain click still switches to just that one sector.\n\n### Fixed\n- The plugin version in `manifest.json` had drifted out of sync with the published 1.3.6 tag/release (still said 1.3.5). Corrected here.\n\n## 1.3.6\n\n### New\n- **Completed-view stats:** two numbers at the top of the Completed view show how many tasks were finished today and this ISO week, counted from the existing `✅` dates (recurring tasks included, counted once per completion event).\n\n### Internal\n- Fixed the release workflow\'s notes fallback (`gh release edit` has no `--generate-notes` flag) and bumped the workflow actions to their current majors.\n\n## 1.3.5\n\n### New\n- **Undo after checking a task off:** completing a task now shows a short notice with an inline "Undo" that restores the state from before — completed flag, completion date, due date, repeat rule and recorded occurrences. This covers recurring tasks too, where completing silently reschedules the task to its next due date. Also available as the **"Undo last completed task"** command, so it can get a hotkey; it works from the board, the Today sidebar, and the review walkthrough\'s `D` action.\n\n### Docs\n- The README no longer hardcodes the version number (it had gone stale twice, since release commits don\'t touch it) and links to the releases page instead.\n- Backfilled the missing 1.3.3 changelog entry.\n- `package-lock.json` now tracks the released version.\n\n## 1.3.4\n\n### New\n- **Combined right-click menu:** right-clicking a task row (board or Today sidebar) now opens one menu with due date (Today/Tomorrow/Next week/Remove) and priority (P1-P4/No priority) together, instead of two separate menus split across the row and the checkbox.\n\n### Fixed\n- **Priority now visible on open board tasks:** the board\'s task checkbox only showed its priority color once a task was checked off; it now shows it while open too, matching the Today sidebar checkbox. Priority is visible directly in the sector columns, not only via the priority sort/group mode.\n\n## 1.3.3\n\n### New\n- **Right-click priority menu:** right-clicking a task\'s checkbox (board or Today sidebar) opened a menu to set P1-P4 or clear the priority, without going through the Tasks modal. Superseded in 1.3.4, which merged it into the row\'s context menu.\n\n### Docs\n- Fixed the README\'s "Current version" line, which was still showing 1.2.1.\n- Trimmed two backlog ideas from the roadmap that are no longer wanted: the "overdue → today" bulk action and the focus-timer/Pomodoro idea.\n\n## 1.3.2\n\n### Changed\n- **Search results:** completed tasks (shown when the "search excludes completed tasks" setting is off) now sort after active matches, appear italic and greyed, and carry a "Completed" badge in the result meta row.\n\n## 1.3.1\n\n### Fixed\n- Restored support for Obsidian 1.7.2: `minAppVersion` is back to 1.7.2. Obsidian 1.13+ keeps the new declarative settings tab (settings search, drag-and-drop sectors); older versions get the previous imperative settings tab as a fallback. Version 1.3.0 itself remains marked as requiring 1.13.0 in `versions.json`, since it shipped without that fallback.\n\n## 1.3.0\n\n### New\n- Settings migrated to Obsidian\'s declarative settings API (`getSettingDefinitions()`): all Sector Tasks settings now appear in Obsidian\'s settings search (Obsidian 1.13+), sectors can be reordered by drag-and-drop and deleted directly from the list, and Appearance (fonts, theme colors, icons, project/label colors) is a proper sub-page instead of a collapsible section.\n- The tasks-file path and icon-name fields now validate input inline instead of silently falling back.\n\n### Changed\n- `minAppVersion` raised from 1.7.2 to 1.13.0 — required for the declarative settings API. Users on older Obsidian versions keep their installed plugin version but won\'t receive this update until they update Obsidian.\n- Adding a sector now creates a placeholder entry (`#new-sector`) to edit in place, replacing the separate add-sector form.\n\n## 1.2.3\n\n### Internal\n- Fixed the root cause of the type-safety warnings still reported by Obsidian\'s review of 1.2.2: `tsconfig.json` declared `lib: ES5/ES6/ES7`, so under the reviewer\'s environment `padStart`, `Object.entries`, `flatMap`, and `Promise.finally` resolved as error-typed values (locally this was masked by `@types/node` pulling in newer lib definitions). The lib is now `ES2020`, matching the compile target and Obsidian 1.7.2\'s runtime. No code changes; the bundle is unchanged.\n- Replaced the deprecated `builtin-modules` dev dependency with Node\'s built-in `builtinModules` (from `node:module`) in the esbuild config, per Obsidian\'s review recommendation. Build output is unchanged.\n\n## 1.2.2\n\n### Internal\n- Type-safety cleanup for Obsidian\'s plugin review: the entire `src/` codebase now uses real TypeScript types (central `Task`/`RepeatRule`/`SectorConfig`/`BelkiSettings`/`ReviewSession` interfaces, typed class fields and method signatures, a typed minimal `TasksApiV1` interface for the Tasks plugin API). This eliminates all ~3,400 advisory `no-unsafe-*`/`no-explicit-any` warnings from the review report; the compiled `main.js` behaves identically.\n- Replaced transpiler-artifact `let _a` optional-chaining temps with native optional chaining.\n\n## 1.2.1\n\n### Fixed\n- Cleared the blocking error from Obsidian\'s plugin review: `Workspace.revealLeaf` is only supported since Obsidian 1.7.2, so `minAppVersion` is raised from 1.6.6 to 1.7.2 (revealLeaf is used to open the Today sidebar).\n\n### Internal\n- Addressed the actionable lint findings from Obsidian\'s review: `document.createElement`/`createEl("span")` → `createSpan`/`createDiv` helpers, `var` → `const`/`let`, removed unnecessary regex escapes, added the `u` flag to emoji character classes, and removed an empty catch block.\n- Added ESLint (with `eslint-plugin-obsidianmd` + `typescript-eslint`) as a dev dependency and a `lint` script, and wired it into CI so genuine review-blocking issues surface before submission. The remaining type-safety warnings on the intentionally loosely-typed reconstructed code are advisory (non-blocking), matching how Obsidian\'s review reports them.\n\n## 1.2.0\n\n### New\n- **"Open search"** command — opens the board (activating it if needed) and jumps straight to the search overlay. Assign it a hotkey under Obsidian\'s Settings → Hotkeys.\n- **"Search excludes completed tasks"** setting (off by default): when on, completed tasks are hidden from search results everywhere search runs.\n\n### Internal\n- Completed Phases 1-4 of the source-based build migration: `main.js` is now generated from real TypeScript source (`src/`) via `tsc` + esbuild, CI runs the build and fails on drift between source and the committed bundle, and releases attest build provenance for the published assets. See prior PRs (#21-24) for details.\n\n## 1.1.1\n\n### Fixed\n- Folder creation no longer logs a "Could not create folder. Error: Folder already exists." warning (and no longer aborts file setup) when a parent folder already exists but Obsidian\'s lookup doesn\'t immediately see it — the "already exists" case is now treated as success.\n\n## 1.1.0\n\n### New\n- **"Clean up completed tasks now"** command — runs the auto-delete cleanup on demand and reports the result, including why nothing was removed (e.g. completed tasks without a `✅` date, which are never deleted).\n- **Tasks-file path warning** in settings: a note appears under the "Tasks file" field when the path points to a folder or to a file that doesn\'t exist yet.\n\n## 1.0.0\n\nFirst stable release. The Time Sector workflow is complete and the file-writing\ncore is covered by tests — see the earlier entries for the full feature history.\n\n### Changed\n- Added `authorUrl` to the manifest.\n- Removed the misleading collapse chevron from the sidebar\'s "Review" heading.\n- The Today sidebar\'s "Due tomorrow" section can now be collapsed by clicking its header.\n\n## 0.27.0\n\n### Changed\n- **Auto-cleanup safety net:** completed tasks removed by the auto-delete cleanup are now appended to an archive note (`<tasks file> (archive).md`) before deletion; if the archive can\'t be written, nothing is deleted.\n\n### Internal\n- Added a test suite (`node --test`) covering the task-line parse/serialize round-trip, recurrence handling, and tag/label helpers, plus a CI workflow that runs it on every push and pull request.\n\n## 0.26.0\n\n### New\n- **Open board** button in the Today sidebar header — jump to the full task board without going through the ribbon or command palette.\n\n### Docs\n- Added this changelog.\n\n## 0.25.0\n\n### New\n- **Due tomorrow** section in the Today sidebar, below Overdue and Due today.\n- **Tab badge** on the Today sidebar showing the count of overdue + due-today tasks.\n- **Right-click due dates:** right-click any open task row (board or Today sidebar) to set the due date to Today / Tomorrow / Next week or clear it, without opening the Tasks modal.\n\n## 0.24.0\n\n### Changed\n- Enlarged the Today sidebar entries by ~10% (font sizes, checkbox, spacing).\n\n## 0.23.0\n\n### Changed\n- Removed the "fork of belki" attribution from the manifest author and user-facing strings; the README keeps a "Based on belki" credit. (0.22.1 was rolled into this release.)\n\n## 0.22.0\n\n### New\n- **Today sidebar:** the "Open Today sidebar" command opens a compact panel in the right sidebar listing overdue and due-today tasks, with priority-colored complete buttons, click-to-edit, and Inbox quick-add. Updates live with the tasks file.\n\n### Changed\n- Grouped all cosmetic settings (fonts, theme colors, sidebar icons, project/label colors) into a collapsible "Appearance" section.\n- Removed the unused "Task Description Font" option.\n\n## 0.21.0\n\n### New\n- **Auto-delete completed tasks:** optional cleanup that removes completed tasks from the file N days after their completion date (settings, default off).\n- **Review reminders:** the Weekly and Monthly Review buttons show a dot until a review of that kind has been completed in the current ISO week / calendar month.\n\n### Removed\n- The sector rollover feature from 0.20.0.\n\n## 0.20.0\n\n### New\n- **Sector rollover** command (later removed in 0.21.0).\n\n## 0.19.0\n\n### New\n- **Quick add task (Inbox)** command for capturing tasks straight into the Inbox via a hotkey, without opening the board.\n\n### Infrastructure\n- GitHub Actions workflow to publish releases with `main.js`, `manifest.json`, and `styles.css` attached as assets.\n';
 
 // src/changelog.ts
 var VERSION_HEADING = /^## (\d+\.\d+\.\d+)\s*$/;
@@ -14032,6 +14136,9 @@ var ReleaseNotesModal = class extends import_obsidian9.Modal {
   }
 };
 
+// src/views/BrainDumpModal.ts
+var import_obsidian12 = require("obsidian");
+
 // src/taskStore.ts
 var import_obsidian11 = require("obsidian");
 
@@ -14081,7 +14188,7 @@ var TaskEditModal = class extends import_obsidian10.Modal {
     };
     const titleField = field("Title");
     const title = titleField.wrap.createEl("input", { attr: { id: titleField.id, type: "text", autocomplete: "off" } });
-    title.value = (task == null ? void 0 : task.title) || "";
+    title.value = (task == null ? void 0 : task.title) || options.initialTitle || "";
     const error = form.createDiv({ cls: "belki-editor-error" });
     error.hide();
     let result;
@@ -14143,7 +14250,7 @@ var TaskEditModal = class extends import_obsidian10.Modal {
     const dueField = field("Due date");
     const dueRow = dueField.wrap.createDiv({ cls: "belki-editor-inline" });
     const due = dueRow.createEl("input", { attr: { id: dueField.id, type: "date" } });
-    due.value = (task == null ? void 0 : task.due) || "";
+    due.value = (task == null ? void 0 : task.due) || options.initialDue || "";
     for (const [label, value] of [["Today", todayIso()], ["Tomorrow", addDaysIso(1)], ["Next week", addDaysIso(7)], ["None", ""]]) {
       const quick = dueRow.createEl("button", { cls: "belki-editor-chip", text: label, attr: { type: "button" } });
       quick.addEventListener("click", () => {
@@ -14366,6 +14473,38 @@ var TaskEditModal = class extends import_obsidian10.Modal {
   }
 };
 
+// src/notes.ts
+var INVALID_NAME_CHARS = /[\\/:*?"<>|#^[\]]/g;
+var MAX_NAME_LENGTH = 120;
+function noteNameFromTitle(title) {
+  let name = (title || "").replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2").replace(/\[\[([^\]]+)\]\]/g, "$1").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(INVALID_NAME_CHARS, " ").replace(/\s+/g, " ").trim();
+  if (name.length > MAX_NAME_LENGTH) name = name.slice(0, MAX_NAME_LENGTH).trim();
+  return name.replace(/[.\s]+$/, "").replace(/^\.+/, "");
+}
+function linkedNoteName(title) {
+  const match = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/.exec(title || "");
+  const target = match == null ? void 0 : match[1].trim();
+  return target ? target : void 0;
+}
+function linkedNoteNames(title) {
+  const out = [];
+  const re = /\[\[([^\]|#\n]+?)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g;
+  let match;
+  while ((match = re.exec(title || "")) !== null) {
+    const target = match[1].trim();
+    if (target && !out.includes(target)) out.push(target);
+  }
+  return out;
+}
+function titleAsLink(title, noteName) {
+  const trimmed = (title || "").trim();
+  if (trimmed === noteName || /[[\]|]/.test(trimmed)) return `[[${noteName}]]`;
+  return `[[${noteName}|${trimmed}]]`;
+}
+function fillNoteTemplate(template, values) {
+  return template.replace(/\{\{\s*title\s*\}\}/gi, values.title).replace(/\{\{\s*date\s*\}\}/gi, values.date).replace(/\{\{\s*tasks\s*\}\}/gi, values.tasks);
+}
+
 // src/taskStore.ts
 var TaskStore = class {
   constructor(app, settings) {
@@ -14558,8 +14697,8 @@ var TaskStore = class {
     await this.save();
   }
   /** Opens the task editor for a new task; sector "" or undefined means Inbox. */
-  async createTaskInEditor(sector) {
-    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels() });
+  async createTaskInEditor(sector, initial) {
+    const edit = await openTaskEditor(this.app, { sector: sector || "", sectors: this.settings.sectors, knownLabels: this.knownLabels(), initialTitle: initial == null ? void 0 : initial.title, initialDue: initial == null ? void 0 : initial.due });
     if (!edit) return;
     await this.createTask(edit);
   }
@@ -14596,9 +14735,23 @@ var TaskStore = class {
     return created.filter((task) => this.tasks.some((t) => t.id === task.id)).length;
   }
   /** Opens the editor for a task or planning entry and saves what it returns. */
+  /**
+   * The current version of a task shown earlier. Lines without 🆔 get a new id
+   * each time the file is read, so after a reload the old id no longer matches;
+   * then the same title and dates identify it (only if that's unambiguous).
+   */
+  findCurrent(task) {
+    const byId = this.tasks.find((t) => t.id === task.id);
+    if (byId) return byId;
+    const same = this.tasks.filter((t) => t.title === task.title && t.due === task.due && t.start === task.start && Boolean(t.planning) === Boolean(task.planning));
+    return same.length === 1 ? same[0] : void 0;
+  }
   async editTaskInEditor(id) {
     const current = this.tasks.find((t) => t.id === id);
-    if (!current) return;
+    if (!current) {
+      new import_obsidian11.Notice("This entry changed in the file in the meantime. Open it again to edit it.");
+      return;
+    }
     const edit = await openTaskEditor(this.app, {
       task: cloneTask(current),
       planning: current.planning === true,
@@ -14855,6 +15008,77 @@ ${lines.join("\n")}
   notify() {
     for (const listener of this.listeners) listener();
   }
+  /** The note a task's title links to, if it exists. */
+  linkedNote(task) {
+    const name = linkedNoteName(task.title);
+    if (!name) return null;
+    return this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+  }
+  /** Open tasks whose title links to the note at `path` (for "Linked to this note"). */
+  tasksLinkingTo(path) {
+    return this.getTasks().filter((task) => !task.completed && linkedNoteNames(task.title).some((name) => {
+      var _a;
+      return ((_a = this.app.metadataCache.getFirstLinkpathDest(name, this.filePath)) == null ? void 0 : _a.path) === path;
+    }));
+  }
+  /**
+   * "Create note" on a task: makes a note named after the task (or reuses one
+   * with that name), turns the task title into a link to it, and opens it.
+   * When the title already links to an existing note, that note is opened.
+   */
+  async createNoteForTask(id) {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const existing = this.linkedNote(task);
+    if (existing) {
+      await this.app.workspace.getLeaf("tab").openFile(existing);
+      return;
+    }
+    const name = noteNameFromTitle(task.title);
+    if (!name) {
+      new import_obsidian11.Notice("This task's title can't be used as a note name.");
+      return;
+    }
+    let file = this.app.metadataCache.getFirstLinkpathDest(name, this.filePath);
+    if (!file) {
+      const tasksFolder = this.filePath.includes("/") ? this.filePath.slice(0, this.filePath.lastIndexOf("/")) : "";
+      const folder = (this.settings.notesFolder || tasksFolder).replace(/^\/+|\/+$/g, "");
+      const path = (0, import_obsidian11.normalizePath)(folder ? `${folder}/${name}.md` : `${name}.md`);
+      const atPath = this.app.vault.getAbstractFileByPath(path);
+      if (atPath instanceof import_obsidian11.TFile) {
+        file = atPath;
+      } else {
+        if (!await this.ensureParentFolders(path)) return;
+        try {
+          file = await this.app.vault.create(path, await this.noteContent(task.title, path));
+        } catch (error) {
+          console.warn("[belki] Could not create note.", error, { path });
+          new import_obsidian11.Notice(`Could not create "${path}".`);
+          return;
+        }
+      }
+    }
+    const linkName = this.app.metadataCache.fileToLinktext(file, this.filePath, true);
+    await this.updateTask(id, { title: titleAsLink(task.title, linkName) });
+    await this.app.workspace.getLeaf("tab").openFile(file);
+  }
+  /** A new note's text: the template if one is set and readable, else a link back to the tasks file. */
+  async noteContent(title, notePath) {
+    const tasksFile = this.app.vault.getAbstractFileByPath(this.filePath);
+    const tasksLink = tasksFile instanceof import_obsidian11.TFile ? this.app.fileManager.generateMarkdownLink(tasksFile, notePath) : "";
+    const templatePath = (this.settings.noteTemplate || "").trim();
+    if (templatePath) {
+      const withExt = (0, import_obsidian11.normalizePath)(/\.md$/i.test(templatePath) ? templatePath : `${templatePath}.md`);
+      const template = this.app.vault.getAbstractFileByPath(withExt);
+      if (template instanceof import_obsidian11.TFile) {
+        return fillNoteTemplate(await this.app.vault.read(template), { title, date: todayIso(), tasks: tasksLink });
+      }
+      new import_obsidian11.Notice(`Note template "${withExt}" not found; created the note without it.`);
+    }
+    return tasksLink ? `Task in ${tasksLink}
+
+` : "";
+  }
   // --- File helpers --------------------------------------------------------
   async ensureFile(path) {
     const normalizedPath = (0, import_obsidian11.normalizePath)(path);
@@ -14988,12 +15212,85 @@ function cloneTask(task) {
   };
 }
 
+// src/views/BrainDumpModal.ts
+function brainDumpLines(text2) {
+  return text2.split(/\r?\n/).map((line) => stripListMarker(line).replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+var BrainDumpModal = class extends import_obsidian12.Modal {
+  constructor(app, draft, save, keepDraft) {
+    super(app);
+    this.saved = false;
+    this.draft = draft;
+    this.save = save;
+    this.keepDraft = keepDraft;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass("belki-brain-dump-modal");
+    this.setTitle("Brain dump");
+    contentEl.createDiv({ cls: "belki-brain-dump-hint", text: "One task per line. Everything goes to the Inbox; sort it later." });
+    this.textarea = contentEl.createEl("textarea", {
+      cls: "belki-brain-dump-input",
+      attr: { rows: "10", placeholder: "Call the printer about the flyer", "aria-label": "Tasks, one per line" }
+    });
+    this.textarea.value = this.draft;
+    const footer = contentEl.createDiv({ cls: "belki-brain-dump-footer" });
+    const count = footer.createSpan({ cls: "belki-brain-dump-count" });
+    const actions = footer.createDiv({ cls: "belki-brain-dump-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel", attr: { type: "button" } });
+    const submit = actions.createEl("button", { cls: "mod-cta", attr: { type: "button" } });
+    const update = () => {
+      const n = brainDumpLines(this.textarea.value).length;
+      count.setText(n === 1 ? "1 task" : `${n} tasks`);
+      submit.setText("Add to inbox");
+      submit.disabled = n === 0;
+    };
+    const commit = async () => {
+      const lines = brainDumpLines(this.textarea.value);
+      if (!lines.length) return;
+      submit.disabled = true;
+      const saved = await this.save(lines);
+      if (saved > 0) {
+        this.saved = true;
+        new import_obsidian12.Notice(saved === 1 ? "1 task added to the inbox." : `${saved} tasks added to the inbox.`);
+        this.close();
+      } else {
+        submit.disabled = false;
+        new import_obsidian12.Notice("Couldn't save the tasks. Your text is still here.");
+      }
+    };
+    this.textarea.addEventListener("input", update);
+    this.textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        void commit();
+      }
+    });
+    cancel.addEventListener("click", () => this.close());
+    submit.addEventListener("click", () => void commit());
+    if (!import_obsidian12.Platform.isMobile) footer.createDiv({ cls: "belki-brain-dump-shortcut", text: import_obsidian12.Platform.isMacOS ? "⌘ + Enter to save" : "Ctrl + Enter to save" });
+    update();
+    window.setTimeout(() => {
+      this.textarea.focus();
+      const end = this.textarea.value.length;
+      this.textarea.setSelectionRange(end, end);
+    }, 0);
+  }
+  onClose() {
+    var _a;
+    this.keepDraft(this.saved ? "" : ((_a = this.textarea) == null ? void 0 : _a.value) || "");
+    this.contentEl.empty();
+  }
+};
+
 // src/main.ts
-var BelkiPlugin = class extends import_obsidian12.Plugin {
+var BelkiPlugin = class extends import_obsidian13.Plugin {
   constructor() {
     super(...arguments);
     this.reloadDebounceTimer = null;
     this.seedWaitingFromCreated = false;
+    /** Unsaved brain-dump text, kept while Obsidian runs so closing the window by accident loses nothing. */
+    this.brainDumpDraft = "";
   }
   async onload() {
     const hadSettings = await this.loadSettings();
@@ -15054,7 +15351,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new import_obsidian12.Notice("Sector Tasks labels normalized.");
+        new import_obsidian13.Notice("Sector Tasks labels normalized.");
       }
     });
     this.addCommand({
@@ -15062,6 +15359,32 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       name: "Quick add task (Inbox)",
       callback: () => {
         void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
+      }
+    });
+    this.addRibbonIcon("brain", "Brain dump to inbox", () => {
+      this.openBrainDump();
+    });
+    this.addCommand({
+      id: "brain-dump",
+      name: "Brain dump to inbox",
+      callback: () => {
+        this.openBrainDump();
+      }
+    });
+    this.addCommand({
+      id: "selection-to-inbox",
+      name: "Add selected lines to inbox",
+      editorCheckCallback: (checking, editor, ctx) => {
+        const lines = brainDumpLines(editor.getSelection());
+        const inTasksFile = ctx.file ? this.store.isTaskStorageFile(ctx.file.path) : false;
+        if (!lines.length || inTasksFile) return false;
+        if (!checking) {
+          void this.store.createTasksFromLines(lines).then((saved) => {
+            if (saved > 0) new import_obsidian13.Notice(saved === 1 ? "1 task added to the inbox." : `${saved} tasks added to the inbox.`);
+            this.refreshBelkiViews();
+          });
+        }
+        return true;
       }
     });
     this.addCommand({
@@ -15125,6 +15448,20 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     }
   }
   /** Loads settings; returns false when there was no saved data yet (a fresh install). */
+  openBrainDump() {
+    new BrainDumpModal(
+      this.app,
+      this.brainDumpDraft,
+      async (lines) => {
+        const saved = await this.store.createTasksFromLines(lines);
+        this.refreshBelkiViews();
+        return saved;
+      },
+      (text2) => {
+        this.brainDumpDraft = text2;
+      }
+    ).open();
+  }
   async loadSettings() {
     const raw = await this.loadData();
     const saved = toSettingsData(raw);
@@ -15177,7 +15514,9 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
       planningEnabled: (saved == null ? void 0 : saved.planningEnabled) !== false,
       archivePastPlanning: (saved == null ? void 0 : saved.archivePastPlanning) !== false,
-      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder)
+      reviewNotesFolder: normalizeReviewNotesFolder(saved == null ? void 0 : saved.reviewNotesFolder),
+      notesFolder: normalizeOptionalPath(saved == null ? void 0 : saved.notesFolder),
+      noteTemplate: normalizeOptionalPath(saved == null ? void 0 : saved.noteTemplate)
     };
     if (!saved || saved.waitingSince === void 0) this.seedWaitingFromCreated = true;
     if (this.settings) {
@@ -15227,7 +15566,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     const entries = bundledReleaseNotes();
     const entry = entries.find((e) => e.version === this.manifest.version) || entries[0];
     if (!entry) {
-      new import_obsidian12.Notice("No release notes found.");
+      new import_obsidian13.Notice("No release notes found.");
       return;
     }
     new ReleaseNotesModal(this.app, [entry]).open();
@@ -15244,7 +15583,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new import_obsidian12.Notice("Sector Tasks could not reload task data.");
+      new import_obsidian13.Notice("Sector Tasks could not reload task data.");
       console.error(error);
     }
   }
@@ -15252,7 +15591,7 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) {
       if (manual) {
-        new import_obsidian12.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+        new import_obsidian13.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
       }
       return;
     }
@@ -15263,18 +15602,18 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       if (manual) {
         const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
         const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
-        new import_obsidian12.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+        new import_obsidian13.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
       }
       return;
     }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
-      new import_obsidian12.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      new import_obsidian13.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
       return;
     }
     await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new import_obsidian12.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
+    new import_obsidian13.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -15360,10 +15699,10 @@ var BelkiPlugin = class extends import_obsidian12.Plugin {
       await this.pruneCompletedTasks();
       if (this.settings.planningEnabled && this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning((/* @__PURE__ */ new Date()).getFullYear());
-        if (moved > 0) new import_obsidian12.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+        if (moved > 0) new import_obsidian13.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }
     } catch (error) {
-      new import_obsidian12.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
+      new import_obsidian13.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath
@@ -15378,6 +15717,13 @@ function toSettingsData(value) {
   return value;
 }
 var __testables = {
+  noteNameFromTitle,
+  linkedNoteName,
+  linkedNoteNames,
+  titleAsLink,
+  taskDueForEvent,
+  fillNoteTemplate,
+  brainDumpLines,
   parseTaskLine,
   serializeTaskLine,
   ensureTaskMarker,
