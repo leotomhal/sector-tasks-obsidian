@@ -20,7 +20,7 @@ import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { BrainDumpModal, brainDumpLines } from "./views/BrainDumpModal";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { taskDueForEvent } from "./views/dayPlan";
-import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, snapshotDeletion } from "./taskStore";
+import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, restoreDeletedTasks, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ordinal, ensureSectorInLine, ensureTaskMarker, extractTags, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
 export default class BelkiPlugin extends Plugin {
@@ -506,6 +506,7 @@ export const __testables = {
   snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
+  restoreDeletedTasks,
   parseChangelog,
   compareVersions,
   releaseNotesSince

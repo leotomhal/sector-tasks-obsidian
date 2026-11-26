@@ -18,7 +18,8 @@ export class TaskStore {
   writing: boolean;
   lastKnownDiskContent: string | null;
   lastCompletion: { id: string; title: string; patch: Partial<Task> } | null;
-  lastDeletion: DeletedTaskSnapshot | null;
+  /** The tasks removed by the last delete (one, or a whole selection), for Undo. */
+  lastDeletion: DeletedTaskSnapshot[] | null;
   constructor(app: App, settings: BelkiSettings) {
     this.app = app;
     this.settings = settings;
@@ -381,26 +382,33 @@ export class TaskStore {
   }
   /** Deletes one task the user chose to delete, with a notice that can undo it. */
   async deleteTask(id: string) {
-    const snapshot = snapshotDeletion(this.fileModel.blocks, this.tasks, id);
-    await this.deleteManyTasks([id]);
-    if (!snapshot) return;
-    this.lastDeletion = snapshot;
-    this.showUndoNotice(`Deleted "${snapshot.task.title}".`, () => this.undoLastDeletion());
+    await this.deleteTasksWithUndo([id]);
+  }
+  /** Deletes one or more tasks and offers Undo, which puts all of them back where they were. */
+  async deleteTasksWithUndo(ids: string[]) {
+    const snapshots = ids
+      .map((id) => snapshotDeletion(this.fileModel.blocks, this.tasks, id))
+      .filter((s): s is DeletedTaskSnapshot => s !== null);
+    await this.deleteManyTasks(ids);
+    if (!snapshots.length) return;
+    this.lastDeletion = snapshots;
+    const message = snapshots.length === 1 ? `Deleted "${snapshots[0].task.title}".` : `Deleted ${snapshots.length} tasks.`;
+    this.showUndoNotice(message, () => this.undoLastDeletion());
   }
   /** Puts the most recently deleted task back where it was in the file. */
   async undoLastDeletion(): Promise<boolean> {
-    const snapshot = this.lastDeletion;
-    if (!snapshot) {
+    const snapshots = (this.lastDeletion || []).filter((s) => !this.tasks.some((t) => t.id === s.task.id));
+    if (!this.lastDeletion) {
       new Notice("Nothing to undo.");
       return false;
     }
     this.lastDeletion = null;
-    if (this.tasks.some((t) => t.id === snapshot.task.id)) return false;
-    const restored = reinsertDeletedTask(this.fileModel.blocks, this.tasks, snapshot);
+    if (!snapshots.length) return false;
+    const restored = restoreDeletedTasks(this.fileModel.blocks, this.tasks, snapshots);
     this.fileModel.blocks = restored.blocks;
     this.tasks = restored.tasks;
     await this.save();
-    new Notice(`Restored "${snapshot.task.title}".`);
+    new Notice(snapshots.length === 1 ? `Restored "${snapshots[0].task.title}".` : `Restored ${snapshots.length} tasks.`);
     return true;
   }
   get archiveFilePath() {
@@ -686,6 +694,17 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
   const ti = Math.min(snapshot.taskIndex, tasks.length);
   const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
   return { blocks: nextBlocks, tasks: nextTasks };
+}
+/**
+ * Puts several deleted tasks back. Snapshots were taken before the delete, so
+ * restoring them top to bottom gives each one its old neighbours back.
+ */
+export function restoreDeletedTasks(blocks: FileBlock[], tasks: Task[], snapshots: DeletedTaskSnapshot[]): { blocks: FileBlock[]; tasks: Task[] } {
+  let state = { blocks, tasks };
+  for (const snapshot of [...snapshots].sort((a, b) => a.blockIndex - b.blockIndex)) {
+    state = reinsertDeletedTask(state.blocks, state.tasks, snapshot);
+  }
+  return state;
 }
 /** "- [ ] Buy milk", "* Buy milk", "3. Buy milk" → "Buy milk". */
 export function stripListMarker(line: string): string {

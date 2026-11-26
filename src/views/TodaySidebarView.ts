@@ -2,6 +2,7 @@ import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import type { BelkiSettings, CalendarFeed, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
+import { ConfirmModal } from "./ConfirmModal";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
@@ -55,6 +56,20 @@ export function showSelectionContextMenu(store: TaskStore, tasks: Task[], event:
     menu.addItem((item) => item.setTitle(getPriorityLabel(priority)).onClick(() => same({ priority })));
   }
   menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle(`Delete ${tasks.length} tasks\u2026`).setIcon("trash-2").setWarning(true).onClick(() => {
+      new ConfirmModal(store.app, {
+        title: `Delete ${tasks.length} tasks?`,
+        subject: tasks.slice(0, 5).map((t) => t.title).join("\n") + (tasks.length > 5 ? `\n\u2026and ${tasks.length - 5} more` : ""),
+        body: "This removes their lines from your tasks file. You can still undo it right after.",
+        confirmText: "Delete",
+        destructive: true
+      }, () => {
+        void store.deleteTasksWithUndo(ids).then(onDone);
+      }).open();
+    });
+  });
   menu.showAtMouseEvent(event);
 }
 export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEvent, extra?: (menu: Menu) => void) {

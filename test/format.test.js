@@ -67,6 +67,7 @@ const {
   snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
+  restoreDeletedTasks,
   parseChangelog,
   compareVersions,
   releaseNotesSince
@@ -277,6 +278,17 @@ test("undoing a delete of the first line puts it back at the top", () => {
   const after = deleteFrom(before, firstId);
   const restored = reinsertDeletedTask(after.blocks, after.tasks, snap);
   assert.equal(restored.blocks[0].taskId, firstId);
+});
+
+test("undoing a bulk delete restores every task in its old place", () => {
+  const before = deletionFixture();
+  const all = before.tasks.map((t) => t.id);
+  const snaps = all.map((id) => snapshotDeletion(before.blocks, before.tasks, id));
+  let after = before;
+  for (const id of all) after = deleteFrom(after, id);
+  const restored = restoreDeletedTasks(after.blocks, after.tasks, snaps.reverse());
+  assert.deepEqual(ids(restored.blocks), ids(before.blocks));
+  assert.deepEqual(restored.tasks.map((t) => t.id), before.tasks.map((t) => t.id));
 });
 
 // Release notes after an update come from the bundled CHANGELOG.md.

@@ -8412,6 +8412,21 @@ function showSelectionContextMenu(store, tasks, event, onDone) {
     menu.addItem((item) => item.setTitle(getPriorityLabel(priority)).onClick(() => same({ priority })));
   }
   menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
+  menu.addSeparator();
+  menu.addItem((item) => {
+    item.setTitle(`Delete ${tasks.length} tasks…`).setIcon("trash-2").setWarning(true).onClick(() => {
+      new ConfirmModal(store.app, {
+        title: `Delete ${tasks.length} tasks?`,
+        subject: tasks.slice(0, 5).map((t) => t.title).join("\n") + (tasks.length > 5 ? `
+…and ${tasks.length - 5} more` : ""),
+        body: "This removes their lines from your tasks file. You can still undo it right after.",
+        confirmText: "Delete",
+        destructive: true
+      }, () => {
+        void store.deleteTasksWithUndo(ids).then(onDone);
+      }).open();
+    });
+  });
   menu.showAtMouseEvent(event);
 }
 function showTaskContextMenu(store, task, event, extra) {
@@ -14869,26 +14884,31 @@ var TaskStore = class {
   }
   /** Deletes one task the user chose to delete, with a notice that can undo it. */
   async deleteTask(id) {
-    const snapshot = snapshotDeletion(this.fileModel.blocks, this.tasks, id);
-    await this.deleteManyTasks([id]);
-    if (!snapshot) return;
-    this.lastDeletion = snapshot;
-    this.showUndoNotice(`Deleted "${snapshot.task.title}".`, () => this.undoLastDeletion());
+    await this.deleteTasksWithUndo([id]);
+  }
+  /** Deletes one or more tasks and offers Undo, which puts all of them back where they were. */
+  async deleteTasksWithUndo(ids) {
+    const snapshots = ids.map((id) => snapshotDeletion(this.fileModel.blocks, this.tasks, id)).filter((s) => s !== null);
+    await this.deleteManyTasks(ids);
+    if (!snapshots.length) return;
+    this.lastDeletion = snapshots;
+    const message = snapshots.length === 1 ? `Deleted "${snapshots[0].task.title}".` : `Deleted ${snapshots.length} tasks.`;
+    this.showUndoNotice(message, () => this.undoLastDeletion());
   }
   /** Puts the most recently deleted task back where it was in the file. */
   async undoLastDeletion() {
-    const snapshot = this.lastDeletion;
-    if (!snapshot) {
+    const snapshots = (this.lastDeletion || []).filter((s) => !this.tasks.some((t) => t.id === s.task.id));
+    if (!this.lastDeletion) {
       new import_obsidian11.Notice("Nothing to undo.");
       return false;
     }
     this.lastDeletion = null;
-    if (this.tasks.some((t) => t.id === snapshot.task.id)) return false;
-    const restored = reinsertDeletedTask(this.fileModel.blocks, this.tasks, snapshot);
+    if (!snapshots.length) return false;
+    const restored = restoreDeletedTasks(this.fileModel.blocks, this.tasks, snapshots);
     this.fileModel.blocks = restored.blocks;
     this.tasks = restored.tasks;
     await this.save();
-    new import_obsidian11.Notice(`Restored "${snapshot.task.title}".`);
+    new import_obsidian11.Notice(snapshots.length === 1 ? `Restored "${snapshots[0].task.title}".` : `Restored ${snapshots.length} tasks.`);
     return true;
   }
   get archiveFilePath() {
@@ -15165,6 +15185,13 @@ function reinsertDeletedTask(blocks, tasks, snapshot) {
   const ti = Math.min(snapshot.taskIndex, tasks.length);
   const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
   return { blocks: nextBlocks, tasks: nextTasks };
+}
+function restoreDeletedTasks(blocks, tasks, snapshots) {
+  let state = { blocks, tasks };
+  for (const snapshot of [...snapshots].sort((a, b) => a.blockIndex - b.blockIndex)) {
+    state = reinsertDeletedTask(state.blocks, state.tasks, snapshot);
+  }
+  return state;
 }
 function stripListMarker(line) {
   return line.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "").replace(/^\s*\[[ xX]\]\s+/, "");
@@ -15751,6 +15778,7 @@ var __testables = {
   snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
+  restoreDeletedTasks,
   parseChangelog,
   compareVersions,
   releaseNotesSince
