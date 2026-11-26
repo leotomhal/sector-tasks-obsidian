@@ -247,9 +247,23 @@ export class TaskStore {
     return created.filter((task) => this.tasks.some((t) => t.id === task.id)).length;
   }
   /** Opens the editor for a task or planning entry and saves what it returns. */
+  /**
+   * The current version of a task shown earlier. Lines without 🆔 get a new id
+   * each time the file is read, so after a reload the old id no longer matches;
+   * then the same title and dates identify it (only if that's unambiguous).
+   */
+  findCurrent(task: Task): Task | undefined {
+    const byId = this.tasks.find((t) => t.id === task.id);
+    if (byId) return byId;
+    const same = this.tasks.filter((t) => t.title === task.title && t.due === task.due && t.start === task.start && Boolean(t.planning) === Boolean(task.planning));
+    return same.length === 1 ? same[0] : void 0;
+  }
   async editTaskInEditor(id: string) {
     const current = this.tasks.find((t) => t.id === id);
-    if (!current) return;
+    if (!current) {
+      new Notice("This entry changed in the file in the meantime. Open it again to edit it.");
+      return;
+    }
     const edit = await openTaskEditor(this.app, {
       task: cloneTask(current),
       planning: current.planning === true,

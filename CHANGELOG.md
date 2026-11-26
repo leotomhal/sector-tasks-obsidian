@@ -3,6 +3,19 @@
 All notable changes to Sector Tasks are documented here. Versions follow the
 `manifest.json` version; dates are release dates.
 
+## 1.7.0
+
+### New
+- **Brain dump.** The **Brain dump to inbox** command, or the brain icon in the ribbon (handy on a phone), opens a window from anywhere in Obsidian. Write one task per line, and `Cmd/Ctrl+Enter` saves them all to the Inbox. Text you close without saving is still there the next time you open it, until Obsidian restarts.
+- **Selected lines to the Inbox.** Select lines in any note and run **Add selected lines to inbox**: each line becomes a task, and the note stays as it is.
+- **Notes for tasks.** Right-click a task → **Create note** makes a note named after the task, turns the task's title into a link to it and opens it. If a note with that name already exists, it's linked instead of overwritten. Once linked, the menu says **Open note**. In the settings you can choose the folder (by default the tasks file's folder) and an optional template with `{{title}}`, `{{date}}` and `{{tasks}}`.
+- **Linked to this note.** The Today sidebar lists the open tasks that link to the note you're looking at.
+- **Task from a calendar event.** The event details have a **Create task** button. It opens the editor with the event's title and date filled in, for example to prepare for it.
+- **Calendar in the reviews.** With calendars on, the Daily Review shows tomorrow's events and the Weekly Review the next 7 days, so you can plan around them.
+
+### Fixed
+- **Editing year-plan entries.** Choosing Edit on an entry sometimes did nothing, so the only way to change it was in the file. This happened when the entry had no `🆔` and the tasks file had been reread in the meantime. The entry is now found again by its title and dates. Edit is also the main button in the entry dialog, and clicking the title or the date opens the editor too.
+
 ## 1.6.1
 
 ### Fixed

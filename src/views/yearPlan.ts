@@ -339,6 +339,7 @@ export class PlanningEntryModal extends Modal {
     const today = todayIso();
     contentEl.empty();
     contentEl.addClass("belki-planning-modal");
+    this.modalEl.addClass("belki-planning-entry-modal");
     this.setTitle(entry.title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target: string, _a, alias?: string) => alias || target));
     const status = this.readOnly ? "Archived"
       : entry.milestone ? (entry.completed ? "Reached" : isMissedMilestone(entry, today) ? "Not reached, the date has passed" : "Open")
@@ -355,6 +356,24 @@ export class PlanningEntryModal extends Modal {
       const button = actions.createEl("button", { cls, text, attr: { type: "button" } });
       button.addEventListener("click", onClick);
     };
+    // The entry as it is in the file now (its id changes on reload when it has no 🆔).
+    const current = () => {
+      const found = host.store.findCurrent(entry);
+      if (!found) new Notice("This entry changed in the file in the meantime. Open it again from the year plan.");
+      return found;
+    };
+    const edit = () => {
+      this.close();
+      const found = current();
+      if (found) void host.store.editTaskInEditor(found.id);
+    };
+    // Clicking the title or the date edits too.
+    const whenEl = contentEl.querySelector<HTMLElement>(".belki-planning-modal-when");
+    for (const el of whenEl ? [this.titleEl, whenEl] : [this.titleEl]) {
+      el.addClass("is-editable");
+      el.setAttr("title", "Edit");
+      el.addEventListener("click", edit);
+    }
     add("Delete", () => {
       this.close();
       new ConfirmModal(host.app, {
@@ -364,22 +383,22 @@ export class PlanningEntryModal extends Modal {
         confirmText: "Delete",
         destructive: true
       }, () => {
-        void host.store.deleteTask(entry.id);
+        const found = current();
+        if (found) void host.store.deleteTask(found.id);
       }).open();
     }, "mod-warning");
     add("Show in file", () => {
       this.close();
       void host.openTaskInNote(entry);
     });
-    add("Edit", () => {
-      this.close();
-      void host.store.editTaskInEditor(entry.id);
-    });
+    add("Edit", edit, entry.milestone ? "" : "mod-cta");
     if (entry.milestone) {
       add(entry.completed ? "Mark as open" : "Mark as reached", () => {
         this.close();
-        const reached = !entry.completed;
-        void host.store.updateTask(entry.id, reached ? { completed: true, completedDate: todayIso() } : { completed: false, completedDate: void 0 })
+        const found = current();
+        if (!found) return;
+        const reached = !found.completed;
+        void host.store.updateTask(found.id, reached ? { completed: true, completedDate: todayIso() } : { completed: false, completedDate: void 0 })
           .then(() => new Notice(reached ? "Milestone reached." : "Milestone open again."));
       }, "mod-cta");
     }

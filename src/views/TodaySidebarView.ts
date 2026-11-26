@@ -221,7 +221,10 @@ export class TodaySidebarView extends ItemView {
         .map((item) => ({ ...item, when: `Tomorrow ${item.when === "All day" ? "" : item.when}`.trim() })));
     }
     if (this.settings.planningEnabled) {
-      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 1), today, (entry) => void this.store.editTaskInEditor(entry.id))
+      items.push(...planningItems(upcomingEntries(this.store.getPlanningEntries(), today, 1), today, (entry) => {
+        const found = this.store.findCurrent(entry);
+        if (found) void this.store.editTaskInEditor(found.id);
+      })
         .map((item) => (item.when === "Today" ? item : { ...item, when: "Tomorrow" })));
     }
     if (items.length) this.renderAgendaSection(container, items);
