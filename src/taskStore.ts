@@ -301,16 +301,16 @@ export class TaskStore {
   knownLabels(): string[] {
     return dedupeLabels([...(this.settings.labelRegistry || []), ...this.tasks.flatMap((t) => t.labels)]).sort();
   }
-  async updateTask(id: string, patch: Partial<Task>) {
-    await this.updateManyTasks([id], patch);
+  async updateTask(id: string, patch: Partial<Task>, options?: { notPostponing?: boolean }) {
+    await this.updateEachTask(new Map([[id, patch]]), options);
   }
   async updateManyTasks(ids: string[], patch: Partial<Task>) {
     await this.updateEachTask(new Map(ids.map((id) => [id, patch])));
   }
   /** Applies a separate patch per task (e.g. snoozing each from its own date) in one save. */
-  async updateEachTask(patches: Map<string, Partial<Task>>) {
+  async updateEachTask(patches: Map<string, Partial<Task>>, options?: { notPostponing?: boolean }) {
     if (patches.size === 0) return;
-    const postponed = this.tasks.filter((t) => patches.has(t.id) && isPostponement(t, patches.get(t.id) || {})).map((t) => ({ id: t.id, due: patches.get(t.id)?.due }));
+    const postponed = options?.notPostponing ? [] : this.tasks.filter((t) => patches.has(t.id) && isPostponement(t, patches.get(t.id) || {})).map((t) => ({ id: t.id, due: patches.get(t.id)?.due }));
     let changed = false;
     this.tasks = this.tasks.map((candidate) => {
       const patch = patches.get(candidate.id);
@@ -372,6 +372,30 @@ export class TaskStore {
     }
     await this.updateTask(id, { completed: true, completedDate: todayIso() });
     this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
+  }
+  /**
+   * "Skip this time" for a recurring task: moves it to its next occurrence
+   * without counting the current one as done (and without counting as
+   * postponing it).
+   */
+  async skipOccurrence(id: string) {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task || !task.repeat || task.completed) return;
+    const today = todayIso();
+    const fromDate = task.repeat.mode === "completedDate" ? today : task.due || today;
+    const nextDue = nextOccurrence(task.repeat, fromDate);
+    if (isRepeatEnded(task.repeat, (task.completedOccurrences || []).length, nextDue)) {
+      new Notice("There's no later occurrence to skip to.");
+      return;
+    }
+    const shift = task.due ? daysBetweenIso(task.due, nextDue) : 0;
+    const previous = { due: task.due, scheduled: task.scheduled, start: task.start };
+    await this.updateTask(id, {
+      due: nextDue,
+      scheduled: task.scheduled && shift ? shiftIsoDate(task.scheduled, shift) : task.scheduled,
+      start: task.start && shift ? shiftIsoDate(task.start, shift) : task.start
+    }, { notPostponing: true });
+    this.showUndoNotice(`Skipped. Next time: ${formatDueDateChip(nextDue)}.`, () => this.updateTask(id, previous, { notPostponing: true }));
   }
   /** Toast after a completion or deletion, with an inline action to take it back. */
   showUndoNotice(message: string, undo: () => Promise<unknown>) {

@@ -3,6 +3,7 @@ import type { BelkiSettings, CalendarFeed, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { ConfirmModal } from "./ConfirmModal";
+import { SectorPickModal } from "./SectorPickModal";
 import { renderIntentionBanner } from "./NudgeModals";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
@@ -58,6 +59,9 @@ export function showSelectionContextMenu(store: TaskStore, tasks: Task[], event:
   }
   menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
   menu.addSeparator();
+  menu.addItem((item) => item.setTitle("Move to sector\u2026").setIcon("folder-input").onClick(() => {
+    new SectorPickModal(store.app, store.settings.sectors, void 0, (tag) => same({ project: tag })).open();
+  }));
   menu.addItem((item) => {
     item.setTitle(`Delete ${tasks.length} tasks\u2026`).setIcon("trash-2").setWarning(true).onClick(() => {
       new ConfirmModal(store.app, {
@@ -125,6 +129,20 @@ export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEv
       void store.editTaskInEditor(task.id);
     });
   });
+  if (!task.planning) {
+    menu.addItem((item) => {
+      item.setTitle("Move to sector\u2026").setIcon("folder-input").onClick(() => {
+        new SectorPickModal(store.app, store.settings.sectors, task.project, (tag) => void store.updateTask(task.id, { project: tag })).open();
+      });
+    });
+  }
+  if (task.repeat && !task.completed) {
+    menu.addItem((item) => {
+      item.setTitle("Skip this time").setIcon("skip-forward").onClick(() => {
+        void store.skipOccurrence(task.id);
+      });
+    });
+  }
   if (!task.planning) {
     const hasNote = store.linkedNote(task) !== null;
     menu.addItem((item) => {
