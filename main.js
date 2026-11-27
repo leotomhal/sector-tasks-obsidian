@@ -132,9 +132,9 @@ function planningTagPrecision(tag) {
   const sub = lower.startsWith(`${PLANNING_TAG}/`) ? lower.slice(PLANNING_TAG.length + 1) : null;
   return sub !== null && PLANNING_PRECISIONS.includes(sub) ? sub : null;
 }
-function periodStart(iso, precision) {
-  const year = iso.slice(0, 4);
-  const month = Number(iso.slice(5, 7));
+function periodStart(iso2, precision) {
+  const year = iso2.slice(0, 4);
+  const month = Number(iso2.slice(5, 7));
   const first = precision === "quarter" ? Math.floor((month - 1) / 3) * 3 + 1 : month;
   return `${year}-${String(first).padStart(2, "0")}-01`;
 }
@@ -734,8 +734,8 @@ function uniqueRealProjects(projects) {
 function entryFirstDay(entry) {
   return entry.start && isIsoDate(entry.start) ? entry.start : entry.due || "";
 }
-function quarterOf(iso) {
-  return Math.floor((Number(iso.slice(5, 7)) - 1) / 3) + 1;
+function quarterOf(iso2) {
+  return Math.floor((Number(iso2.slice(5, 7)) - 1) / 3) + 1;
 }
 function entryDays(entry) {
   if (!entry.start || !entry.due) return 1;
@@ -8174,8 +8174,8 @@ var MAX_OCCURRENCES_PER_EVENT = 1500;
 function dayOf(time) {
   return `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}`;
 }
-function shiftDay(iso, days) {
-  const [y, m, d] = iso.split("-").map(Number);
+function shiftDay(iso2, days) {
+  const [y, m, d] = iso2.split("-").map(Number);
   return toIsoDate(new Date(y, m - 1, d + days));
 }
 function text(component, name) {
@@ -8281,11 +8281,11 @@ function normalizeFeedUrl(url) {
 }
 
 // src/views/dayPlan.ts
-var fmt = (iso, options) => {
-  const [y, m, d] = iso.split("-").map(Number);
+var fmt = (iso2, options) => {
+  const [y, m, d] = iso2.split("-").map(Number);
   return new Intl.DateTimeFormat("en-GB", options).format(new Date(y, m - 1, d));
 };
-var shortDay = (iso) => fmt(iso, { weekday: "short", day: "numeric", month: "short" });
+var shortDay = (iso2) => fmt(iso2, { weekday: "short", day: "numeric", month: "short" });
 var plainTitle = (title) => title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target, _a, alias) => alias || target);
 function calendarItems(events, days, feeds, nowMin, withDate, open) {
   const items = [];
@@ -8555,8 +8555,8 @@ function renderBlockChip(parent, block) {
 // src/views/TodaySidebarView.ts
 var VIEW_TYPE_BELKI_TODAY = "sector-task-today";
 var TODAY_PRIORITY_RANK = { P1: 0, P2: 1, P3: 2, P4: 3, none: 4 };
-function formatSnoozeDate(iso) {
-  const [y, m, d] = iso.split("-").map(Number);
+function formatSnoozeDate(iso2) {
+  const [y, m, d] = iso2.split("-").map(Number);
   const date = new Date(y, m - 1, d);
   return new Intl.DateTimeFormat(void 0, {
     weekday: "short",
@@ -9211,6 +9211,7 @@ var DEFAULT_SETTINGS = {
   calendarRefreshMinutes: 30,
   timeBlocking: false,
   upcomingWeekView: false,
+  dateWords: true,
   dayStartHour: 8,
   dayEndHour: 18,
   timeBlocks: { date: "", blocks: [] },
@@ -9583,6 +9584,11 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
         control: { type: "number", key: "dayEndHour", min: 1, max: 24, step: 1, placeholder: "18" }
       },
       {
+        name: "Dates in words when capturing",
+        desc: "In the inbox field and the brain dump, a date written as a word at the end or start becomes the due date: “call back fr”, “morgen …”, “in 3 tagen”, “15.12.”. Short day names at the start need a colon (“fr: …”).",
+        control: { type: "toggle", key: "dateWords" }
+      },
+      {
         name: "Focus in today (2+8)",
         desc: "Of the tasks due today or overdue, lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view. The count turns red when there are more.",
         control: { type: "toggle", key: "focusSection" }
@@ -9688,6 +9694,8 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
       return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
+    } else if (key === "dateWords") {
+      settings.dateWords = value === true;
     } else if (key === "postponeAsk") {
       settings.postponeAsk = normalizeAutoDeleteDays(value);
     } else if (key === "weeklyIntentionEnabled") {
@@ -10452,6 +10460,13 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
       }
     }
     this.renderLegacyCalendars(containerEl);
+    new import_obsidian6.Setting(containerEl).setName("Dates in words when capturing").setDesc("In the inbox field and the brain dump, a date written as a word at the end or start becomes the due date: “call back fr”, “morgen …”, “in 3 tagen”, “15.12.”. Short day names at the start need a colon (“fr: …”).").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.dateWords).onChange(async (value) => {
+        this.plugin.settings.dateWords = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
     new import_obsidian6.Setting(containerEl).setName("Focus in today (2+8)").setDesc("Of the tasks due today or overdue, lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view. The count turns red when there are more.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.focusSection === true).onChange(async (value) => {
         this.plugin.settings.focusSection = value;
@@ -10943,6 +10958,113 @@ function stuckWeeks(task, stay, sectors, today, thresholdWeeks) {
   return weeks >= thresholdWeeks ? weeks : 0;
 }
 
+// src/dateWords.ts
+var WEEKDAYS_FULL = {
+  sonntag: 0,
+  montag: 1,
+  dienstag: 2,
+  mittwoch: 3,
+  donnerstag: 4,
+  freitag: 5,
+  samstag: 6,
+  sonnabend: 6,
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6
+};
+var WEEKDAYS_SHORT = {
+  so: 0,
+  mo: 1,
+  di: 2,
+  mi: 3,
+  do: 4,
+  fr: 5,
+  sa: 6,
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6
+};
+function iso(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function parseIso(day) {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+function addDays(today, days) {
+  const date = parseIso(today);
+  date.setDate(date.getDate() + days);
+  return iso(date);
+}
+function validDate(y, m, d) {
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return void 0;
+  return iso(date);
+}
+function dateForWords(words, today, short) {
+  var _a;
+  const w = words.toLowerCase().replace(/\s+/g, " ").trim();
+  if (w === "heute" || w === "today") return today;
+  if (w === "morgen" || w === "tomorrow" || w === "tmr") return addDays(today, 1);
+  if (w === "übermorgen" || w === "uebermorgen") return addDays(today, 2);
+  const dow = parseIso(today).getDay();
+  if (w === "nächste woche" || w === "naechste woche" || w === "next week") return addDays(today, (1 - dow + 7) % 7 || 7);
+  const weekday = (_a = WEEKDAYS_FULL[w]) != null ? _a : short ? WEEKDAYS_SHORT[w] : void 0;
+  if (weekday !== void 0) return addDays(today, (weekday - dow + 7) % 7 || 7);
+  const inDays = /^in (\d{1,3}) (tag|tagen|tage|day|days|woche|wochen|week|weeks)$/.exec(w);
+  if (inDays) return addDays(today, Number(inDays[1]) * (/^(woche|wochen|week|weeks)$/.test(inDays[2]) ? 7 : 1));
+  const german = /^(\d{1,2})\.(\d{1,2})\.(\d{4})?$/.exec(w);
+  if (german) {
+    const d = Number(german[1]);
+    const m = Number(german[2]);
+    if (german[3]) return validDate(Number(german[3]), m, d);
+    const year = Number(today.slice(0, 4));
+    const thisYear = validDate(year, m, d);
+    if (!thisYear) return validDate(year + 1, m, d);
+    return thisYear >= today ? thisYear : validDate(year + 1, m, d);
+  }
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(w);
+  if (isoMatch) return validDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+  return void 0;
+}
+var NOT_AT_END = /* @__PURE__ */ new Set(["so", "do"]);
+var EXPRESSION_LENGTHS = [3, 2, 1];
+function extractDateWords(text2, today) {
+  const source = text2.trim();
+  if (!source || source.includes("📅")) return { title: source };
+  const tail = /((?:\s+#[^\s#]+)*)$/.exec(source);
+  const tags = tail ? tail[1] : "";
+  const body = source.slice(0, source.length - tags.length);
+  const words = body.split(/\s+/);
+  for (const n of EXPRESSION_LENGTHS) {
+    if (words.length <= n) continue;
+    const expr = words.slice(-n).join(" ");
+    if (n === 1 && /^morgen$/i.test(expr) && /^(heute|gestern)$/i.test(words[words.length - 2])) continue;
+    if (n === 1 && NOT_AT_END.has(expr.toLowerCase())) continue;
+    const due = dateForWords(expr, today, true);
+    if (due) return { title: (words.slice(0, -n).join(" ") + tags).trim(), due, matched: expr };
+  }
+  const startWords = source.split(/\s+/);
+  for (const n of EXPRESSION_LENGTHS) {
+    if (startWords.length <= n) continue;
+    const head = startWords.slice(0, n).join(" ");
+    const colon = head.endsWith(":");
+    const expr = colon ? head.slice(0, -1) : head;
+    if (!expr || /-$/.test(expr)) continue;
+    const due = dateForWords(expr, today, colon);
+    if (due) return { title: startWords.slice(n).join(" ").trim(), due, matched: expr };
+  }
+  return { title: source };
+}
+
 // src/views/yearPlan.ts
 var import_obsidian7 = require("obsidian");
 var YearPlanState = class {
@@ -10965,12 +11087,12 @@ var YearPlanState = class {
   }
 };
 var MONTHS = Array.from({ length: 12 }, (_, m) => new Intl.DateTimeFormat("en-GB", { month: "long" }).format(new Date(2026, m, 1)));
-function parseIso(iso) {
-  const [y, m, d] = iso.split("-").map(Number);
+function parseIso2(iso2) {
+  const [y, m, d] = iso2.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
-function fmt2(iso, options) {
-  return new Intl.DateTimeFormat("en-GB", options).format(parseIso(iso));
+function fmt2(iso2, options) {
+  return new Intl.DateTimeFormat("en-GB", options).format(parseIso2(iso2));
 }
 function formatEntryWhen(entry) {
   if (entry.precision === "month") return `Sometime in ${fmt2(entry.due, { month: "long", year: "numeric" })}`;
@@ -11220,7 +11342,7 @@ function renderPlanningStrip(host, parent, heading, entries, openYearPlan) {
   for (const entry of entries) {
     const row = strip.createEl("button", { cls: "belki-planning-strip-row", attr: { type: "button" } });
     const first = entryFirstDay(entry);
-    const when = entry.precision === "quarter" ? `Q${quarterOf(first)} ${first.slice(0, 4)}` : entry.precision === "month" ? fmt2(first, { month: "long" }) : isEntryOn(entry, today) ? entryDays(entry) > 1 ? `Today · day ${Math.round((parseIso(today).getTime() - parseIso(first).getTime()) / 864e5) + 1}/${entryDays(entry)}` : "Today" : fmt2(first, { weekday: "short", day: "numeric", month: "short" });
+    const when = entry.precision === "quarter" ? `Q${quarterOf(first)} ${first.slice(0, 4)}` : entry.precision === "month" ? fmt2(first, { month: "long" }) : isEntryOn(entry, today) ? entryDays(entry) > 1 ? `Today · day ${Math.round((parseIso2(today).getTime() - parseIso2(first).getTime()) / 864e5) + 1}/${entryDays(entry)}` : "Today" : fmt2(first, { weekday: "short", day: "numeric", month: "short" });
     row.createSpan({ cls: "belki-planning-strip-when", text: when });
     if (entry.milestone) row.createSpan({ cls: "belki-year-diamond", attr: { "aria-label": "Milestone" } });
     host.renderLinkedTitle(entry.title, row.createSpan({ cls: "belki-planning-strip-title" }));
@@ -11377,8 +11499,8 @@ function buildReviewSummary(input) {
   }
   return lines.join("\n") + "\n";
 }
-function shiftDays(iso, days) {
-  const [y, m, d] = iso.split("-").map(Number);
+function shiftDays(iso2, days) {
+  const [y, m, d] = iso2.split("-").map(Number);
   const date = new Date(y, m - 1, d + days);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -13321,8 +13443,20 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
     });
     input.value = this.captureDraft;
     this.captureInputEl = input;
+    const preview = parent.createDiv({ cls: "belki-quick-capture-preview" });
+    const updatePreview = () => {
+      const words = this.settings.dateWords ? extractDateWords(input.value, todayIso()) : null;
+      preview.empty();
+      preview.toggleClass("is-visible", Boolean(words == null ? void 0 : words.due));
+      if (!(words == null ? void 0 : words.due)) return;
+      const [y, m, d] = words.due.split("-").map(Number);
+      const when = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" }).format(new Date(y, m - 1, d));
+      preview.setText(`📅 ${when}, from “${words.matched}”`);
+    };
+    updatePreview();
     input.addEventListener("input", () => {
       this.captureDraft = input.value;
+      updatePreview();
     });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -13330,6 +13464,7 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
       if (!text2) return;
       this.captureDraft = "";
       input.value = "";
+      updatePreview();
       void this.store.createTaskFromText(text2).then((saved) => {
         if (saved) return;
         this.captureDraft = text2;
@@ -14408,13 +14543,13 @@ var CalendarService = class {
 };
 
 // src/recurrenceForm.ts
-function weekdayOf(iso) {
-  if (!iso) return (/* @__PURE__ */ new Date()).getDay();
-  const [y, m, d] = iso.split("-").map(Number);
+function weekdayOf(iso2) {
+  if (!iso2) return (/* @__PURE__ */ new Date()).getDay();
+  const [y, m, d] = iso2.split("-").map(Number);
   return new Date(y, m - 1, d).getDay();
 }
-function dayOfMonthOf(iso) {
-  return iso ? Number(iso.slice(8, 10)) : (/* @__PURE__ */ new Date()).getDate();
+function dayOfMonthOf(iso2) {
+  return iso2 ? Number(iso2.slice(8, 10)) : (/* @__PURE__ */ new Date()).getDate();
 }
 function formFromRule(rule, due) {
   var _a, _b, _c;
@@ -15104,8 +15239,12 @@ var TaskStore = class {
   async createTasksFromLines(lines, sector) {
     const created = [];
     for (const raw of lines) {
-      const trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
+      let trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
       if (!trimmed) continue;
+      if (this.settings.dateWords) {
+        const words = extractDateWords(trimmed, todayIso());
+        if (words.due) trimmed = `${words.title} 📅 ${words.due}`;
+      }
       let line = ensureTaskMarker(`- [ ] ${trimmed}`);
       line = ensureSectorInLine(line, sector);
       const parsed = parseTaskLine(line, createId(), this.tasks.length);
@@ -15999,6 +16138,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       calendarRefreshMinutes: Math.max(5, normalizeAutoDeleteDays(saved == null ? void 0 : saved.calendarRefreshMinutes) || 30),
       timeBlocking: (saved == null ? void 0 : saved.timeBlocking) === true,
       upcomingWeekView: (saved == null ? void 0 : saved.upcomingWeekView) === true,
+      dateWords: (saved == null ? void 0 : saved.dateWords) !== false,
       dayStartHour: normalizeHour(saved == null ? void 0 : saved.dayStartHour, 8),
       dayEndHour: normalizeHour(saved == null ? void 0 : saved.dayEndHour, 18),
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
@@ -16219,6 +16359,8 @@ var __testables = {
   prunePostponeCounts,
   intentionIsCurrent,
   longTermSector,
+  extractDateWords,
+  dateForWords,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,

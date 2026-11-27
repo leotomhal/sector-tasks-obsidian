@@ -6,6 +6,7 @@ import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
 import { isPostponement } from "./postpone";
+import { extractDateWords } from "./dateWords";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
@@ -241,8 +242,12 @@ export class TaskStore {
   async createTasksFromLines(lines: string[], sector?: string): Promise<number> {
     const created: Task[] = [];
     for (const raw of lines) {
-      const trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
+      let trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
       if (!trimmed) continue;
+      if (this.settings.dateWords) {
+        const words = extractDateWords(trimmed, todayIso());
+        if (words.due) trimmed = `${words.title} \u{1F4C5} ${words.due}`;
+      }
       let line = ensureTaskMarker(`- [ ] ${trimmed}`);
       line = ensureSectorInLine(line, sector);
       const parsed = parseTaskLine(line, createId(), this.tasks.length);

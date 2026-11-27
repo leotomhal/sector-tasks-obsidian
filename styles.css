@@ -4012,3 +4012,15 @@ button.belki-postpone-choice {
     min-height: 0;
   }
 }
+
+/* Quick capture: the date read from words, before Enter */
+.belki-quick-capture-preview {
+  color: var(--belki-muted, var(--text-muted));
+  display: none;
+  font-size: 12px;
+  margin: -6px 0 10px 14px;
+}
+
+.belki-quick-capture-preview.is-visible {
+  display: block;
+}

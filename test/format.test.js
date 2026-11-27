@@ -59,6 +59,8 @@ const {
   prunePostponeCounts,
   intentionIsCurrent,
   longTermSector,
+  extractDateWords,
+  dateForWords,
   fillNoteTemplate,
   brainDumpLines,
   formFromRule,
@@ -707,4 +709,52 @@ test("intentionIsCurrent lasts two weeks", () => {
 test("longTermSector finds the long-term sector", () => {
   assert.equal(longTermSector([{ tag: "01this-week", label: "This week" }, { tag: "05longterm", label: "Long term" }]).tag, "05longterm");
   assert.equal(longTermSector([{ tag: "x", label: "Soon" }]), void 0);
+});
+
+// 2026-11-27 is a Friday.
+const FRI = "2026-11-27";
+test("dateForWords reads the listed words", () => {
+  assert.equal(dateForWords("heute", FRI, true), FRI);
+  assert.equal(dateForWords("Morgen", FRI, true), "2026-11-28");
+  assert.equal(dateForWords("übermorgen", FRI, true), "2026-11-29");
+  assert.equal(dateForWords("fr", FRI, true), "2026-12-04"); // never today
+  assert.equal(dateForWords("montag", FRI, true), "2026-11-30");
+  assert.equal(dateForWords("mon", FRI, false), void 0); // short names need permission
+  assert.equal(dateForWords("nächste woche", FRI, true), "2026-11-30");
+  assert.equal(dateForWords("in 3 tagen", FRI, true), "2026-11-30");
+  assert.equal(dateForWords("in 2 wochen", FRI, true), "2026-12-11");
+  assert.equal(dateForWords("15.12.", FRI, true), "2026-12-15");
+  assert.equal(dateForWords("3.1.", FRI, true), "2027-01-03"); // past this year: next year
+  assert.equal(dateForWords("15.12.2027", FRI, true), "2027-12-15");
+  assert.equal(dateForWords("31.2.", FRI, true), void 0);
+  assert.equal(dateForWords("1.2", FRI, true), void 0);
+});
+
+test("extractDateWords takes a date at the end, keeping trailing tags", () => {
+  assert.deepEqual(extractDateWords("Bescheid an Krause fr", FRI), { title: "Bescheid an Krause", due: "2026-12-04", matched: "fr" });
+  assert.equal(extractDateWords("Folien schicken in 3 tagen #grk", FRI).title, "Folien schicken #grk");
+  assert.equal(extractDateWords("Folien schicken in 3 tagen #grk", FRI).due, "2026-11-30");
+  assert.equal(extractDateWords("Jahresbericht 15.12.", FRI).due, "2026-12-15");
+});
+
+test("extractDateWords takes a date at the start, strictly", () => {
+  assert.deepEqual(extractDateWords("morgen Bescheid an Krause", FRI), { title: "Bescheid an Krause", due: "2026-11-28", matched: "morgen" });
+  assert.equal(extractDateWords("fr: Bescheid an Krause", FRI).due, "2026-12-04");
+  assert.equal(extractDateWords("fr: Bescheid an Krause", FRI).title, "Bescheid an Krause");
+  assert.equal(extractDateWords("15.12. Jahresbericht abgeben", FRI).due, "2026-12-15");
+  assert.equal(extractDateWords("So viel wie möglich vorbereiten", FRI).due, void 0);
+  assert.equal(extractDateWords("Do the taxes", FRI).due, void 0);
+  assert.equal(extractDateWords("Montag-Meeting vorbereiten", FRI).due, void 0);
+});
+
+test("extractDateWords leaves ambiguous or complete text alone", () => {
+  assert.equal(extractDateWords("Morgenrunde vorbereiten", FRI).due, void 0);
+  assert.equal(extractDateWords("Mail an Anna heute morgen", FRI).due, void 0);
+  assert.equal(extractDateWords("Mach das so", FRI).due, void 0);
+  assert.equal(extractDateWords("things to do", FRI).due, void 0);
+  assert.equal(extractDateWords("Termin Freitag.", FRI).due, void 0);
+  assert.equal(extractDateWords("Update auf Version 1.2", FRI).due, void 0);
+  assert.equal(extractDateWords("morgen", FRI).due, void 0); // nothing would be left
+  assert.equal(extractDateWords("Report fr 📅 2026-12-01", FRI).due, void 0);
+  assert.equal(extractDateWords("Krause anrufen morgen fr", FRI).due, "2026-12-04"); // the end wins
 });

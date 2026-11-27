@@ -191,6 +191,8 @@ export interface BelkiSettings {
   timeBlocking: boolean;
   /** Upcoming as seven day columns instead of a list (desktop). */
   upcomingWeekView: boolean;
+  /** Read dates written as words when capturing ("… fr", "morgen …", "15.12."). */
+  dateWords: boolean;
   dayStartHour: number;
   dayEndHour: number;
   /** Today's blocks; blocks from another day are dropped. */

@@ -15,6 +15,7 @@ import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
 import { stuckWeeks } from "../stale";
 import { isEntryOn, upcomingEntries } from "../planning";
+import { extractDateWords } from "../dateWords";
 import { PlanningEntryModal, YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
 import type { CalendarService } from "../calendarService";
 import type { CalEvent } from "../calendar";
@@ -1944,8 +1945,21 @@ export class TaskBoardView extends ItemView {
     });
     input.value = this.captureDraft;
     this.captureInputEl = input;
+    // Shows the date read from words ("… fr", "morgen …") before Enter.
+    const preview = parent.createDiv({ cls: "belki-quick-capture-preview" });
+    const updatePreview = () => {
+      const words = this.settings.dateWords ? extractDateWords(input.value, todayIso()) : null;
+      preview.empty();
+      preview.toggleClass("is-visible", Boolean(words?.due));
+      if (!words?.due) return;
+      const [y, m, d] = words.due.split("-").map(Number);
+      const when = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" }).format(new Date(y, m - 1, d));
+      preview.setText(`\u{1F4C5} ${when}, from \u201c${words.matched}\u201d`);
+    };
+    updatePreview();
     input.addEventListener("input", () => {
       this.captureDraft = input.value;
+      updatePreview();
     });
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -1953,6 +1967,7 @@ export class TaskBoardView extends ItemView {
       if (!text) return;
       this.captureDraft = "";
       input.value = "";
+      updatePreview();
       void this.store.createTaskFromText(text).then((saved) => {
         if (saved) return;
         // Not written (e.g. the file changed on disk): give the text back.

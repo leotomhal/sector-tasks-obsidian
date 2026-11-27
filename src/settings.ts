@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   calendarRefreshMinutes: 30,
   timeBlocking: false,
   upcomingWeekView: false,
+  dateWords: true,
   dayStartHour: 8,
   dayEndHour: 18,
   timeBlocks: { date: "", blocks: [] },
@@ -438,6 +439,11 @@ export class BelkiSettingTab extends PluginSettingTab {
         control: { type: "number", key: "dayEndHour", min: 1, max: 24, step: 1, placeholder: "18" }
       },
       {
+        name: "Dates in words when capturing",
+        desc: "In the inbox field and the brain dump, a date written as a word at the end or start becomes the due date: \u201ccall back fr\u201d, \u201cmorgen …\u201d, \u201cin 3 tagen\u201d, \u201c15.12.\u201d. Short day names at the start need a colon (\u201cfr: …\u201d).",
+        control: { type: "toggle", key: "dateWords" }
+      },
+      {
         name: "Focus in today (2+8)",
         desc: "Of the tasks due today or overdue, lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view. The count turns red when there are more.",
         control: { type: "toggle", key: "focusSection" }
@@ -543,6 +549,8 @@ export class BelkiSettingTab extends PluginSettingTab {
       return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
+    } else if (key === "dateWords") {
+      settings.dateWords = value === true;
     } else if (key === "postponeAsk") {
       settings.postponeAsk = normalizeAutoDeleteDays(value as number);
     } else if (key === "weeklyIntentionEnabled") {
@@ -1308,6 +1316,13 @@ export class BelkiSettingTab extends PluginSettingTab {
       }
     }
     this.renderLegacyCalendars(containerEl);
+    new Setting(containerEl).setName("Dates in words when capturing").setDesc("In the inbox field and the brain dump, a date written as a word at the end or start becomes the due date: \u201ccall back fr\u201d, \u201cmorgen …\u201d, \u201cin 3 tagen\u201d, \u201c15.12.\u201d. Short day names at the start need a colon (\u201cfr: …\u201d).").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.dateWords).onChange(async (value) => {
+        this.plugin.settings.dateWords = value;
+        await this.plugin.saveSettings();
+        this.plugin.refreshBelkiViews();
+      });
+    });
     new Setting(containerEl).setName("Focus in today (2+8)").setDesc("Of the tasks due today or overdue, lists priority 1 tasks (the must-dos, up to 2) and priority 2 tasks (up to 8 more) at the top of the today view. The count turns red when there are more.").addToggle((toggle) => {
       toggle.setValue(this.plugin.settings.focusSection === true).onChange(async (value) => {
         this.plugin.settings.focusSection = value;

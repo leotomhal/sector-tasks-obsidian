@@ -20,6 +20,7 @@ import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { BrainDumpModal, brainDumpLines } from "./views/BrainDumpModal";
 import { PostponeModal, editWeeklyIntention, longTermSector } from "./views/NudgeModals";
 import { intentionIsCurrent, isPostponement, prunePostponeCounts } from "./postpone";
+import { dateForWords, extractDateWords } from "./dateWords";
 import { normalizeTaskProject } from "./projects";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { layoutLanes, taskDueForEvent } from "./views/dayPlan";
@@ -306,6 +307,7 @@ export default class BelkiPlugin extends Plugin {
       calendarRefreshMinutes: Math.max(5, normalizeAutoDeleteDays(saved == null ? void 0 : saved.calendarRefreshMinutes) || 30),
       timeBlocking: (saved == null ? void 0 : saved.timeBlocking) === true,
       upcomingWeekView: (saved == null ? void 0 : saved.upcomingWeekView) === true,
+      dateWords: (saved == null ? void 0 : saved.dateWords) !== false,
       dayStartHour: normalizeHour(saved == null ? void 0 : saved.dayStartHour, 8),
       dayEndHour: normalizeHour(saved == null ? void 0 : saved.dayEndHour, 18),
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
@@ -539,6 +541,8 @@ export const __testables = {
   prunePostponeCounts,
   intentionIsCurrent,
   longTermSector,
+  extractDateWords,
+  dateForWords,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,
