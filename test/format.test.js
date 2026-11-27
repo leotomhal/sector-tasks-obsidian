@@ -55,6 +55,10 @@ const {
   titleAsLink,
   taskDueForEvent,
   layoutLanes,
+  isPostponement,
+  prunePostponeCounts,
+  intentionIsCurrent,
+  longTermSector,
   fillNoteTemplate,
   brainDumpLines,
   formFromRule,
@@ -674,4 +678,33 @@ test("layoutLanes puts overlapping timeline items side by side", () => {
   const lanes = layoutLanes([{ s: 540, e: 600 }, { s: 570, e: 630 }, { s: 660, e: 720 }, { s: 600, e: 660 }]);
   assert.deepEqual(lanes, [{ lane: 0, lanes: 2 }, { lane: 1, lanes: 2 }, { lane: 0, lanes: 1 }, { lane: 0, lanes: 2 }]);
   assert.deepEqual(layoutLanes([]), []);
+});
+
+test("isPostponement only counts moving an open task's date later", () => {
+  const task = { id: "a", due: "2026-11-27", completed: false };
+  assert.equal(isPostponement(task, { due: "2026-11-28" }), true);
+  assert.equal(isPostponement(task, { due: "2026-11-20" }), false);
+  assert.equal(isPostponement(task, { due: void 0 }), false);
+  assert.equal(isPostponement({ id: "b", completed: false }, { due: "2026-11-28" }), false);
+  assert.equal(isPostponement(task, { due: "2026-12-04", completedOccurrences: ["2026-11-27"] }), false);
+  assert.equal(isPostponement({ ...task, planning: true }, { due: "2026-11-28" }), false);
+  assert.equal(isPostponement(task, { priority: "P1" }), false);
+});
+
+test("prunePostponeCounts keeps only open tasks and never wipes on an empty file", () => {
+  const tasks = [{ id: "a", completed: false }, { id: "b", completed: true }];
+  assert.deepEqual(prunePostponeCounts({ a: 2, b: 1, gone: 3 }, tasks), { a: 2 });
+  assert.equal(prunePostponeCounts({ a: 2 }, tasks), null);
+  assert.equal(prunePostponeCounts({ a: 2 }, []), null);
+});
+
+test("intentionIsCurrent lasts two weeks", () => {
+  assert.equal(intentionIsCurrent("2026-11-20", "2026-11-27"), true);
+  assert.equal(intentionIsCurrent("2026-11-13", "2026-11-27"), false);
+  assert.equal(intentionIsCurrent(void 0, "2026-11-27"), false);
+});
+
+test("longTermSector finds the long-term sector", () => {
+  assert.equal(longTermSector([{ tag: "01this-week", label: "This week" }, { tag: "05longterm", label: "Long term" }]).tag, "05longterm");
+  assert.equal(longTermSector([{ tag: "x", label: "Soon" }]), void 0);
 });

@@ -49,6 +49,10 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   waitingSince: {},
   waitingHighlightDays: 7,
   sectorSince: {},
+  postponeAsk: 3,
+  postponeCounts: {},
+  weeklyIntentionEnabled: true,
+  weeklyIntention: null,
   stuckWeeks: 3,
   reviewNotes: false,
   focusSection: false,
@@ -182,6 +186,23 @@ export function normalizeTimeBlocks(value: unknown): { date: string; blocks: Tim
 export function normalizeStuckWeeks(value?: number | string): number {
   if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.stuckWeeks;
   return normalizeAutoDeleteDays(value);
+}
+export function normalizePostponeAsk(value?: unknown): number {
+  if (value === void 0 || value === null || value === "") return DEFAULT_SETTINGS.postponeAsk;
+  return normalizeAutoDeleteDays(value as number);
+}
+export function normalizePostponeCounts(value?: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!value || typeof value !== "object") return out;
+  for (const [id, count] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof count === "number" && Number.isInteger(count) && count > 0) out[id] = count;
+  }
+  return out;
+}
+export function normalizeWeeklyIntention(value?: unknown): { text: string; setOn: string } | null {
+  const v = value as { text?: unknown; setOn?: unknown } | null | undefined;
+  if (!v || typeof v.text !== "string" || !v.text.trim() || typeof v.setOn !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v.setOn)) return null;
+  return { text: v.text.trim(), setOn: v.setOn };
 }
 export function normalizeSectorSince(value?: unknown): Record<string, { sector: string; since: string }> {
   const out: Record<string, { sector: string; since: string }> = {};
@@ -521,6 +542,10 @@ export class BelkiSettingTab extends PluginSettingTab {
       return;
     } else if (key === "archivePastPlanning") {
       settings.archivePastPlanning = value === true;
+    } else if (key === "postponeAsk") {
+      settings.postponeAsk = normalizeAutoDeleteDays(value as number);
+    } else if (key === "weeklyIntentionEnabled") {
+      settings.weeklyIntentionEnabled = value === true;
     } else if (key === "stuckWeeks") {
       settings.stuckWeeks = normalizeAutoDeleteDays(value as number);
     } else if (key === "waitingHighlightDays") {
@@ -763,6 +788,16 @@ export class BelkiSettingTab extends PluginSettingTab {
           name: "Mark stuck tasks",
           desc: "Tasks that sit this many weeks in the same sector get a note, in the weekly review and on the board. Only sectors in the weekly review count; recurring tasks never do. Set it to 0 to turn this off.",
           control: { type: "number", key: "stuckWeeks", min: 0, step: 1, placeholder: "3" }
+        },
+        {
+          name: "Ask after repeated postponing",
+          desc: "When a task's due date has been moved later this many times, ask whether to make it smaller, drop the date or move it to long term. Set it to 0 to turn this off.",
+          control: { type: "number", key: "postponeAsk", min: 0, step: 1, placeholder: "3" }
+        },
+        {
+          name: "Intention for the week",
+          desc: "After the weekly review, ask for one sentence about what should have happened by the end of next week, and show it at the top of today.",
+          control: { type: "toggle", key: "weeklyIntentionEnabled" }
         }
       ]
     };
@@ -1362,6 +1397,20 @@ export class BelkiSettingTab extends PluginSettingTab {
         text.inputEl.type = "number";
         text.setPlaceholder("3").setValue(String(this.plugin.settings.stuckWeeks)).onChange(async (value) => {
           this.plugin.settings.stuckWeeks = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+          this.plugin.refreshBelkiViews();
+        });
+      });
+      new Setting(sectorsSection).setName("Ask after repeated postponing").setDesc("When a task's due date has been moved later this many times, ask whether to make it smaller, drop the date or move it to long term. Set it to 0 to turn this off.").addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder("3").setValue(String(this.plugin.settings.postponeAsk)).onChange(async (value) => {
+          this.plugin.settings.postponeAsk = normalizeAutoDeleteDays(value);
+          await this.plugin.saveSettings();
+        });
+      });
+      new Setting(sectorsSection).setName("Intention for the week").setDesc("After the weekly review, ask for one sentence about what should have happened by the end of next week, and show it at the top of today.").addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.weeklyIntentionEnabled).onChange(async (value) => {
+          this.plugin.settings.weeklyIntentionEnabled = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
         });

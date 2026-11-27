@@ -1,5 +1,5 @@
 import { Notice, Plugin, TAbstractFile } from "obsidian";
-import type { BelkiSettings } from "./types";
+import type { BelkiSettings, Task } from "./types";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./views/TaskBoardView";
 import { TodaySidebarView, VIEW_TYPE_BELKI_TODAY } from "./views/TodaySidebarView";
 import { addDaysIso, isIsoDate, todayIso } from "./dateUtils";
@@ -14,10 +14,13 @@ import { CalendarService } from "./calendarService";
 import { entriesForYear, isMissedMilestone, upcomingEntries } from "./planning";
 import { formFromRule, ruleFromForm } from "./recurrenceForm";
 import { buildReviewSummary, snapshotForReview } from "./reviewSummary";
-import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeOptionalPath, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks, normalizeCalendars, normalizeHour, normalizeTimeBlocks } from "./settings";
+import { BelkiSettingTab, DEFAULT_SETTINGS, normalizeAutoDeleteDays, normalizeDataFolderPath, normalizeFontOption, normalizeIcons, normalizeLabelColorMap, normalizeLabelRegistry, normalizeOverdueRange, normalizeReviewNotesFolder, normalizeOptionalPath, normalizeRowLayout, normalizeSortMode, normalizeStartView, normalizeThemeColors, normalizeVisualStyle, normalizeThemePreset, normalizeWaitingHighlightDays, normalizeWaitingSince, normalizeSectorSince, normalizeStuckWeeks, normalizePostponeAsk, normalizePostponeCounts, normalizeWeeklyIntention, normalizeCalendars, normalizeHour, normalizeTimeBlocks } from "./settings";
 import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince } from "./changelog";
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { BrainDumpModal, brainDumpLines } from "./views/BrainDumpModal";
+import { PostponeModal, editWeeklyIntention, longTermSector } from "./views/NudgeModals";
+import { intentionIsCurrent, isPostponement, prunePostponeCounts } from "./postpone";
+import { normalizeTaskProject } from "./projects";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { layoutLanes, taskDueForEvent } from "./views/dayPlan";
 import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, restoreDeletedTasks, snapshotDeletion } from "./taskStore";
@@ -37,13 +40,14 @@ export default class BelkiPlugin extends Plugin {
     this.calendar = new CalendarService(this.app, this.settings, `${this.manifest.dir}/calendar-cache.json`);
     // Registered before any view subscribes, so views render with the updated record.
     this.store.subscribe(() => this.syncWaitingSince());
+    this.store.onPostpone = (tasks) => this.recordPostponements(tasks);
     this.registerView(
       VIEW_TYPE_BELKI,
       (leaf) => new TaskBoardView(leaf, this.store, this.settings, () => this.saveSettings(), this.calendar)
     );
     this.registerView(
       VIEW_TYPE_BELKI_TODAY,
-      (leaf) => new TodaySidebarView(leaf, this.store, this.settings, this.calendar)
+      (leaf) => new TodaySidebarView(leaf, this.store, this.settings, this.calendar, () => this.saveSettings())
     );
     this.addRibbonIcon("check-circle-2", "Open Sector Tasks", () => {
       void this.activateView();
@@ -128,6 +132,13 @@ export default class BelkiPlugin extends Plugin {
       }
     });
     this.addCommand({
+      id: "weekly-intention",
+      name: "Set intention for the week",
+      callback: () => {
+        this.askWeeklyIntention();
+      }
+    });
+    this.addCommand({
       id: "open-today-sidebar",
       name: "Open Today sidebar",
       callback: () => {
@@ -188,6 +199,47 @@ export default class BelkiPlugin extends Plugin {
     }
   }
   /** Loads settings; returns false when there was no saved data yet (a fresh install). */
+  /** "Not today": count moves to a later date; after enough of them, ask what to do. */
+  recordPostponements(tasks: Task[]) {
+    const limit = this.settings.postponeAsk;
+    if (!limit) return;
+    const counts = this.settings.postponeCounts;
+    let ask: Task | null = null;
+    for (const task of tasks) {
+      counts[task.id] = (counts[task.id] || 0) + 1;
+      if (counts[task.id] >= limit && tasks.length === 1) ask = task;
+    }
+    void this.saveSettings();
+    if (!ask) return;
+    const task = ask;
+    const reset = () => {
+      delete this.settings.postponeCounts[task.id];
+      void this.saveSettings();
+    };
+    const longTerm = longTermSector(this.settings.sectors);
+    new PostponeModal(this.app, task, counts[task.id], {
+      smaller: () => {
+        reset();
+        void this.store.editTaskInEditor(task.id);
+      },
+      dropDate: () => {
+        reset();
+        void this.store.updateTask(task.id, { due: void 0 });
+      },
+      longTerm: longTerm && normalizeTaskProject(task.project)?.toLowerCase() !== longTerm.tag.toLowerCase() ? {
+        label: longTerm.label,
+        move: () => {
+          reset();
+          void this.store.updateTask(task.id, { project: longTerm.tag });
+        }
+      } : void 0,
+      keep: reset
+    }).open();
+  }
+  /** The weekly intention dialog; an empty answer clears it. */
+  askWeeklyIntention() {
+    editWeeklyIntention(this.app, this.settings, () => this.saveSettings(), () => this.refreshBelkiViews());
+  }
   openBrainDump() {
     new BrainDumpModal(
       this.app,
@@ -242,6 +294,10 @@ export default class BelkiPlugin extends Plugin {
       waitingSince: normalizeWaitingSince(saved == null ? void 0 : saved.waitingSince),
       waitingHighlightDays: normalizeWaitingHighlightDays(saved == null ? void 0 : saved.waitingHighlightDays),
       sectorSince: normalizeSectorSince(saved == null ? void 0 : saved.sectorSince),
+      postponeAsk: normalizePostponeAsk(saved == null ? void 0 : saved.postponeAsk),
+      postponeCounts: normalizePostponeCounts(saved == null ? void 0 : saved.postponeCounts),
+      weeklyIntentionEnabled: (saved == null ? void 0 : saved.weeklyIntentionEnabled) !== false,
+      weeklyIntention: normalizeWeeklyIntention(saved == null ? void 0 : saved.weeklyIntention),
       stuckWeeks: normalizeStuckWeeks(saved == null ? void 0 : saved.stuckWeeks),
       reviewNotes: (saved == null ? void 0 : saved.reviewNotes) === true,
       focusSection: (saved == null ? void 0 : saved.focusSection) === true,
@@ -283,7 +339,9 @@ export default class BelkiPlugin extends Plugin {
     if (this.store.getTasks().length > 0) this.seedWaitingFromCreated = false;
     const stays = reconcileSectorSince(this.settings.sectorSince, this.store.getTasks(), todayIso());
     if (stays) this.settings.sectorSince = stays;
-    if (!next && !stays) return;
+    const counts = prunePostponeCounts(this.settings.postponeCounts, this.store.getTasks());
+    if (counts) this.settings.postponeCounts = counts;
+    if (!next && !stays && !counts) return;
     if (next) this.settings.waitingSince = next;
     void this.saveSettings();
   }
@@ -476,6 +534,10 @@ export const __testables = {
   titleAsLink,
   taskDueForEvent,
   layoutLanes,
+  isPostponement,
+  prunePostponeCounts,
+  intentionIsCurrent,
+  longTermSector,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,

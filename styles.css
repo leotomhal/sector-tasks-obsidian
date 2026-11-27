@@ -3763,3 +3763,85 @@ button.belki-editor-chip {
 .belki-planning-modal-when.is-editable:hover {
   color: var(--text-accent);
 }
+
+/* Weekly intention at the top of today */
+.belki-intention {
+  align-items: baseline;
+  background: var(--background-secondary);
+  border-left: 3px solid var(--interactive-accent);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+}
+
+.belki-intention-label {
+  color: var(--text-muted);
+  flex: none;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.belki-intention-text {
+  flex: 1;
+  font-style: italic;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.belki-root button.belki-intention-clear,
+.belki-today-panel button.belki-intention-clear {
+  align-self: center;
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--text-faint);
+  flex: none;
+  height: 22px;
+  padding: 0;
+  width: 22px;
+}
+
+.belki-today-panel .belki-intention {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+}
+
+.belki-intention-input {
+  box-sizing: border-box;
+  font-size: var(--font-text-size);
+  resize: vertical;
+  width: 100%;
+}
+
+/* "Not today": what to do with a task moved again and again */
+.belki-postpone-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+button.belki-postpone-choice {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: auto;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.belki-postpone-choice-title {
+  font-weight: 600;
+}
+
+.belki-postpone-choice-hint {
+  font-size: var(--font-ui-smaller);
+  opacity: 0.8;
+}

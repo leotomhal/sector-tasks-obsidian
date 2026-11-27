@@ -20,6 +20,7 @@ import type { CalendarService } from "../calendarService";
 import type { CalEvent } from "../calendar";
 import { EventModal, calendarItems, taskDueForEvent, planningItems, renderAgenda, renderBlockChip, renderTimeline } from "./dayPlan";
 import type { AgendaItem, TimelineHost } from "./dayPlan";
+import { editWeeklyIntention, renderIntentionBanner } from "./NudgeModals";
 import { snapshotForReview, writeReviewSummaryNote } from "../reviewSummary";
 
 export const VIEW_TYPE_BELKI = "sector-task-board";
@@ -520,6 +521,7 @@ export class TaskBoardView extends ItemView {
   stampReviewCompleted(type: string) {
     if (type === "weekly") {
       this.settings.lastWeeklyReviewKey = currentIsoWeekKey();
+      if (this.settings.weeklyIntentionEnabled) editWeeklyIntention(this.app, this.settings, () => this.saveSettings(), () => this.render());
     } else if (type === "monthly") {
       this.settings.lastMonthlyReviewKey = currentMonthKey();
       this.settings.lastWeeklyReviewKey = currentIsoWeekKey();
@@ -706,6 +708,7 @@ export class TaskBoardView extends ItemView {
       column = layout.createDiv({ cls: "belki-today-list" });
       timelinePane = layout.createDiv({ cls: "belki-today-timeline" });
     }
+    if (this.mode === "today") renderIntentionBanner(column, this.app, this.settings, () => this.saveSettings(), () => this.render());
     if (this.mode === "today") this.renderDayPlan(column);
     else if (this.mode === "upcoming") this.renderUpcomingAgenda(column);
     if (timelinePane) renderTimeline(timelinePane, this.timelineHost(), this.calendar.events(), todayIso(), nowMinutes());

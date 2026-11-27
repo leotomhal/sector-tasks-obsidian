@@ -3,6 +3,7 @@ import type { BelkiSettings, CalendarFeed, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
 import { ConfirmModal } from "./ConfirmModal";
+import { renderIntentionBanner } from "./NudgeModals";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
@@ -142,8 +143,10 @@ export class TodaySidebarView extends ItemView {
   collapsedSections?: Set<string>;
   calendar: CalendarService;
   unsubscribeCalendar?: () => void;
-  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, calendar: CalendarService) {
+  saveSettings: () => Promise<void>;
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, calendar: CalendarService, saveSettings: () => Promise<void>) {
     super(leaf);
+    this.saveSettings = saveSettings;
     this.store = store;
     this.settings = settings;
     this.calendar = calendar;
@@ -212,6 +215,7 @@ export class TodaySidebarView extends ItemView {
     addButton.addEventListener("click", () => {
       void this.store.createTaskInEditor("");
     });
+    renderIntentionBanner(container, this.app, this.settings, this.saveSettings, () => this.render());
     const archivedSet = new Set(this.settings.archivedProjects);
     const open = this.store.getTasks().filter(
       (t) => !t.completed && !archivedSet.has(normalizeTaskProject(t.project) || "")

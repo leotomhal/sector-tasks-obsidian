@@ -5,6 +5,7 @@ import { dedupeLabels } from "./labels";
 import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
+import { isPostponement } from "./postpone";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
@@ -20,6 +21,8 @@ export class TaskStore {
   lastCompletion: { id: string; title: string; patch: Partial<Task> } | null;
   /** Tasks whose line has no 🆔 yet, so their id only lives until the file is read again. */
   idsNotInFile: Set<string> = new Set();
+  /** Called with the tasks whose due date a change moved later (for \"not today\"). */
+  onPostpone?: (tasks: Task[]) => void;
   /** The tasks removed by the last delete (one, or a whole selection), for Undo. */
   lastDeletion: DeletedTaskSnapshot[] | null;
   constructor(app: App, settings: BelkiSettings) {
@@ -307,6 +310,7 @@ export class TaskStore {
   /** Applies a separate patch per task (e.g. snoozing each from its own date) in one save. */
   async updateEachTask(patches: Map<string, Partial<Task>>) {
     if (patches.size === 0) return;
+    const postponed = this.tasks.filter((t) => patches.has(t.id) && isPostponement(t, patches.get(t.id) || {})).map((t) => ({ id: t.id, due: patches.get(t.id)?.due }));
     let changed = false;
     this.tasks = this.tasks.map((candidate) => {
       const patch = patches.get(candidate.id);
@@ -327,6 +331,9 @@ export class TaskStore {
     });
     if (!changed) return;
     await this.save();
+    // Only count moves that were actually saved (a conflicting save drops them).
+    const applied = postponed.map((p) => this.tasks.find((t) => t.id === p.id && t.due === p.due)).filter((t): t is Task => Boolean(t));
+    if (applied.length && this.onPostpone) this.onPostpone(applied);
   }
   async toggleComplete(id: string) {
     const task = this.tasks.find((t) => t.id === id);
