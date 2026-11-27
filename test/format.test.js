@@ -54,6 +54,7 @@ const {
   linkedNoteNames,
   titleAsLink,
   taskDueForEvent,
+  layoutLanes,
   fillNoteTemplate,
   brainDumpLines,
   formFromRule,
@@ -666,4 +667,11 @@ test("linkedNoteNames lists every linked note once", () => {
 test("taskDueForEvent uses the event day, or today once it has started", () => {
   assert.equal(taskDueForEvent({ startDay: "2026-11-20" }, "2026-11-15"), "2026-11-20");
   assert.equal(taskDueForEvent({ startDay: "2026-11-10" }, "2026-11-15"), "2026-11-15");
+});
+
+test("layoutLanes puts overlapping timeline items side by side", () => {
+  // 9-10 and 9:30-10:30 overlap; 11-12 stands alone; 10-11 fits back into lane 0.
+  const lanes = layoutLanes([{ s: 540, e: 600 }, { s: 570, e: 630 }, { s: 660, e: 720 }, { s: 600, e: 660 }]);
+  assert.deepEqual(lanes, [{ lane: 0, lanes: 2 }, { lane: 1, lanes: 2 }, { lane: 0, lanes: 1 }, { lane: 0, lanes: 2 }]);
+  assert.deepEqual(layoutLanes([]), []);
 });

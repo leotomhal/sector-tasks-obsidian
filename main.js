@@ -8267,6 +8267,37 @@ var PX_PER_MIN = 1.1;
 function blockConflicts(block, events, day) {
   return eventsOnDay(events, day).some((p) => !p.allDay && block.start < p.endMin && p.startMin < block.start + block.duration);
 }
+function layoutLanes(ranges) {
+  const order = ranges.map((r, i) => ({ ...r, i })).sort((a, b) => a.s - b.s || b.e - a.e);
+  const out = ranges.map(() => ({ lane: 0, lanes: 1 }));
+  let group = [];
+  let groupEnd = -Infinity;
+  let laneEnds = [];
+  const close = () => {
+    for (const i of group) out[i].lanes = laneEnds.length;
+    group = [];
+    laneEnds = [];
+  };
+  for (const item of order) {
+    if (item.s >= groupEnd) {
+      close();
+      groupEnd = -Infinity;
+    }
+    let lane = laneEnds.findIndex((end) => end <= item.s);
+    if (lane < 0) lane = laneEnds.push(item.e) - 1;
+    else laneEnds[lane] = item.e;
+    out[item.i].lane = lane;
+    group.push(item.i);
+    groupEnd = Math.max(groupEnd, item.e);
+  }
+  close();
+  return out;
+}
+function placeInLane(item, from, to, slot) {
+  const width = (to - from) / slot.lanes;
+  const left = from + slot.lane * width;
+  item.setCssStyles({ left: `${left}%`, right: `${100 - left - width}%` });
+}
 function renderTimeline(parent, host, events, day, nowMin) {
   const start = Math.min(host.dayStartHour, 23) * 60;
   const end = Math.max(start + 60, Math.min(host.dayEndHour, 24) * 60);
@@ -8302,33 +8333,33 @@ function renderTimeline(parent, host, events, day, nowMin) {
   }
   const timed = eventsOnDay(events, day).filter((p) => !p.allDay && p.endMin > start && p.startMin < end);
   const hasEvents = timed.length > 0;
-  for (const piece of timed) {
-    const s = Math.max(start, piece.startMin);
-    const e = Math.min(end, Math.max(piece.endMin, piece.startMin + 15));
+  const eventRanges = timed.map((piece) => ({ s: Math.max(start, piece.startMin), e: Math.min(end, Math.max(piece.endMin, piece.startMin + 15)) }));
+  const eventLanes = layoutLanes(eventRanges);
+  timed.forEach((piece, index) => {
+    const { s, e } = eventRanges[index];
     const item = grid.createEl("button", { cls: "belki-timeline-item belki-timeline-event", attr: { type: "button" } });
+    if (eventLanes[index].lanes > 1) placeInLane(item, 0, 54, eventLanes[index]);
     item.setCssStyles({ top: `${(s - start) * PX_PER_MIN + 1}px`, height: `${(e - s) * PX_PER_MIN - 2}px` });
     const color = host.eventColor(piece.event);
     if (color) item.setCssProps({ "--belki-event-color": color });
     item.setText(piece.event.title);
     item.createEl("small", { text: `${formatMinutes(piece.startMin)}–${formatMinutes(piece.endMin)}` });
     item.addEventListener("click", () => host.openEvent(piece.event));
-  }
-  for (const block of host.blocks) {
-    const title = host.taskTitle(block.taskId);
-    if (!title) continue;
-    const s = Math.max(start, block.start);
-    const e = Math.min(end, block.start + block.duration);
-    if (e <= s) continue;
+  });
+  const shown = host.blocks.map((block) => ({ block, title: host.taskTitle(block.taskId), s: Math.max(start, block.start), e: Math.min(end, block.start + block.duration) })).filter((b) => b.title !== null && b.e > b.s);
+  const blockLanes = layoutLanes(shown);
+  shown.forEach(({ block, title, s, e }, index) => {
     const conflict = blockConflicts(block, events, day);
     const item = grid.createEl("button", { cls: "belki-timeline-item belki-timeline-block", attr: { type: "button" } });
     item.toggleClass("has-events", hasEvents);
     item.toggleClass("is-conflict", conflict);
     item.toggleClass("is-done", host.taskDone(block.taskId));
     item.setCssStyles({ top: `${(s - start) * PX_PER_MIN + 1}px`, height: `${(e - s) * PX_PER_MIN - 2}px` });
+    if (blockLanes[index].lanes > 1) placeInLane(item, hasEvents ? 56 : 0, 100, blockLanes[index]);
     item.setText(title);
     item.createEl("small", { text: `${formatMinutes(block.start)}–${formatMinutes(block.start + block.duration)}${conflict ? " · overlaps" : ""}` });
     item.addEventListener("click", () => new BlockModal(host, block, title).open());
-  }
+  });
   if (nowMin >= start && nowMin <= end) grid.createDiv({ cls: "belki-timeline-now", attr: { "aria-label": `Now ${formatMinutes(nowMin)}` } }).setCssStyles({ top: top(nowMin) });
 }
 var BlockModal = class extends import_obsidian2.Modal {
@@ -12911,6 +12942,12 @@ var TaskBoardView = class extends import_obsidian7.ItemView {
       },
       placeBlock: (id, start) => {
         var _a;
+        if (this.store.idsNotInFile.has(id)) {
+          void this.store.ensureIdInFile(id).then((ok) => {
+            if (ok) this.timelineHost().placeBlock(id, start);
+          });
+          return;
+        }
         const blocks = this.todaysBlocks().filter((b) => b.taskId !== id);
         const previous = this.todaysBlocks().find((b) => b.taskId === id);
         const end = Math.max(this.settings.dayEndHour, this.settings.dayStartHour + 1) * 60;
@@ -13945,6 +13982,8 @@ var CalendarService = class {
     this.feeds = /* @__PURE__ */ new Map();
     this.listeners = /* @__PURE__ */ new Set();
     this.refreshing = false;
+    /** When the last refresh started (ms), successful or not, so a failing feed isn't retried every minute. */
+    this.lastAttemptMs = 0;
     this.app = app;
     this.settings = settings;
     this.cachePath = cachePath;
@@ -13987,6 +14026,12 @@ var CalendarService = class {
       return { feed, error: ((_a = this.feeds.get(feed.id)) == null ? void 0 : _a.error) || "" };
     }).filter((e) => e.error);
   }
+  /** Whether the next automatic refresh is due: `minutes` after the last attempt or the last good sync. */
+  refreshDue(minutes, now = Date.now()) {
+    const synced = this.lastSynced();
+    const last = Math.max(this.lastAttemptMs, synced ? new Date(synced).getTime() : 0);
+    return now - last >= minutes * 6e4;
+  }
   async loadCache() {
     try {
       if (!await this.app.vault.adapter.exists(this.cachePath)) return;
@@ -14015,6 +14060,8 @@ var CalendarService = class {
    */
   async refresh() {
     if (!this.enabled || this.refreshing) return;
+    this.lastAttemptMs = Date.now();
+    if (!this.activeFeeds().length && !this.feeds.size) return;
     this.refreshing = true;
     try {
       const year = Number(todayIso().slice(0, 4));
@@ -14523,6 +14570,8 @@ function fillNoteTemplate(template, values) {
 // src/taskStore.ts
 var TaskStore = class {
   constructor(app, settings) {
+    /** Tasks whose line has no 🆔 yet, so their id only lives until the file is read again. */
+    this.idsNotInFile = /* @__PURE__ */ new Set();
     this.app = app;
     this.settings = settings;
     this.tasks = [];
@@ -14671,10 +14720,13 @@ var TaskStore = class {
     const blocks = [];
     const tasks = [];
     let order = 0;
+    this.idsNotInFile = /* @__PURE__ */ new Set();
     for (const line of lines) {
       if (isTaskLine(line) && hasTaskMarker(line)) {
-        const parsed = parseTaskLine(line, createId(), order);
+        const freshId = createId();
+        const parsed = parseTaskLine(line, freshId, order);
         if (parsed) {
+          if (parsed.task.id === freshId) this.idsNotInFile.add(freshId);
           parsed.task.sourcePath = this.filePath;
           tasks.push(parsed.task);
           blocks.push({ type: "task", taskId: parsed.task.id });
@@ -14760,6 +14812,16 @@ var TaskStore = class {
     if (byId) return byId;
     const same = this.tasks.filter((t) => t.title === task.title && t.due === task.due && t.start === task.start && Boolean(t.planning) === Boolean(task.planning));
     return same.length === 1 ? same[0] : void 0;
+  }
+  /**
+   * Makes sure a task's id is written to the file (as 🆔) before something in
+   * the plugin's data refers to it, like a time block. Returns false if that
+   * save didn't go through.
+   */
+  async ensureIdInFile(id) {
+    if (!this.idsNotInFile.has(id)) return this.tasks.some((t) => t.id === id);
+    await this.save();
+    return this.tasks.some((t) => t.id === id) && !this.idsNotInFile.has(id);
   }
   async editTaskInEditor(id) {
     const current = this.tasks.find((t) => t.id === id);
@@ -15347,9 +15409,7 @@ var BelkiPlugin = class extends import_obsidian13.Plugin {
       void this.calendar.loadCache().then(() => this.calendar.refresh());
     });
     this.registerInterval(window.setInterval(() => {
-      const last = this.calendar.lastSynced();
-      const due = !last || Date.now() - new Date(last).getTime() >= this.settings.calendarRefreshMinutes * 6e4;
-      if (due) void this.calendar.refresh();
+      if (this.calendar.refreshDue(this.settings.calendarRefreshMinutes)) void this.calendar.refresh();
     }, 6e4));
     this.addCommand({
       id: "refresh-calendars",
@@ -15749,6 +15809,7 @@ var __testables = {
   linkedNoteNames,
   titleAsLink,
   taskDueForEvent,
+  layoutLanes,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,

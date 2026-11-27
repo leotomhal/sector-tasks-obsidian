@@ -23,6 +23,8 @@ export class CalendarService {
   feeds = new Map<string, FeedState>();
   listeners = new Set<() => void>();
   refreshing = false;
+  /** When the last refresh started (ms), successful or not, so a failing feed isn't retried every minute. */
+  lastAttemptMs = 0;
   constructor(app: App, settings: BelkiSettings, cachePath: string) {
     this.app = app;
     this.settings = settings;
@@ -61,6 +63,12 @@ export class CalendarService {
       .map((feed) => ({ feed, error: this.feeds.get(feed.id)?.error || "" }))
       .filter((e) => e.error);
   }
+  /** Whether the next automatic refresh is due: `minutes` after the last attempt or the last good sync. */
+  refreshDue(minutes: number, now = Date.now()): boolean {
+    const synced = this.lastSynced();
+    const last = Math.max(this.lastAttemptMs, synced ? new Date(synced).getTime() : 0);
+    return now - last >= minutes * 60000;
+  }
   async loadCache() {
     try {
       if (!(await this.app.vault.adapter.exists(this.cachePath))) return;
@@ -89,6 +97,8 @@ export class CalendarService {
    */
   async refresh(): Promise<void> {
     if (!this.enabled || this.refreshing) return;
+    this.lastAttemptMs = Date.now();
+    if (!this.activeFeeds().length && !this.feeds.size) return;
     this.refreshing = true;
     try {
       // From the start of last year to the end of next year: enough for the

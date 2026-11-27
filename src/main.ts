@@ -19,7 +19,7 @@ import { bundledReleaseNotes, compareVersions, parseChangelog, releaseNotesSince
 import { ReleaseNotesModal } from "./views/ReleaseNotesModal";
 import { BrainDumpModal, brainDumpLines } from "./views/BrainDumpModal";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
-import { taskDueForEvent } from "./views/dayPlan";
+import { layoutLanes, taskDueForEvent } from "./views/dayPlan";
 import { TaskStore, completionUndoPatch, stripListMarker, reinsertDeletedTask, restoreDeletedTasks, snapshotDeletion } from "./taskStore";
 import { applySectorSettings, ordinal, ensureSectorInLine, ensureTaskMarker, extractTags, normalizeSectors, parseTaskLine, parseTasksRecurrence, serializeTaskLine, serializeTasksRecurrence } from "./tasksFormat";
 
@@ -62,9 +62,7 @@ export default class BelkiPlugin extends Plugin {
     });
     // Check once a minute whether a calendar refresh is due.
     this.registerInterval(window.setInterval(() => {
-      const last = this.calendar.lastSynced();
-      const due = !last || Date.now() - new Date(last).getTime() >= this.settings.calendarRefreshMinutes * 60000;
-      if (due) void this.calendar.refresh();
+      if (this.calendar.refreshDue(this.settings.calendarRefreshMinutes)) void this.calendar.refresh();
     }, 60000));
     this.addCommand({
       id: "refresh-calendars",
@@ -477,6 +475,7 @@ export const __testables = {
   linkedNoteNames,
   titleAsLink,
   taskDueForEvent,
+  layoutLanes,
   fillNoteTemplate,
   brainDumpLines,
   parseTaskLine,

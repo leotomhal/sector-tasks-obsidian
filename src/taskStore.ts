@@ -18,6 +18,8 @@ export class TaskStore {
   writing: boolean;
   lastKnownDiskContent: string | null;
   lastCompletion: { id: string; title: string; patch: Partial<Task> } | null;
+  /** Tasks whose line has no 🆔 yet, so their id only lives until the file is read again. */
+  idsNotInFile: Set<string> = new Set();
   /** The tasks removed by the last delete (one, or a whole selection), for Undo. */
   lastDeletion: DeletedTaskSnapshot[] | null;
   constructor(app: App, settings: BelkiSettings) {
@@ -169,10 +171,14 @@ export class TaskStore {
     const blocks: FileBlock[] = [];
     const tasks: Task[] = [];
     let order = 0;
+    this.idsNotInFile = new Set();
     for (const line of lines) {
       if (isTaskLine(line) && hasTaskMarker(line)) {
-        const parsed = parseTaskLine(line, createId(), order);
+        const freshId = createId();
+        const parsed = parseTaskLine(line, freshId, order);
         if (parsed) {
+          // A line without 🆔 gets a new id on every read until it's saved once.
+          if (parsed.task.id === freshId) this.idsNotInFile.add(freshId);
           parsed.task.sourcePath = this.filePath;
           tasks.push(parsed.task);
           blocks.push({ type: "task", taskId: parsed.task.id });
@@ -258,6 +264,16 @@ export class TaskStore {
     if (byId) return byId;
     const same = this.tasks.filter((t) => t.title === task.title && t.due === task.due && t.start === task.start && Boolean(t.planning) === Boolean(task.planning));
     return same.length === 1 ? same[0] : void 0;
+  }
+  /**
+   * Makes sure a task's id is written to the file (as 🆔) before something in
+   * the plugin's data refers to it, like a time block. Returns false if that
+   * save didn't go through.
+   */
+  async ensureIdInFile(id: string): Promise<boolean> {
+    if (!this.idsNotInFile.has(id)) return this.tasks.some((t) => t.id === id);
+    await this.save();
+    return this.tasks.some((t) => t.id === id) && !this.idsNotInFile.has(id);
   }
   async editTaskInEditor(id: string) {
     const current = this.tasks.find((t) => t.id === id);

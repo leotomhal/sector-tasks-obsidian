@@ -1785,6 +1785,13 @@ export class TaskBoardView extends ItemView {
       taskTitle: (id) => tasks.get(id)?.title ?? null,
       taskDone: (id) => tasks.get(id)?.completed === true,
       placeBlock: (id, start) => {
+        // The block refers to the task by id, so the id has to be in the file first.
+        if (this.store.idsNotInFile.has(id)) {
+          void this.store.ensureIdInFile(id).then((ok) => {
+            if (ok) this.timelineHost().placeBlock(id, start);
+          });
+          return;
+        }
         const blocks = this.todaysBlocks().filter((b) => b.taskId !== id);
         const previous = this.todaysBlocks().find((b) => b.taskId === id);
         const end = Math.max(this.settings.dayEndHour, this.settings.dayStartHour + 1) * 60;
