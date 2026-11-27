@@ -14,10 +14,11 @@ import type { BelkiSettings, CalendarFeed, Task, TimeBlock } from "../types";
 import { TaskStore } from "../taskStore";
 import { formatWaitingAge, waitingDays } from "../waiting";
 import { stuckWeeks } from "../stale";
-import { upcomingEntries } from "../planning";
+import { isEntryOn, upcomingEntries } from "../planning";
 import { PlanningEntryModal, YearPlanState, renderPlanningStrip, renderYearPlan } from "./yearPlan";
 import type { CalendarService } from "../calendarService";
 import type { CalEvent } from "../calendar";
+import { eventsOnDay, formatMinutes } from "../calendar";
 import { EventModal, calendarItems, taskDueForEvent, planningItems, renderAgenda, renderBlockChip, renderTimeline } from "./dayPlan";
 import type { AgendaItem, TimelineHost } from "./dayPlan";
 import { editWeeklyIntention, renderIntentionBanner } from "./NudgeModals";
@@ -692,6 +693,19 @@ export class TaskBoardView extends ItemView {
     // (on phones: one at a time, switched by a List/Timeline toggle).
     let column: HTMLElement = main;
     let timelinePane: HTMLElement | null = null;
+    if (this.mode === "upcoming" && !Platform.isPhone) {
+      const toggle = header.createDiv({ cls: "belki-pane-toggle belki-view-toggle" });
+      for (const [week, label] of [[false, "List"], [true, "Week"]] as const) {
+        const button = toggle.createEl("button", { text: label, attr: { type: "button" } });
+        button.toggleClass("is-on", this.settings.upcomingWeekView === week);
+        button.addEventListener("click", () => {
+          this.settings.upcomingWeekView = week;
+          void this.saveSettings();
+          this.render();
+        });
+      }
+      main.toggleClass("has-week", this.weekView());
+    }
     if (this.mode === "today" && this.settings.timeBlocking) {
       main.addClass("has-timeline");
       const toggle = header.createDiv({ cls: "belki-pane-toggle" });
@@ -710,7 +724,7 @@ export class TaskBoardView extends ItemView {
     }
     if (this.mode === "today") renderIntentionBanner(column, this.app, this.settings, () => this.saveSettings(), () => this.render());
     if (this.mode === "today") this.renderDayPlan(column);
-    else if (this.mode === "upcoming") this.renderUpcomingAgenda(column);
+    else if (this.mode === "upcoming" && !this.weekView()) this.renderUpcomingAgenda(column);
     if (timelinePane) renderTimeline(timelinePane, this.timelineHost(), this.calendar.events(), todayIso(), nowMinutes());
     const sections = column.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
@@ -990,15 +1004,18 @@ export class TaskBoardView extends ItemView {
       return;
     }
     if (this.mode === "upcoming") {
+      const weekEnd = shiftIsoDate(todayIso(), 7);
+      if (this.weekView()) this.renderWeek(parent, active);
       const groups = groupByDueDate(
-        active.filter((task) => isAfterToday(task.due))
+        active.filter((task) => isAfterToday(task.due) && (!this.weekView() || (task.due || "") > weekEnd))
       );
+      if (this.weekView() && groups.length) parent.createDiv({ cls: "belki-week-later", text: "Later" });
       for (const [date, tasks] of groups) {
         const section2 = this.createSection(parent, formatGroupHeader(date), tasks.length);
         this.enableDueDateDrop(section2, date);
         this.renderTaskList(section2, this.sortTasks(tasks));
       }
-      if (groups.length === 0) {
+      if (groups.length === 0 && !this.weekView()) {
         this.renderEmptySection(parent, "No upcoming tasks.");
       }
       return;
@@ -1748,6 +1765,86 @@ export class TaskBoardView extends ItemView {
       this.settings.planningEnabled ? { label: "Year plan \u2192", onClick: () => this.openYearPlan() } : void 0);
   }
   /** Upcoming: calendar events and planning entries for the next two weeks. */
+  /** Week view only on screens wide enough for seven columns. */
+  weekView(): boolean {
+    return this.settings.upcomingWeekView === true && !Platform.isPhone;
+  }
+  /** Upcoming as seven columns (tomorrow onwards): events, year-plan entries, and tasks to drag between days. */
+  renderWeek(parent: HTMLElement, active: Task[]) {
+    const today = todayIso();
+    const days = Array.from({ length: 7 }, (_, i) => shiftIsoDate(today, i + 1));
+    const feeds = this.feedsById();
+    const events = this.calendar.enabled ? this.calendar.events() : [];
+    const planning = this.settings.planningEnabled ? upcomingEntries(this.store.getPlanningEntries(), today, 8) : [];
+    const grid = parent.createDiv({ cls: "belki-week" });
+    for (const day of days) {
+      const [y, m, d] = day.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      const col = grid.createDiv({ cls: "belki-week-day" });
+      col.toggleClass("is-weekend", date.getDay() === 0 || date.getDay() === 6);
+      this.enableDueDateDrop(col, day);
+      const dayTasks = this.sortTasks(active.filter((t) => t.due === day));
+      const head = col.createDiv({ cls: "belki-week-head" });
+      head.createSpan({ cls: "belki-week-weekday", text: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date) });
+      head.createSpan({ cls: "belki-week-date", text: new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date) });
+      if (dayTasks.length) head.createSpan({ cls: "belki-week-count", text: String(dayTasks.length) });
+      const agenda = col.createDiv({ cls: "belki-week-agenda" });
+      for (const piece of eventsOnDay(events, day)) {
+        const row = agenda.createDiv({ cls: "belki-week-event", attr: { role: "button", tabindex: "0" } });
+        const color = feeds.get(piece.event.feedId)?.color;
+        if (color) row.setCssProps({ "--belki-event-color": color });
+        if (!piece.allDay) row.createSpan({ cls: "belki-week-event-time", text: formatMinutes(piece.startMin) });
+        row.createSpan({ cls: "belki-week-event-title", text: piece.event.title });
+        row.addEventListener("click", () => this.openEvent(piece.event));
+      }
+      for (const entry of planning.filter((e) => isEntryOn(e, day))) {
+        const row = agenda.createDiv({ cls: "belki-week-event is-planning", attr: { role: "button", tabindex: "0" } });
+        row.createSpan({ cls: "belki-year-diamond" });
+        row.createSpan({ cls: "belki-week-event-title", text: entry.title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target: string, _a, alias?: string) => alias || target) });
+        row.addEventListener("click", () => new PlanningEntryModal(this, entry, false).open());
+      }
+      if (!agenda.childElementCount) agenda.remove();
+      const list = col.createDiv({ cls: "belki-week-tasks" });
+      for (const task of dayTasks) this.renderWeekCard(list, task);
+    }
+  }
+  /** A compact task card for the week view: check off, click to edit, drag to another day. */
+  renderWeekCard(parent: HTMLElement, task: Task) {
+    const card = parent.createDiv({ cls: "belki-week-task", attr: { draggable: "true" } });
+    const checkbox = card.createEl("button", { cls: `belki-task-checkbox ${getPriorityClass(task.priority)}`, attr: { type: "button", "aria-label": "Complete task" } });
+    const priorityColor = getPriorityColor(task.priority);
+    checkbox.setCssProps({ "--belki-priority-text": priorityColor.color, "--belki-priority-bg": priorityColor.light });
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.store.toggleComplete(task.id);
+    });
+    const body = card.createDiv({ cls: "belki-week-task-body" });
+    renderLinkedText(task.title, body.createDiv({ cls: "belki-week-task-title" }), this.app);
+    const sector = this.settings.sectors.find((s) => s.tag === normalizeTaskProject(task.project));
+    body.createDiv({ cls: "belki-week-task-sector", text: sector ? sector.label : INBOX_SECTOR });
+    card.addEventListener("click", () => {
+      void this.store.editTaskInEditor(task.id);
+    });
+    card.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showTaskContextMenu(this.store, task, event);
+    });
+    card.addEventListener("dragstart", (event) => {
+      this.draggedTaskIds = [task.id];
+      this.draggedTaskId = task.id;
+      card.addClass("is-dragging");
+      event.dataTransfer?.setData("application/x-belki-task-id", task.id);
+      event.dataTransfer?.setData("text/plain", task.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      this.showDropTargets([task]);
+    });
+    card.addEventListener("dragend", () => {
+      this.draggedTaskId = null;
+      this.draggedTaskIds = null;
+      card.removeClass("is-dragging");
+      this.clearDropTargets();
+    });
+  }
   renderUpcomingAgenda(parent: HTMLElement) {
     const today = todayIso();
     const items: AgendaItem[] = [];

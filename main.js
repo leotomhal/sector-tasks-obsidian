@@ -9210,6 +9210,7 @@ var DEFAULT_SETTINGS = {
   calendars: [],
   calendarRefreshMinutes: 30,
   timeBlocking: false,
+  upcomingWeekView: false,
   dayStartHour: 8,
   dayEndHour: 18,
   timeBlocks: { date: "", blocks: [] },
@@ -12066,6 +12067,19 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
     }
     let column = main;
     let timelinePane = null;
+    if (this.mode === "upcoming" && !import_obsidian9.Platform.isPhone) {
+      const toggle = header.createDiv({ cls: "belki-pane-toggle belki-view-toggle" });
+      for (const [week, label] of [[false, "List"], [true, "Week"]]) {
+        const button = toggle.createEl("button", { text: label, attr: { type: "button" } });
+        button.toggleClass("is-on", this.settings.upcomingWeekView === week);
+        button.addEventListener("click", () => {
+          this.settings.upcomingWeekView = week;
+          void this.saveSettings();
+          this.render();
+        });
+      }
+      main.toggleClass("has-week", this.weekView());
+    }
     if (this.mode === "today" && this.settings.timeBlocking) {
       main.addClass("has-timeline");
       const toggle = header.createDiv({ cls: "belki-pane-toggle" });
@@ -12084,7 +12098,7 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
     }
     if (this.mode === "today") renderIntentionBanner(column, this.app, this.settings, () => this.saveSettings(), () => this.render());
     if (this.mode === "today") this.renderDayPlan(column);
-    else if (this.mode === "upcoming") this.renderUpcomingAgenda(column);
+    else if (this.mode === "upcoming" && !this.weekView()) this.renderUpcomingAgenda(column);
     if (timelinePane) renderTimeline(timelinePane, this.timelineHost(), this.calendar.events(), todayIso(), nowMinutes());
     const sections = column.createDiv({ cls: "belki-sections" });
     this.renderTaskSections(sections, tasks);
@@ -12347,15 +12361,18 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
       return;
     }
     if (this.mode === "upcoming") {
+      const weekEnd = shiftIsoDate(todayIso(), 7);
+      if (this.weekView()) this.renderWeek(parent, active);
       const groups = groupByDueDate(
-        active.filter((task) => isAfterToday(task.due))
+        active.filter((task) => isAfterToday(task.due) && (!this.weekView() || (task.due || "") > weekEnd))
       );
+      if (this.weekView() && groups.length) parent.createDiv({ cls: "belki-week-later", text: "Later" });
       for (const [date, tasks] of groups) {
         const section2 = this.createSection(parent, formatGroupHeader(date), tasks.length);
         this.enableDueDateDrop(section2, date);
         this.renderTaskList(section2, this.sortTasks(tasks));
       }
-      if (groups.length === 0) {
+      if (groups.length === 0 && !this.weekView()) {
         this.renderEmptySection(parent, "No upcoming tasks.");
       }
       return;
@@ -13109,6 +13126,88 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
     );
   }
   /** Upcoming: calendar events and planning entries for the next two weeks. */
+  /** Week view only on screens wide enough for seven columns. */
+  weekView() {
+    return this.settings.upcomingWeekView === true && !import_obsidian9.Platform.isPhone;
+  }
+  /** Upcoming as seven columns (tomorrow onwards): events, year-plan entries, and tasks to drag between days. */
+  renderWeek(parent, active) {
+    var _a;
+    const today = todayIso();
+    const days = Array.from({ length: 7 }, (_, i) => shiftIsoDate(today, i + 1));
+    const feeds = this.feedsById();
+    const events = this.calendar.enabled ? this.calendar.events() : [];
+    const planning = this.settings.planningEnabled ? upcomingEntries(this.store.getPlanningEntries(), today, 8) : [];
+    const grid = parent.createDiv({ cls: "belki-week" });
+    for (const day of days) {
+      const [y, m, d] = day.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      const col = grid.createDiv({ cls: "belki-week-day" });
+      col.toggleClass("is-weekend", date.getDay() === 0 || date.getDay() === 6);
+      this.enableDueDateDrop(col, day);
+      const dayTasks = this.sortTasks(active.filter((t) => t.due === day));
+      const head = col.createDiv({ cls: "belki-week-head" });
+      head.createSpan({ cls: "belki-week-weekday", text: new Intl.DateTimeFormat("en-GB", { weekday: "short" }).format(date) });
+      head.createSpan({ cls: "belki-week-date", text: new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date) });
+      if (dayTasks.length) head.createSpan({ cls: "belki-week-count", text: String(dayTasks.length) });
+      const agenda = col.createDiv({ cls: "belki-week-agenda" });
+      for (const piece of eventsOnDay(events, day)) {
+        const row = agenda.createDiv({ cls: "belki-week-event", attr: { role: "button", tabindex: "0" } });
+        const color = (_a = feeds.get(piece.event.feedId)) == null ? void 0 : _a.color;
+        if (color) row.setCssProps({ "--belki-event-color": color });
+        if (!piece.allDay) row.createSpan({ cls: "belki-week-event-time", text: formatMinutes(piece.startMin) });
+        row.createSpan({ cls: "belki-week-event-title", text: piece.event.title });
+        row.addEventListener("click", () => this.openEvent(piece.event));
+      }
+      for (const entry of planning.filter((e) => isEntryOn(e, day))) {
+        const row = agenda.createDiv({ cls: "belki-week-event is-planning", attr: { role: "button", tabindex: "0" } });
+        row.createSpan({ cls: "belki-year-diamond" });
+        row.createSpan({ cls: "belki-week-event-title", text: entry.title.replace(/\[\[([^\]|]+)(\|([^\]]+))?\]\]/g, (_m, target, _a2, alias) => alias || target) });
+        row.addEventListener("click", () => new PlanningEntryModal(this, entry, false).open());
+      }
+      if (!agenda.childElementCount) agenda.remove();
+      const list = col.createDiv({ cls: "belki-week-tasks" });
+      for (const task of dayTasks) this.renderWeekCard(list, task);
+    }
+  }
+  /** A compact task card for the week view: check off, click to edit, drag to another day. */
+  renderWeekCard(parent, task) {
+    const card = parent.createDiv({ cls: "belki-week-task", attr: { draggable: "true" } });
+    const checkbox = card.createEl("button", { cls: `belki-task-checkbox ${getPriorityClass(task.priority)}`, attr: { type: "button", "aria-label": "Complete task" } });
+    const priorityColor = getPriorityColor(task.priority);
+    checkbox.setCssProps({ "--belki-priority-text": priorityColor.color, "--belki-priority-bg": priorityColor.light });
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.store.toggleComplete(task.id);
+    });
+    const body = card.createDiv({ cls: "belki-week-task-body" });
+    renderLinkedText(task.title, body.createDiv({ cls: "belki-week-task-title" }), this.app);
+    const sector = this.settings.sectors.find((s) => s.tag === normalizeTaskProject(task.project));
+    body.createDiv({ cls: "belki-week-task-sector", text: sector ? sector.label : INBOX_SECTOR });
+    card.addEventListener("click", () => {
+      void this.store.editTaskInEditor(task.id);
+    });
+    card.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      showTaskContextMenu(this.store, task, event);
+    });
+    card.addEventListener("dragstart", (event) => {
+      var _a, _b;
+      this.draggedTaskIds = [task.id];
+      this.draggedTaskId = task.id;
+      card.addClass("is-dragging");
+      (_a = event.dataTransfer) == null ? void 0 : _a.setData("application/x-belki-task-id", task.id);
+      (_b = event.dataTransfer) == null ? void 0 : _b.setData("text/plain", task.id);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      this.showDropTargets([task]);
+    });
+    card.addEventListener("dragend", () => {
+      this.draggedTaskId = null;
+      this.draggedTaskIds = null;
+      card.removeClass("is-dragging");
+      this.clearDropTargets();
+    });
+  }
   renderUpcomingAgenda(parent) {
     const today = todayIso();
     const items = [];
@@ -15899,6 +15998,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       calendars: normalizeCalendars(saved == null ? void 0 : saved.calendars),
       calendarRefreshMinutes: Math.max(5, normalizeAutoDeleteDays(saved == null ? void 0 : saved.calendarRefreshMinutes) || 30),
       timeBlocking: (saved == null ? void 0 : saved.timeBlocking) === true,
+      upcomingWeekView: (saved == null ? void 0 : saved.upcomingWeekView) === true,
       dayStartHour: normalizeHour(saved == null ? void 0 : saved.dayStartHour, 8),
       dayEndHour: normalizeHour(saved == null ? void 0 : saved.dayEndHour, 18),
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),

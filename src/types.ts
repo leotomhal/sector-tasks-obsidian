@@ -189,6 +189,8 @@ export interface BelkiSettings {
   calendarRefreshMinutes: number;
   /** Module: a timeline in Today to plan tasks into time slots. */
   timeBlocking: boolean;
+  /** Upcoming as seven day columns instead of a list (desktop). */
+  upcomingWeekView: boolean;
   dayStartHour: number;
   dayEndHour: number;
   /** Today's blocks; blocks from another day are dropped. */

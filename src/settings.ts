@@ -60,6 +60,7 @@ export const DEFAULT_SETTINGS: BelkiSettings = {
   calendars: [],
   calendarRefreshMinutes: 30,
   timeBlocking: false,
+  upcomingWeekView: false,
   dayStartHour: 8,
   dayEndHour: 18,
   timeBlocks: { date: "", blocks: [] },

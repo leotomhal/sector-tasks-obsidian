@@ -305,6 +305,7 @@ export default class BelkiPlugin extends Plugin {
       calendars: normalizeCalendars(saved == null ? void 0 : saved.calendars),
       calendarRefreshMinutes: Math.max(5, normalizeAutoDeleteDays(saved == null ? void 0 : saved.calendarRefreshMinutes) || 30),
       timeBlocking: (saved == null ? void 0 : saved.timeBlocking) === true,
+      upcomingWeekView: (saved == null ? void 0 : saved.upcomingWeekView) === true,
       dayStartHour: normalizeHour(saved == null ? void 0 : saved.dayStartHour, 8),
       dayEndHour: normalizeHour(saved == null ? void 0 : saved.dayEndHour, 18),
       timeBlocks: normalizeTimeBlocks(saved == null ? void 0 : saved.timeBlocks),
