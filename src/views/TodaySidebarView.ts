@@ -228,7 +228,7 @@ export class TodaySidebarView extends ItemView {
     const addButton = headerActions.createEl("button", {
       cls: "belki-today-add",
       text: "+",
-      attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
+      attr: { type: "button", "aria-label": "Quick add task to inbox" }
     });
     addButton.addEventListener("click", () => {
       void this.store.createTaskInEditor("");

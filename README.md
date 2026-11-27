@@ -41,7 +41,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
 - **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Paste a list (from a note or an email) and each line becomes its own task; list markers like `-`, `*` or `1.` are dropped. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
 - **Dates in words:** when capturing (Inbox field, brain dump, pasted lists), a date written as a word at the **end** or **start** becomes the due date: `Bescheid an Krause fr`, `morgen Folien schicken`, `Report in 3 tagen`, `15.12. Jahresbericht`, also `heute`, `übermorgen`, `nächste woche`, weekdays, and the English words. At the start, short day names need a colon (`fr: …`) so titles like "So viel wie möglich" stay as they are. A line under the field shows the date it read before you press Enter. A fixed word list, no AI; can be turned off in the settings
-- **Quick add task (Inbox)** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
+- **Quick add task to inbox** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Brain dump:** the **Brain dump to inbox** command (or the brain icon in the ribbon, handy on a phone) opens a window from anywhere in Obsidian: write one task per line and save them all to the Inbox with `Cmd/Ctrl+Enter`. Text you close without saving is still there the next time you open it (until Obsidian restarts)
 - **Selection to Inbox:** select lines in any note and run **Add selected lines to inbox**; each line becomes a task, the note stays as it is
 - **Notes for tasks:** right-click a task → **Create note** makes a note named after the task, turns the task's title into a link to it and opens it. If a note with that name exists, it's linked instead of overwritten; once linked, the menu says **Open note**. Choose the folder (default: the tasks file's folder) and an optional template with `{{title}}`, `{{date}}` and `{{tasks}}` in the settings. The Today sidebar shows **Linked to this note**: the open tasks that link to the note you're looking at
@@ -73,7 +73,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
 
 ### Today sidebar
-- The **Open Today sidebar** command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in
+- The **Open today sidebar** command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in
 - The tab shows a badge with the count of overdue + due-today tasks; header buttons quick-add to the Inbox and jump to the full board
 
 ### Calendars and time blocking (optional, both off by default)
@@ -127,6 +127,8 @@ This plugin was developed in close collaboration with an AI assistant (Claude). 
 ## License
 
 MIT, see [LICENSE](./LICENSE). The board started from [belki](https://github.com/aribuga/obsidian-belki-tasks) by Yasin Aribuga (also MIT).
+
+The calendars module bundles [ical.js](https://github.com/kewisch/ical.js) by Philipp Kewisch, licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/); its unmodified source is available at that link.
 
 ## Contact
 

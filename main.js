@@ -8754,7 +8754,7 @@ var TodaySidebarView = class extends import_obsidian5.ItemView {
     const addButton = headerActions.createEl("button", {
       cls: "belki-today-add",
       text: "+",
-      attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
+      attr: { type: "button", "aria-label": "Quick add task to inbox" }
     });
     addButton.addEventListener("click", () => {
       void this.store.createTaskInEditor("");
@@ -9533,7 +9533,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     return [
       {
         name: "Tasks file",
-        desc: "Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin. If the file does not exist yet, it is created on the first write.",
+        desc: "Path to the file with your tasks. The plugin manages every line tagged #task in it. If the file does not exist yet, it is created on the first write.",
         control: {
           type: "text",
           key: "tasksFilePath",
@@ -9548,12 +9548,12 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
       },
       {
         name: "Default overdue range",
-        desc: "Default range used by the Today overdue section.",
+        desc: "How far back the overdue section in today reaches.",
         control: { type: "dropdown", key: "defaultOverdueRange", options: OVERDUE_RANGE_LABELS }
       },
       {
         name: "Auto-delete completed tasks",
-        desc: "Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a ✅ date are never touched.",
+        desc: "Delete completed tasks from the file this many days after they were completed, checked when Obsidian starts. Set it to 0 to turn this off. Completed tasks without a ✅ date are never touched.",
         control: { type: "number", key: "autoDeleteCompletedAfterDays", min: 0, step: 1, placeholder: "0" }
       },
       {
@@ -9985,7 +9985,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     let tagValue = sector.tag;
     let labelValue = sector.label;
     setting.addText((text2) => {
-      text2.setPlaceholder("tag").setValue(sector.tag).onChange((value) => {
+      text2.setPlaceholder("Tag").setValue(sector.tag).onChange((value) => {
         tagValue = value;
       });
     });
@@ -10245,7 +10245,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
             },
             {
               name: "Color scheme",
-              desc: '"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.',
+              desc: "Follow the active theme, use a fixed palette, or pick every color yourself below.",
               control: { type: "dropdown", key: "themePreset", options: themePresetOptions }
             },
             ...THEME_COLOR_KEYS.map((entry) => ({
@@ -10321,7 +10321,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
   renderAddLabelRow(setting) {
     let pendingLabel = "";
     setting.addText((text2) => {
-      text2.setPlaceholder("#label").onChange((value) => {
+      text2.setPlaceholder("Label").onChange((value) => {
         pendingLabel = value;
       });
     });
@@ -10376,7 +10376,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     applyBelkiFontSettings(containerEl, this.plugin.settings);
-    new import_obsidian6.Setting(containerEl).setName("Tasks file").setDesc("Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin.").addText((text2) => {
+    new import_obsidian6.Setting(containerEl).setName("Tasks file").setDesc("Path to the file with your tasks. The plugin manages every line tagged #task in it.").addText((text2) => {
       text2.setPlaceholder("Tasks.md").setValue(this.plugin.settings.tasksFilePath).onChange(async (value) => {
         this.plugin.settings.tasksFilePath = value.trim() || DEFAULT_SETTINGS.tasksFilePath;
         await this.plugin.saveSettings();
@@ -10409,7 +10409,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian6.Setting(containerEl).setName("Default overdue range").setDesc("Default range used by the Today overdue section.").addDropdown((dropdown) => {
+    new import_obsidian6.Setting(containerEl).setName("Default overdue range").setDesc("How far back the overdue section in today reaches.").addDropdown((dropdown) => {
       for (const range of OVERDUE_RANGES) {
         dropdown.addOption(range, overdueRangeLabel(range));
       }
@@ -10419,7 +10419,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
-    new import_obsidian6.Setting(containerEl).setName("Auto-delete completed tasks").setDesc("Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a ✅ date are never touched.").addText((text2) => {
+    new import_obsidian6.Setting(containerEl).setName("Auto-delete completed tasks").setDesc("Delete completed tasks from the file this many days after they were completed, checked when Obsidian starts. Set it to 0 to turn this off. Completed tasks without a ✅ date are never touched.").addText((text2) => {
       text2.setPlaceholder("0").setValue(String(this.plugin.settings.autoDeleteCompletedAfterDays || 0)).onChange(async (value) => {
         this.plugin.settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value.trim());
         await this.plugin.saveSettings();
@@ -10620,7 +10620,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
           this.plugin.refreshBelkiViews();
         });
       });
-      new import_obsidian6.Setting(appearance).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
+      new import_obsidian6.Setting(appearance).setName("Color scheme").setDesc("Follow the active theme, use a fixed palette, or pick every color yourself below.").addDropdown((dropdown) => {
         for (const [value, label] of THEME_PRESET_OPTIONS) {
           dropdown.addOption(value, label);
         }
@@ -10656,7 +10656,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
           });
         });
       }
-      new import_obsidian6.Setting(appearance).setName("Sidebar icons").setDesc("Lucide-Icon-Namen (siehe lucide.dev/icons), z. B. „search“, „calendar-check“.").setHeading();
+      new import_obsidian6.Setting(appearance).setName("Sidebar icons").setDesc("Icon names as listed on lucide.dev/icons, for example search or calendar-check.").setHeading();
       this.addIconSetting("Search icon", "search");
       this.addIconSetting("Overview icon", "overview");
       this.addIconSetting("Inbox icon", "inbox");
@@ -10721,7 +10721,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     let tagValue = sector.tag;
     let labelValue = sector.label;
     setting.addText((text2) => {
-      text2.setPlaceholder("tag").setValue(sector.tag).onChange((value) => {
+      text2.setPlaceholder("Tag").setValue(sector.tag).onChange((value) => {
         tagValue = value;
       });
     });
@@ -10754,7 +10754,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     if (sector.isWaiting !== true) {
       reviewRow.controlEl.createSpan({ text: "Weekly", cls: "belki-inline-toggle-label" });
       reviewRow.addToggle((toggle) => {
-        toggle.setTooltip("Include in Weekly Review").setValue(sector.inWeekly === true).onChange(async (value) => {
+        toggle.setTooltip("Include in weekly review").setValue(sector.inWeekly === true).onChange(async (value) => {
           sector.inWeekly = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
@@ -10762,7 +10762,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
       });
       reviewRow.controlEl.createSpan({ text: "Monthly", cls: "belki-inline-toggle-label" });
       reviewRow.addToggle((toggle) => {
-        toggle.setTooltip("Include in Monthly Review").setValue(sector.inMonthly === true).onChange(async (value) => {
+        toggle.setTooltip("Include in monthly review").setValue(sector.inMonthly === true).onChange(async (value) => {
           sector.inMonthly = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
@@ -10771,7 +10771,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     }
     reviewRow.controlEl.createSpan({ text: "Waiting for", cls: "belki-inline-toggle-label" });
     reviewRow.addToggle((toggle) => {
-      toggle.setTooltip('Treat as "Waiting for" sector (own review step with follow-up/wait instead of up/down)').setValue(sector.isWaiting === true).onChange(async (value) => {
+      toggle.setTooltip("Treat as the waiting sector (its own review step with follow up or keep waiting)").setValue(sector.isWaiting === true).onChange(async (value) => {
         if (value) {
           for (const other of this.plugin.settings.sectors) {
             other.isWaiting = false;
@@ -10788,7 +10788,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
     let pendingTag = "";
     let pendingLabel = "";
     new import_obsidian6.Setting(this.containerEl).setName("Add sector").setDesc("New tag + display name for an additional column.").addText((text2) => {
-      text2.setPlaceholder("tag").onChange((value) => {
+      text2.setPlaceholder("Tag").onChange((value) => {
         pendingTag = value;
       });
     }).addText((text2) => {
@@ -10859,7 +10859,7 @@ var BelkiSettingTab = class extends import_obsidian6.PluginSettingTab {
   addLabelRegistrySetting() {
     let pendingLabel = "";
     new import_obsidian6.Setting(this.containerEl).setName("Add label").setDesc("Create a label without assigning it to a task yet.").addText((text2) => {
-      text2.setPlaceholder("#label").onChange((value) => {
+      text2.setPlaceholder("Label").onChange((value) => {
         pendingLabel = value;
       });
     }).addButton((button) => {
@@ -12619,7 +12619,7 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
       return;
     }
     const filtersSection = parent.createDiv({ cls: "belki-filter-section" });
-    filtersSection.createEl("h2", { text: "My Filters" });
+    filtersSection.createEl("h2", { text: "My filters" });
     const filterList = filtersSection.createDiv({ cls: "belki-filter-list" });
     for (const filter of this.getFilterDefinitions(allTasks)) {
       this.renderFilterRow(filterList, filter.name, filter.count, filter.icon, () => {
@@ -12650,7 +12650,7 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
     }
   }
   renderBackToFilters(parent) {
-    parent.createEl("button", { cls: "belki-back-button", text: "Back to Filters & Labels" }).addEventListener("click", () => {
+    parent.createEl("button", { cls: "belki-back-button", text: "Back to filters and labels" }).addEventListener("click", () => {
       this.activeFilter = null;
       this.activeLabel = null;
       this.render();
@@ -14190,7 +14190,7 @@ var LabelPromptModal = class extends import_obsidian9.Modal {
       cls: "belki-label-prompt-input",
       attr: {
         type: "text",
-        placeholder: "#label"
+        placeholder: "Label"
       }
     });
     const actions = contentEl.createDiv({ cls: "belki-label-prompt-actions" });
@@ -15536,7 +15536,7 @@ ${lines.join("\n")}
   async save() {
     const file = await this.ensureFile(this.filePath);
     if (!file) {
-      new import_obsidian13.Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
+      new import_obsidian13.Notice("Could not write the tasks file. Check its path in the settings.");
       return;
     }
     const tasksById = new Map(this.tasks.map((t) => [t.id, t]));
@@ -15700,7 +15700,7 @@ ${lines.join("\n")}
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
     const kind = existing instanceof import_obsidian13.TFolder ? "folder" : "something";
-    new import_obsidian13.Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
+    new import_obsidian13.Notice(`"${path}" is a ${kind}, not a usable tasks file. Change the path in the settings.`);
   }
 };
 function sameBlock(a, b) {
@@ -15882,7 +15882,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       VIEW_TYPE_BELKI_TODAY,
       (leaf) => new TodaySidebarView(leaf, this.store, this.settings, this.calendar, () => this.saveSettings())
     );
-    this.addRibbonIcon("check-circle-2", "Open Sector Tasks", () => {
+    this.addRibbonIcon("check-circle-2", "Open task board", () => {
       void this.activateView();
     });
     this.addCommand({
@@ -15917,7 +15917,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
     });
     this.addCommand({
       id: "normalize-labels",
-      name: "Normalize Labels",
+      name: "Normalize labels",
       callback: async () => {
         await this.store.normalizeLabels();
         this.settings.labelColors = normalizeLabelColorMap(this.settings.labelColors);
@@ -15926,12 +15926,12 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new import_obsidian15.Notice("Sector Tasks labels normalized.");
+        new import_obsidian15.Notice("Labels normalized.");
       }
     });
     this.addCommand({
       id: "quick-add-task",
-      name: "Quick add task (Inbox)",
+      name: "Quick add task to inbox",
       callback: () => {
         void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
       }
@@ -15971,7 +15971,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
     });
     this.addCommand({
       id: "open-today-sidebar",
-      name: "Open Today sidebar",
+      name: "Open today sidebar",
       callback: () => {
         void this.activateTodaySidebar();
       }
@@ -16215,7 +16215,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new import_obsidian15.Notice("Sector Tasks could not reload task data.");
+      new import_obsidian15.Notice("Could not reload the tasks file.");
       console.error(error);
     }
   }
@@ -16223,7 +16223,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) {
       if (manual) {
-        new import_obsidian15.Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+        new import_obsidian15.Notice("Auto-delete is off. Set a number of days in the settings first.");
       }
       return;
     }
@@ -16234,18 +16234,18 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       if (manual) {
         const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
         const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
-        new import_obsidian15.Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+        new import_obsidian15.Notice(`Nothing to clean up: no completed tasks older than ${days} days${extra}.`);
       }
       return;
     }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
-      new import_obsidian15.Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      new import_obsidian15.Notice("Could not write the archive file, so completed tasks were kept.");
       return;
     }
     await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new import_obsidian15.Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
+    new import_obsidian15.Notice(`Archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -16331,10 +16331,10 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       await this.pruneCompletedTasks();
       if (this.settings.planningEnabled && this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning((/* @__PURE__ */ new Date()).getFullYear());
-        if (moved > 0) new import_obsidian15.Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+        if (moved > 0) new import_obsidian15.Notice(`Moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }
     } catch (error) {
-      new import_obsidian15.Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
+      new import_obsidian15.Notice("Could not open the tasks file. The developer console has details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath

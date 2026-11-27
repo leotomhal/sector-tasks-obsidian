@@ -539,7 +539,7 @@ ${lines.join("\n")}
   async save() {
     const file = await this.ensureFile(this.filePath);
     if (!file) {
-      new Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
+      new Notice("Could not write the tasks file. Check its path in the settings.");
       return;
     }
     const tasksById = new Map(this.tasks.map((t) => [t.id, t]));
@@ -698,7 +698,7 @@ ${lines.join("\n")}
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
     const kind = existing instanceof TFolder ? "folder" : "something";
-    new Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
+    new Notice(`"${path}" is a ${kind}, not a usable tasks file. Change the path in the settings.`);
   }
 };
 /** A deleted task plus where its line sat in the file, so undo can put it back. */

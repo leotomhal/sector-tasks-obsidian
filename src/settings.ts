@@ -388,7 +388,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     return [
       {
         name: "Tasks file",
-        desc: "Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin. If the file does not exist yet, it is created on the first write.",
+        desc: "Path to the file with your tasks. The plugin manages every line tagged #task in it. If the file does not exist yet, it is created on the first write.",
         control: {
           type: "text",
           key: "tasksFilePath",
@@ -403,12 +403,12 @@ export class BelkiSettingTab extends PluginSettingTab {
       },
       {
         name: "Default overdue range",
-        desc: "Default range used by the Today overdue section.",
+        desc: "How far back the overdue section in today reaches.",
         control: { type: "dropdown", key: "defaultOverdueRange", options: OVERDUE_RANGE_LABELS }
       },
       {
         name: "Auto-delete completed tasks",
-        desc: "Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a \u2705 date are never touched.",
+        desc: "Delete completed tasks from the file this many days after they were completed, checked when Obsidian starts. Set it to 0 to turn this off. Completed tasks without a \u2705 date are never touched.",
         control: { type: "number", key: "autoDeleteCompletedAfterDays", min: 0, step: 1, placeholder: "0" }
       },
       {
@@ -839,7 +839,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     let tagValue = sector.tag;
     let labelValue = sector.label;
     setting.addText((text) => {
-      text.setPlaceholder("tag").setValue(sector.tag).onChange((value) => {
+      text.setPlaceholder("Tag").setValue(sector.tag).onChange((value) => {
         tagValue = value;
       });
     });
@@ -1101,7 +1101,7 @@ export class BelkiSettingTab extends PluginSettingTab {
             },
             {
               name: "Color scheme",
-              desc: '"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.',
+              desc: 'Follow the active theme, use a fixed palette, or pick every color yourself below.',
               control: { type: "dropdown", key: "themePreset", options: themePresetOptions }
             },
             ...THEME_COLOR_KEYS.map((entry): SettingGroupItem => ({
@@ -1177,7 +1177,7 @@ export class BelkiSettingTab extends PluginSettingTab {
   renderAddLabelRow(setting: Setting) {
     let pendingLabel = "";
     setting.addText((text) => {
-      text.setPlaceholder("#label").onChange((value) => {
+      text.setPlaceholder("Label").onChange((value) => {
         pendingLabel = value;
       });
     });
@@ -1232,7 +1232,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     applyBelkiFontSettings(containerEl, this.plugin.settings);
-    new Setting(containerEl).setName("Tasks file").setDesc("Path to the Markdown file Sector Tasks reads and writes. All '#task' lines in this file are managed by the plugin.").addText((text) => {
+    new Setting(containerEl).setName("Tasks file").setDesc("Path to the file with your tasks. The plugin manages every line tagged #task in it.").addText((text) => {
       text.setPlaceholder("Tasks.md").setValue(this.plugin.settings.tasksFilePath).onChange(async (value) => {
         this.plugin.settings.tasksFilePath = value.trim() || DEFAULT_SETTINGS.tasksFilePath;
         await this.plugin.saveSettings();
@@ -1265,7 +1265,7 @@ export class BelkiSettingTab extends PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new Setting(containerEl).setName("Default overdue range").setDesc("Default range used by the Today overdue section.").addDropdown((dropdown) => {
+    new Setting(containerEl).setName("Default overdue range").setDesc("How far back the overdue section in today reaches.").addDropdown((dropdown) => {
       for (const range of OVERDUE_RANGES) {
         dropdown.addOption(range, overdueRangeLabel(range));
       }
@@ -1275,7 +1275,7 @@ export class BelkiSettingTab extends PluginSettingTab {
         this.plugin.refreshBelkiViews();
       });
     });
-    new Setting(containerEl).setName("Auto-delete completed tasks").setDesc("Permanently delete completed tasks from the file this many days after their completion date (checked once per Obsidian start). 0 disables the cleanup. Completed tasks without a ✅ date are never touched.").addText((text) => {
+    new Setting(containerEl).setName("Auto-delete completed tasks").setDesc("Delete completed tasks from the file this many days after they were completed, checked when Obsidian starts. Set it to 0 to turn this off. Completed tasks without a ✅ date are never touched.").addText((text) => {
       text.setPlaceholder("0").setValue(String(this.plugin.settings.autoDeleteCompletedAfterDays || 0)).onChange(async (value) => {
         this.plugin.settings.autoDeleteCompletedAfterDays = normalizeAutoDeleteDays(value.trim());
         await this.plugin.saveSettings();
@@ -1476,7 +1476,7 @@ export class BelkiSettingTab extends PluginSettingTab {
           this.plugin.refreshBelkiViews();
         });
       });
-      new Setting(appearance).setName("Color scheme").setDesc('"Follow Obsidian theme" uses the active Obsidian theme. "Custom colors" unlocks the color pickers below.').addDropdown((dropdown) => {
+      new Setting(appearance).setName("Color scheme").setDesc('Follow the active theme, use a fixed palette, or pick every color yourself below.').addDropdown((dropdown) => {
         for (const [value, label] of THEME_PRESET_OPTIONS) {
           dropdown.addOption(value, label);
         }
@@ -1512,7 +1512,7 @@ export class BelkiSettingTab extends PluginSettingTab {
           });
         });
       }
-      new Setting(appearance).setName("Sidebar icons").setDesc("Lucide-Icon-Namen (siehe lucide.dev/icons), z. B. \u201Esearch\u201C, \u201Ecalendar-check\u201C.").setHeading();
+      new Setting(appearance).setName("Sidebar icons").setDesc("Icon names as listed on lucide.dev/icons, for example search or calendar-check.").setHeading();
       this.addIconSetting("Search icon", "search");
       this.addIconSetting("Overview icon", "overview");
       this.addIconSetting("Inbox icon", "inbox");
@@ -1577,7 +1577,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     let tagValue = sector.tag;
     let labelValue = sector.label;
     setting.addText((text) => {
-      text.setPlaceholder("tag").setValue(sector.tag).onChange((value) => {
+      text.setPlaceholder("Tag").setValue(sector.tag).onChange((value) => {
         tagValue = value;
       });
     });
@@ -1610,7 +1610,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     if (sector.isWaiting !== true) {
       reviewRow.controlEl.createSpan({ text: "Weekly", cls: "belki-inline-toggle-label" });
       reviewRow.addToggle((toggle) => {
-        toggle.setTooltip("Include in Weekly Review").setValue(sector.inWeekly === true).onChange(async (value) => {
+        toggle.setTooltip("Include in weekly review").setValue(sector.inWeekly === true).onChange(async (value) => {
           sector.inWeekly = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
@@ -1618,7 +1618,7 @@ export class BelkiSettingTab extends PluginSettingTab {
       });
       reviewRow.controlEl.createSpan({ text: "Monthly", cls: "belki-inline-toggle-label" });
       reviewRow.addToggle((toggle) => {
-        toggle.setTooltip("Include in Monthly Review").setValue(sector.inMonthly === true).onChange(async (value) => {
+        toggle.setTooltip("Include in monthly review").setValue(sector.inMonthly === true).onChange(async (value) => {
           sector.inMonthly = value;
           await this.plugin.saveSettings();
           this.plugin.refreshBelkiViews();
@@ -1627,7 +1627,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     }
     reviewRow.controlEl.createSpan({ text: 'Waiting for', cls: "belki-inline-toggle-label" });
     reviewRow.addToggle((toggle) => {
-      toggle.setTooltip('Treat as "Waiting for" sector (own review step with follow-up/wait instead of up/down)').setValue(sector.isWaiting === true).onChange(async (value) => {
+      toggle.setTooltip('Treat as the waiting sector (its own review step with follow up or keep waiting)').setValue(sector.isWaiting === true).onChange(async (value) => {
         if (value) {
           for (const other of this.plugin.settings.sectors) {
             other.isWaiting = false;
@@ -1644,7 +1644,7 @@ export class BelkiSettingTab extends PluginSettingTab {
     let pendingTag = "";
     let pendingLabel = "";
     new Setting(this.containerEl).setName("Add sector").setDesc("New tag + display name for an additional column.").addText((text) => {
-      text.setPlaceholder("tag").onChange((value) => {
+      text.setPlaceholder("Tag").onChange((value) => {
         pendingTag = value;
       });
     }).addText((text) => {
@@ -1715,7 +1715,7 @@ export class BelkiSettingTab extends PluginSettingTab {
   addLabelRegistrySetting() {
     let pendingLabel = "";
     new Setting(this.containerEl).setName("Add label").setDesc("Create a label without assigning it to a task yet.").addText((text) => {
-      text.setPlaceholder("#label").onChange((value) => {
+      text.setPlaceholder("Label").onChange((value) => {
         pendingLabel = value;
       });
     }).addButton((button) => {

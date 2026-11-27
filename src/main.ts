@@ -50,7 +50,7 @@ export default class BelkiPlugin extends Plugin {
       VIEW_TYPE_BELKI_TODAY,
       (leaf) => new TodaySidebarView(leaf, this.store, this.settings, this.calendar, () => this.saveSettings())
     );
-    this.addRibbonIcon("check-circle-2", "Open Sector Tasks", () => {
+    this.addRibbonIcon("check-circle-2", "Open task board", () => {
       void this.activateView();
     });
     this.addCommand({
@@ -87,7 +87,7 @@ export default class BelkiPlugin extends Plugin {
     });
     this.addCommand({
       id: "normalize-labels",
-      name: "Normalize Labels",
+      name: "Normalize labels",
       callback: async () => {
         await this.store.normalizeLabels();
         this.settings.labelColors = normalizeLabelColorMap(this.settings.labelColors);
@@ -96,12 +96,12 @@ export default class BelkiPlugin extends Plugin {
           ...Object.keys(this.settings.labelColors)
         ]);
         await this.saveSettings();
-        new Notice("Sector Tasks labels normalized.");
+        new Notice("Labels normalized.");
       }
     });
     this.addCommand({
       id: "quick-add-task",
-      name: "Quick add task (Inbox)",
+      name: "Quick add task to inbox",
       callback: () => {
         void this.store.createTaskInEditor(void 0).then(() => this.refreshBelkiViews());
       }
@@ -141,7 +141,7 @@ export default class BelkiPlugin extends Plugin {
     });
     this.addCommand({
       id: "open-today-sidebar",
-      name: "Open Today sidebar",
+      name: "Open today sidebar",
       callback: () => {
         void this.activateTodaySidebar();
       }
@@ -391,7 +391,7 @@ export default class BelkiPlugin extends Plugin {
     try {
       await this.store.reloadFromDisk();
     } catch (error) {
-      new Notice("Sector Tasks could not reload task data.");
+      new Notice("Could not reload the tasks file.");
       console.error(error);
     }
   }
@@ -399,7 +399,7 @@ export default class BelkiPlugin extends Plugin {
     const days = this.settings.autoDeleteCompletedAfterDays;
     if (!Number.isInteger(days) || days <= 0) {
       if (manual) {
-        new Notice("Sector Tasks: auto-delete is off. Set a day count in the plugin settings first.");
+        new Notice("Auto-delete is off. Set a number of days in the settings first.");
       }
       return;
     }
@@ -410,18 +410,18 @@ export default class BelkiPlugin extends Plugin {
       if (manual) {
         const noDate = completed.filter((t) => !isIsoDate(t.completedDate)).length;
         const extra = noDate ? ` (${noDate} completed task${noDate === 1 ? "" : "s"} without a ✅ date are never removed)` : "";
-        new Notice(`Sector Tasks: nothing to clean up — no completed tasks older than ${days} days${extra}.`);
+        new Notice(`Nothing to clean up: no completed tasks older than ${days} days${extra}.`);
       }
       return;
     }
     const archived = await this.store.archiveCompletedTasks(tasks);
     if (!archived) {
-      new Notice("Sector Tasks: could not write the archive file — kept completed tasks to avoid data loss.");
+      new Notice("Could not write the archive file, so completed tasks were kept.");
       return;
     }
     await this.store.deleteManyTasks(tasks.map((t) => t.id));
     this.refreshBelkiViews();
-    new Notice(`Sector Tasks: archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
+    new Notice(`Archived and removed ${tasks.length} completed task${tasks.length === 1 ? "" : "s"} older than ${days} days.`);
   }
   refreshBelkiViews() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_BELKI)) {
@@ -510,10 +510,10 @@ export default class BelkiPlugin extends Plugin {
       await this.pruneCompletedTasks();
       if (this.settings.planningEnabled && this.settings.archivePastPlanning) {
         const moved = await this.store.archivePastPlanning(new Date().getFullYear());
-        if (moved > 0) new Notice(`Sector Tasks: moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
+        if (moved > 0) new Notice(`Moved ${moved} planning entr${moved === 1 ? "y" : "ies"} from past years to the archive note.`);
       }
     } catch (error) {
-      new Notice("Sector Tasks could not initialize task storage. Open the developer console for details.");
+      new Notice("Could not open the tasks file. The developer console has details.");
       console.error("[belki] Failed to initialize task storage.", error, {
         dataFolderPath: this.settings.dataFolderPath,
         tasksFilePath: this.settings.tasksFilePath

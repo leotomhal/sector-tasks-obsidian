@@ -1141,7 +1141,7 @@ export class TaskBoardView extends ItemView {
       return;
     }
     const filtersSection = parent.createDiv({ cls: "belki-filter-section" });
-    filtersSection.createEl("h2", { text: "My Filters" });
+    filtersSection.createEl("h2", { text: "My filters" });
     const filterList = filtersSection.createDiv({ cls: "belki-filter-list" });
     for (const filter of this.getFilterDefinitions(allTasks)) {
       this.renderFilterRow(filterList, filter.name, filter.count, filter.icon, () => {
@@ -1172,7 +1172,7 @@ export class TaskBoardView extends ItemView {
     }
   }
   renderBackToFilters(parent: HTMLElement) {
-    parent.createEl("button", { cls: "belki-back-button", text: "Back to Filters & Labels" }).addEventListener("click", () => {
+    parent.createEl("button", { cls: "belki-back-button", text: "Back to filters and labels" }).addEventListener("click", () => {
       this.activeFilter = null;
       this.activeLabel = null;
       this.render();
@@ -2691,7 +2691,7 @@ export class LabelPromptModal extends Modal {
       cls: "belki-label-prompt-input",
       attr: {
         type: "text",
-        placeholder: "#label"
+        placeholder: "Label"
       }
     });
     const actions = contentEl.createDiv({ cls: "belki-label-prompt-actions" });
