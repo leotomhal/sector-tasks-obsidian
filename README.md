@@ -40,11 +40,13 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - **Own task editor:** "+ Add task" and clicking a task open a dialog with title, sector, priority, due date (with Today / Tomorrow / Next week shortcuts), labels (with suggestions from the ones you already use) and repeat (every day / weekday / week on a weekday / month on a day / year, every N, optionally counted from completion). `Cmd/Ctrl+Enter` saves. A free-text recurrence written earlier, like `every 15 july`, is kept exactly as written unless you change the repeat settings
 - Only lines tagged `#task` are managed; everything else in the file is left untouched; additional `#tags` on the line are preserved
 - **Quick capture:** the Inbox (and the Overview's Inbox tab) has a text field — type a task and press Enter, no modal. Paste a list (from a note or an email) and each line becomes its own task; list markers like `-`, `*` or `1.` are dropped. Inline `#labels`, a `#sector` tag, priority emojis and `📅 2026-11-10` are recognized like in a normal line
-- **Quick add task (Inbox)** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
+- **Dates in words:** when capturing (Inbox field, brain dump, pasted lists), a date written as a word at the **end** or **start** becomes the due date: `Bescheid an Krause fr`, `morgen Folien schicken`, `Report in 3 tagen`, `15.12. Jahresbericht`, also `heute`, `übermorgen`, `nächste woche`, weekdays, and the English words. At the start, short day names need a colon (`fr: …`) so titles like "So viel wie möglich" stay as they are. A line under the field shows the date it read before you press Enter. A fixed word list, no AI; can be turned off in the settings
+- **Quick add task to inbox** command: opens the editor and files the new task straight into the Inbox — assign it a hotkey under Obsidian's Settings → Hotkeys to capture tasks without opening the board
 - **Brain dump:** the **Brain dump to inbox** command (or the brain icon in the ribbon, handy on a phone) opens a window from anywhere in Obsidian: write one task per line and save them all to the Inbox with `Cmd/Ctrl+Enter`. Text you close without saving is still there the next time you open it (until Obsidian restarts)
 - **Selection to Inbox:** select lines in any note and run **Add selected lines to inbox**; each line becomes a task, the note stays as it is
 - **Notes for tasks:** right-click a task → **Create note** makes a note named after the task, turns the task's title into a link to it and opens it. If a note with that name exists, it's linked instead of overwritten; once linked, the menu says **Open note**. Choose the folder (default: the tasks file's folder) and an optional template with `{{title}}`, `{{date}}` and `{{tasks}}` in the settings. The Today sidebar shows **Linked to this note**: the open tasks that link to the note you're looking at
-- **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), or set the priority (P1–P4 / none), without opening the editor
+- **Week view** (desktop): Upcoming can switch between **List** and **Week**. The week shows the next seven days as columns with calendar events, year-plan entries and the tasks due that day; drag a task to another day to change its date, click it to edit, right-click for the menu. Tasks further out are listed below under *Later*
+- **Right-click quick edit:** right-click any task row (board or Today sidebar) to set the due date (Today / Tomorrow / Next week / clear), **snooze** it by 1, 3 or 7 days (the menu shows the resulting date; it counts from the due date if that's still ahead, otherwise from today), set the priority (P1–P4 / none), **move it to another sector**, or **skip this time** on a recurring task (it jumps to the next occurrence without counting as done), without opening the editor. With several tasks selected, the same menu sets dates, priority or sector for all of them, or deletes them
 - **Undo:** checking a task off shows a short notice with an **Undo** link that restores the exact previous state — including recurring tasks that were rescheduled. Also available as the **Undo last completed task** command for a hotkey
 
 ### Year plan
@@ -62,6 +64,8 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - **Weekly/Monthly Review**: a guided, sector-by-sector walkthrough (Inbox → configured sectors → Waiting), with Stay/Up/Down/Inbox per task, or Follow up/Keep waiting for Waiting-tagged tasks; progress persists across interruptions
 - **Waiting age:** tasks in the Waiting sector show how long they've been waiting ("Waiting 12 d"), on the board and in the review. After a configurable number of days (Settings → Sectors, default 7) the count turns red as a nudge to follow up. The date is kept in the plugin's data, not in your tasks file
 - **Stuck tasks:** a task that sits 3 weeks (configurable under Settings → Sectors, 0 turns it off) in the same sector gets a note: "3 weeks in This week" on its weekly-review card, a small "3 wk" on the board, and a "Stuck" list in the review summary note. Only sectors in the weekly review count, recurring tasks never do, and moving a task restarts the count. The dates are kept in the plugin's data, not in your tasks file
+- **Not today:** when you've moved a task's due date later three times (snooze, "Due: tomorrow", rescheduling in a review…), Sector Tasks asks what to do instead: make it smaller (opens the editor), drop the date, move it to Long term, or keep the new date. The number is set under Settings → Sectors (0 turns it off)
+- **Intention for the week:** after the weekly review you're asked for one sentence: what should really have happened by the end of next week? It stays at the top of Today and the Today sidebar until the next weekly review (at most two weeks); click it to change it. Also available as the **Set intention for the week** command; can be turned off under Settings → Sectors
 - **Review summary note** (optional, off by default): after a Weekly or Monthly Review, a note like `Reviews/Weekly review 2026-W45.md` lists what you finished recently, what moved or was deleted during the review, what's new, the waiting list with ages, and open/overdue counts per sector
 - **Daily Review**: a shorter, date-based walkthrough (Inbox → due today → due tomorrow or overdue), with Reschedule/Next per task instead of sector logic
 - **PROCESS button** in the Inbox: runs the review workflow for the Inbox only
@@ -69,7 +73,7 @@ Many task plugins manage their own data format. Sector Tasks keeps everything as
 - **Review hotkeys** (desktop): `K` move up, `J` move down, `I` to Inbox, `N` next/leave unchanged, `F` follow up, `W` keep waiting, `R` reschedule, `D` done, `X` delete (press twice to confirm). In the Inbox step, `1`–`9` assign the task directly to the corresponding sector (order as configured in settings; the current mapping is shown inside the review). On mobile, the Inbox step shows one button per sector instead.
 
 ### Today sidebar
-- The **Open Today sidebar** command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in
+- The **Open today sidebar** command opens a compact panel in the right sidebar with overdue, due-today, and due-tomorrow tasks — check them off or click to edit next to whatever note you're working in
 - The tab shows a badge with the count of overdue + due-today tasks; header buttons quick-add to the Inbox and jump to the full board
 
 ### Calendars and time blocking (optional, both off by default)
@@ -123,6 +127,8 @@ This plugin was developed in close collaboration with an AI assistant (Claude). 
 ## License
 
 MIT, see [LICENSE](./LICENSE). The board started from [belki](https://github.com/aribuga/obsidian-belki-tasks) by Yasin Aribuga (also MIT).
+
+The calendars module bundles [ical.js](https://github.com/kewisch/ical.js) by Philipp Kewisch, licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/); its unmodified source is available at that link.
 
 ## Contact
 

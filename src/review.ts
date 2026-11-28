@@ -60,8 +60,10 @@ export function buildReviewSteps(type: string, sectors: SectorConfig[], tasks: T
   if (type === "daily") {
     const today = todayIso();
     const tomorrow = addDaysIso(1);
-    const dueToday = active.filter((t) => t.due === today).map((t) => t.id);
-    const dueTomorrowOrOverdue = active.filter((t) => t.due && t.due !== today && t.due <= tomorrow).map((t) => t.id);
+    // Inbox tasks were already in the inbox step; don't show them twice.
+    const inInbox = new Set(inboxIds);
+    const dueToday = active.filter((t) => t.due === today && !inInbox.has(t.id)).map((t) => t.id);
+    const dueTomorrowOrOverdue = active.filter((t) => t.due && t.due !== today && t.due <= tomorrow && !inInbox.has(t.id)).map((t) => t.id);
     if (dueToday.length) {
       steps.push({ kind: "date", label: "Due today", taskIds: dueToday, totalTasks: dueToday.length, doneTasks: 0 });
     }

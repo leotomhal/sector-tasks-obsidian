@@ -144,7 +144,9 @@ export function parseTasksRecurrence(raw: string): RepeatRule | undefined {
   if (/weekday/.test(body)) {
     return { frequency: "weekdays", interval, mode, ends, raw: rawTrimmed };
   }
-  if (/\bweek(s)?\b/.test(body)) {
+  // "every monday" (no "week") is weekly on that day, as in the Tasks plugin.
+  const weekdayOnly = Object.keys(WEEKDAY_INDEX).find((d) => new RegExp(`^(\\d+\\s+)?${d}s?\\b`).test(body));
+  if (/\bweek(s)?\b/.test(body) || weekdayOnly) {
     const wd = Object.keys(WEEKDAY_INDEX).find((d) => body.includes(d));
     return { frequency: "weekly", interval, mode, ends, weekday: wd ? WEEKDAY_INDEX[wd] : void 0, raw: rawTrimmed };
   }
@@ -154,7 +156,9 @@ export function parseTasksRecurrence(raw: string): RepeatRule | undefined {
   }
   const yearMonth = Object.keys(MONTH_INDEX).find((m) => body.includes(m));
   if (/\byear(s)?\b/.test(body) || yearMonth) {
-    const dMatch = yearMonth ? body.match(/\b(\d{1,2})\b/) : void 0;
+    // The day next to the month name ("on july 15", "15 july"), not the interval ("every 2 years").
+    const afterInterval = intMatch ? body.slice(intMatch[0].length) : body;
+    const dMatch = yearMonth ? afterInterval.match(/\b(\d{1,2})\b/) : void 0;
     return {
       frequency: "yearly",
       interval,
@@ -234,7 +238,7 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
   let repeat: RepeatRule | undefined;
-  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+)`, "u"));
+  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^#\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+)`, "u"));
   if (recurMatch) repeat = parseTasksRecurrence(recurMatch[1]);
   let priority = "none";
   for (const [emoji, p] of PRIORITY_EMOJI_TO_BELKI) {
@@ -249,7 +253,7 @@ export function parseTaskLine(line: string, id: string, order: number): { task: 
   body = stripField(E_SCHEDULED, body);
   body = stripField(E_START, body);
   body = stripField(E_CANCELLED, body);
-  body = body.replace(new RegExp(`${E_RECUR}\\s*[^\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+`, "gu"), " ");
+  body = body.replace(new RegExp(`${E_RECUR}\\s*[^#\u{1F4C5}\u2705\u2795\u{1F194}\u23F3\u{1F6EB}\u274C\u{1F53A}\u23EB\u{1F53C}\u{1F53D}\u23EC]+`, "gu"), " ");
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);

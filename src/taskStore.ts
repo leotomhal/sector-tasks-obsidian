@@ -5,6 +5,8 @@ import { dedupeLabels } from "./labels";
 import { openTaskEditor } from "./views/TaskEditModal";
 import { normalizeTaskProject } from "./projects";
 import { isRepeatEnded, nextOccurrence } from "./repeatUtils";
+import { isPostponement } from "./postpone";
+import { extractDateWords } from "./dateWords";
 import { fillNoteTemplate, linkedNoteName, linkedNoteNames, noteNameFromTitle, titleAsLink } from "./notes";
 import { INBOX_SECTOR, PLANNING_HEADING, PLANNING_PRECISIONS, periodStart, SECTOR_TAGS, ensureSectorInLine, ensureTaskMarker, hasTaskMarker, isTaskLine, parseTaskLine, serializeTaskLine } from "./tasksFormat";
 
@@ -18,7 +20,12 @@ export class TaskStore {
   writing: boolean;
   lastKnownDiskContent: string | null;
   lastCompletion: { id: string; title: string; patch: Partial<Task> } | null;
-  lastDeletion: DeletedTaskSnapshot | null;
+  /** Tasks whose line has no 🆔 yet, so their id only lives until the file is read again. */
+  idsNotInFile: Set<string> = new Set();
+  /** Called with the tasks whose due date a change moved later (for \"not today\"). */
+  onPostpone?: (tasks: Task[]) => void;
+  /** The tasks removed by the last delete (one, or a whole selection), for Undo. */
+  lastDeletion: DeletedTaskSnapshot[] | null;
   constructor(app: App, settings: BelkiSettings) {
     this.app = app;
     this.settings = settings;
@@ -41,8 +48,9 @@ export class TaskStore {
     return normalizePath(path) === this.filePath;
   }
   /** Tasks only; year-plan entries (#planning) live in getPlanningEntries(). */
+  /** Tasks (not planning entries, not cancelled "[-]" lines, which stay in the file untouched). */
   getTasks() {
-    return this.tasks.filter((t) => !t.planning).map(cloneTask);
+    return this.tasks.filter((t) => !t.planning && t.status !== "-").map(cloneTask);
   }
   getPlanningEntries() {
     return this.tasks.filter((t) => t.planning).map(cloneTask);
@@ -168,10 +176,14 @@ export class TaskStore {
     const blocks: FileBlock[] = [];
     const tasks: Task[] = [];
     let order = 0;
+    this.idsNotInFile = new Set();
     for (const line of lines) {
       if (isTaskLine(line) && hasTaskMarker(line)) {
-        const parsed = parseTaskLine(line, createId(), order);
+        const freshId = createId();
+        const parsed = parseTaskLine(line, freshId, order);
         if (parsed) {
+          // A line without 🆔 gets a new id on every read until it's saved once.
+          if (parsed.task.id === freshId) this.idsNotInFile.add(freshId);
           parsed.task.sourcePath = this.filePath;
           tasks.push(parsed.task);
           blocks.push({ type: "task", taskId: parsed.task.id });
@@ -231,8 +243,12 @@ export class TaskStore {
   async createTasksFromLines(lines: string[], sector?: string): Promise<number> {
     const created: Task[] = [];
     for (const raw of lines) {
-      const trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
+      let trimmed = stripListMarker(raw).replace(/\s+/g, " ").trim();
       if (!trimmed) continue;
+      if (this.settings.dateWords) {
+        const words = extractDateWords(trimmed, todayIso());
+        if (words.due) trimmed = `${words.title} \u{1F4C5} ${words.due}`;
+      }
       let line = ensureTaskMarker(`- [ ] ${trimmed}`);
       line = ensureSectorInLine(line, sector);
       const parsed = parseTaskLine(line, createId(), this.tasks.length);
@@ -258,6 +274,16 @@ export class TaskStore {
     const same = this.tasks.filter((t) => t.title === task.title && t.due === task.due && t.start === task.start && Boolean(t.planning) === Boolean(task.planning));
     return same.length === 1 ? same[0] : void 0;
   }
+  /**
+   * Makes sure a task's id is written to the file (as 🆔) before something in
+   * the plugin's data refers to it, like a time block. Returns false if that
+   * save didn't go through.
+   */
+  async ensureIdInFile(id: string): Promise<boolean> {
+    if (!this.idsNotInFile.has(id)) return this.tasks.some((t) => t.id === id);
+    await this.save();
+    return this.tasks.some((t) => t.id === id) && !this.idsNotInFile.has(id);
+  }
   async editTaskInEditor(id: string) {
     const current = this.tasks.find((t) => t.id === id);
     if (!current) {
@@ -281,15 +307,16 @@ export class TaskStore {
   knownLabels(): string[] {
     return dedupeLabels([...(this.settings.labelRegistry || []), ...this.tasks.flatMap((t) => t.labels)]).sort();
   }
-  async updateTask(id: string, patch: Partial<Task>) {
-    await this.updateManyTasks([id], patch);
+  async updateTask(id: string, patch: Partial<Task>, options?: { notPostponing?: boolean }) {
+    await this.updateEachTask(new Map([[id, patch]]), options);
   }
   async updateManyTasks(ids: string[], patch: Partial<Task>) {
     await this.updateEachTask(new Map(ids.map((id) => [id, patch])));
   }
   /** Applies a separate patch per task (e.g. snoozing each from its own date) in one save. */
-  async updateEachTask(patches: Map<string, Partial<Task>>) {
+  async updateEachTask(patches: Map<string, Partial<Task>>, options?: { notPostponing?: boolean }) {
     if (patches.size === 0) return;
+    const postponed = options?.notPostponing ? [] : this.tasks.filter((t) => patches.has(t.id) && isPostponement(t, patches.get(t.id) || {})).map((t) => ({ id: t.id, due: patches.get(t.id)?.due }));
     let changed = false;
     this.tasks = this.tasks.map((candidate) => {
       const patch = patches.get(candidate.id);
@@ -310,6 +337,9 @@ export class TaskStore {
     });
     if (!changed) return;
     await this.save();
+    // Only count moves that were actually saved (a conflicting save drops them).
+    const applied = postponed.map((p) => this.tasks.find((t) => t.id === p.id && t.due === p.due)).filter((t): t is Task => Boolean(t));
+    if (applied.length && this.onPostpone) this.onPostpone(applied);
   }
   async toggleComplete(id: string) {
     const task = this.tasks.find((t) => t.id === id);
@@ -349,6 +379,30 @@ export class TaskStore {
     await this.updateTask(id, { completed: true, completedDate: todayIso() });
     this.showUndoNotice("Task completed.", () => this.undoLastCompletion());
   }
+  /**
+   * "Skip this time" for a recurring task: moves it to its next occurrence
+   * without counting the current one as done (and without counting as
+   * postponing it).
+   */
+  async skipOccurrence(id: string) {
+    const task = this.tasks.find((t) => t.id === id);
+    if (!task || !task.repeat || task.completed) return;
+    const today = todayIso();
+    const fromDate = task.repeat.mode === "completedDate" ? today : task.due || today;
+    const nextDue = nextOccurrence(task.repeat, fromDate);
+    if (isRepeatEnded(task.repeat, (task.completedOccurrences || []).length, nextDue)) {
+      new Notice("There's no later occurrence to skip to.");
+      return;
+    }
+    const shift = task.due ? daysBetweenIso(task.due, nextDue) : 0;
+    const previous = { due: task.due, scheduled: task.scheduled, start: task.start };
+    await this.updateTask(id, {
+      due: nextDue,
+      scheduled: task.scheduled && shift ? shiftIsoDate(task.scheduled, shift) : task.scheduled,
+      start: task.start && shift ? shiftIsoDate(task.start, shift) : task.start
+    }, { notPostponing: true });
+    this.showUndoNotice(`Skipped. Next time: ${formatDueDateChip(nextDue)}.`, () => this.updateTask(id, previous, { notPostponing: true }));
+  }
   /** Toast after a completion or deletion, with an inline action to take it back. */
   showUndoNotice(message: string, undo: () => Promise<unknown>) {
     let notice: Notice | null = null;
@@ -381,26 +435,33 @@ export class TaskStore {
   }
   /** Deletes one task the user chose to delete, with a notice that can undo it. */
   async deleteTask(id: string) {
-    const snapshot = snapshotDeletion(this.fileModel.blocks, this.tasks, id);
-    await this.deleteManyTasks([id]);
-    if (!snapshot) return;
-    this.lastDeletion = snapshot;
-    this.showUndoNotice(`Deleted "${snapshot.task.title}".`, () => this.undoLastDeletion());
+    await this.deleteTasksWithUndo([id]);
+  }
+  /** Deletes one or more tasks and offers Undo, which puts all of them back where they were. */
+  async deleteTasksWithUndo(ids: string[]) {
+    const snapshots = ids
+      .map((id) => snapshotDeletion(this.fileModel.blocks, this.tasks, id))
+      .filter((s): s is DeletedTaskSnapshot => s !== null);
+    await this.deleteManyTasks(ids);
+    if (!snapshots.length) return;
+    this.lastDeletion = snapshots;
+    const message = snapshots.length === 1 ? `Deleted "${snapshots[0].task.title}".` : `Deleted ${snapshots.length} tasks.`;
+    this.showUndoNotice(message, () => this.undoLastDeletion());
   }
   /** Puts the most recently deleted task back where it was in the file. */
   async undoLastDeletion(): Promise<boolean> {
-    const snapshot = this.lastDeletion;
-    if (!snapshot) {
+    const snapshots = (this.lastDeletion || []).filter((s) => !this.tasks.some((t) => t.id === s.task.id));
+    if (!this.lastDeletion) {
       new Notice("Nothing to undo.");
       return false;
     }
     this.lastDeletion = null;
-    if (this.tasks.some((t) => t.id === snapshot.task.id)) return false;
-    const restored = reinsertDeletedTask(this.fileModel.blocks, this.tasks, snapshot);
+    if (!snapshots.length) return false;
+    const restored = restoreDeletedTasks(this.fileModel.blocks, this.tasks, snapshots);
     this.fileModel.blocks = restored.blocks;
     this.tasks = restored.tasks;
     await this.save();
-    new Notice(`Restored "${snapshot.task.title}".`);
+    new Notice(snapshots.length === 1 ? `Restored "${snapshots[0].task.title}".` : `Restored ${snapshots.length} tasks.`);
     return true;
   }
   get archiveFilePath() {
@@ -479,7 +540,7 @@ ${lines.join("\n")}
   async save() {
     const file = await this.ensureFile(this.filePath);
     if (!file) {
-      new Notice("Sector Tasks could not write the tasks file. Check the file path in settings.");
+      new Notice("Could not write the tasks file. Check its path in the settings.");
       return;
     }
     const tasksById = new Map(this.tasks.map((t) => [t.id, t]));
@@ -638,7 +699,7 @@ ${lines.join("\n")}
     if (this.warnedStorageIssues.has(key)) return;
     this.warnedStorageIssues.add(key);
     const kind = existing instanceof TFolder ? "folder" : "something";
-    new Notice(`Sector Tasks: "${path}" is a ${kind}, not a usable tasks file. Change the path in settings.`);
+    new Notice(`"${path}" is a ${kind}, not a usable tasks file. Change the path in the settings.`);
   }
 };
 /** A deleted task plus where its line sat in the file, so undo can put it back. */
@@ -686,6 +747,17 @@ export function reinsertDeletedTask(blocks: FileBlock[], tasks: Task[], snapshot
   const ti = Math.min(snapshot.taskIndex, tasks.length);
   const nextTasks = [...tasks.slice(0, ti), snapshot.task, ...tasks.slice(ti)].map((t, index) => ({ ...t, order: index }));
   return { blocks: nextBlocks, tasks: nextTasks };
+}
+/**
+ * Puts several deleted tasks back. Snapshots were taken before the delete, so
+ * restoring them top to bottom gives each one its old neighbours back.
+ */
+export function restoreDeletedTasks(blocks: FileBlock[], tasks: Task[], snapshots: DeletedTaskSnapshot[]): { blocks: FileBlock[]; tasks: Task[] } {
+  let state = { blocks, tasks };
+  for (const snapshot of [...snapshots].sort((a, b) => a.blockIndex - b.blockIndex)) {
+    state = reinsertDeletedTask(state.blocks, state.tasks, snapshot);
+  }
+  return state;
 }
 /** "- [ ] Buy milk", "* Buy milk", "3. Buy milk" → "Buy milk". */
 export function stripListMarker(line: string): string {

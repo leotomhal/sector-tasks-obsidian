@@ -2,6 +2,9 @@ import { ItemView, Menu, WorkspaceLeaf, setIcon } from "obsidian";
 import type { BelkiSettings, CalendarFeed, Task } from "../types";
 import { TaskStore } from "../taskStore";
 import { TaskBoardView, VIEW_TYPE_BELKI } from "./TaskBoardView";
+import { ConfirmModal } from "./ConfirmModal";
+import { SectorPickModal } from "./SectorPickModal";
+import { renderIntentionBanner } from "./NudgeModals";
 import { addDaysIso, compareIsoDates, formatDueDateChip, shiftIsoDate, todayIso } from "../dateUtils";
 import { getPriorityColor, getPriorityLabel } from "../priority";
 import { normalizeTaskProject, projectDisplayName } from "../projects";
@@ -55,6 +58,23 @@ export function showSelectionContextMenu(store: TaskStore, tasks: Task[], event:
     menu.addItem((item) => item.setTitle(getPriorityLabel(priority)).onClick(() => same({ priority })));
   }
   menu.addItem((item) => item.setTitle("No priority").onClick(() => same({ priority: "none" })));
+  menu.addSeparator();
+  menu.addItem((item) => item.setTitle("Move to sector\u2026").setIcon("folder-input").onClick(() => {
+    new SectorPickModal(store.app, store.settings.sectors, void 0, (tag) => same({ project: tag })).open();
+  }));
+  menu.addItem((item) => {
+    item.setTitle(`Delete ${tasks.length} tasks\u2026`).setIcon("trash-2").setWarning(true).onClick(() => {
+      new ConfirmModal(store.app, {
+        title: `Delete ${tasks.length} tasks?`,
+        subject: tasks.slice(0, 5).map((t) => t.title).join("\n") + (tasks.length > 5 ? `\n\u2026and ${tasks.length - 5} more` : ""),
+        body: "This removes their lines from your tasks file. You can still undo it right after.",
+        confirmText: "Delete",
+        destructive: true
+      }, () => {
+        void store.deleteTasksWithUndo(ids).then(onDone);
+      }).open();
+    });
+  });
   menu.showAtMouseEvent(event);
 }
 export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEvent, extra?: (menu: Menu) => void) {
@@ -110,6 +130,20 @@ export function showTaskContextMenu(store: TaskStore, task: Task, event: MouseEv
     });
   });
   if (!task.planning) {
+    menu.addItem((item) => {
+      item.setTitle("Move to sector\u2026").setIcon("folder-input").onClick(() => {
+        new SectorPickModal(store.app, store.settings.sectors, task.project, (tag) => void store.updateTask(task.id, { project: tag })).open();
+      });
+    });
+  }
+  if (task.repeat && !task.completed) {
+    menu.addItem((item) => {
+      item.setTitle("Skip this time").setIcon("skip-forward").onClick(() => {
+        void store.skipOccurrence(task.id);
+      });
+    });
+  }
+  if (!task.planning) {
     const hasNote = store.linkedNote(task) !== null;
     menu.addItem((item) => {
       item.setTitle(hasNote ? "Open note" : "Create note").setIcon("file-text").onClick(() => {
@@ -127,8 +161,10 @@ export class TodaySidebarView extends ItemView {
   collapsedSections?: Set<string>;
   calendar: CalendarService;
   unsubscribeCalendar?: () => void;
-  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, calendar: CalendarService) {
+  saveSettings: () => Promise<void>;
+  constructor(leaf: WorkspaceLeaf, store: TaskStore, settings: BelkiSettings, calendar: CalendarService, saveSettings: () => Promise<void>) {
     super(leaf);
+    this.saveSettings = saveSettings;
     this.store = store;
     this.settings = settings;
     this.calendar = calendar;
@@ -192,11 +228,12 @@ export class TodaySidebarView extends ItemView {
     const addButton = headerActions.createEl("button", {
       cls: "belki-today-add",
       text: "+",
-      attr: { type: "button", "aria-label": "Quick add task (Inbox)" }
+      attr: { type: "button", "aria-label": "Quick add task to inbox" }
     });
     addButton.addEventListener("click", () => {
       void this.store.createTaskInEditor("");
     });
+    renderIntentionBanner(container, this.app, this.settings, this.saveSettings, () => this.render());
     const archivedSet = new Set(this.settings.archivedProjects);
     const open = this.store.getTasks().filter(
       (t) => !t.completed && !archivedSet.has(normalizeTaskProject(t.project) || "")

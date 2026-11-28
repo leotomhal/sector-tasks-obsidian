@@ -39,6 +39,7 @@ const {
   ensureTaskMarker,
   ensureSectorInLine,
   parseTasksRecurrence,
+  nextOccurrence,
   serializeTasksRecurrence,
   normalizeLabelName,
   extractTags,
@@ -54,6 +55,13 @@ const {
   linkedNoteNames,
   titleAsLink,
   taskDueForEvent,
+  layoutLanes,
+  isPostponement,
+  prunePostponeCounts,
+  intentionIsCurrent,
+  longTermSector,
+  extractDateWords,
+  dateForWords,
   fillNoteTemplate,
   brainDumpLines,
   formFromRule,
@@ -67,6 +75,7 @@ const {
   snapshotForReview,
   snapshotDeletion,
   reinsertDeletedTask,
+  restoreDeletedTasks,
   parseChangelog,
   compareVersions,
   releaseNotesSince
@@ -277,6 +286,17 @@ test("undoing a delete of the first line puts it back at the top", () => {
   const after = deleteFrom(before, firstId);
   const restored = reinsertDeletedTask(after.blocks, after.tasks, snap);
   assert.equal(restored.blocks[0].taskId, firstId);
+});
+
+test("undoing a bulk delete restores every task in its old place", () => {
+  const before = deletionFixture();
+  const all = before.tasks.map((t) => t.id);
+  const snaps = all.map((id) => snapshotDeletion(before.blocks, before.tasks, id));
+  let after = before;
+  for (const id of all) after = deleteFrom(after, id);
+  const restored = restoreDeletedTasks(after.blocks, after.tasks, snaps.reverse());
+  assert.deepEqual(ids(restored.blocks), ids(before.blocks));
+  assert.deepEqual(restored.tasks.map((t) => t.id), before.tasks.map((t) => t.id));
 });
 
 // Release notes after an update come from the bundled CHANGELOG.md.
@@ -654,4 +674,122 @@ test("linkedNoteNames lists every linked note once", () => {
 test("taskDueForEvent uses the event day, or today once it has started", () => {
   assert.equal(taskDueForEvent({ startDay: "2026-11-20" }, "2026-11-15"), "2026-11-20");
   assert.equal(taskDueForEvent({ startDay: "2026-11-10" }, "2026-11-15"), "2026-11-15");
+});
+
+test("layoutLanes puts overlapping timeline items side by side", () => {
+  // 9-10 and 9:30-10:30 overlap; 11-12 stands alone; 10-11 fits back into lane 0.
+  const lanes = layoutLanes([{ s: 540, e: 600 }, { s: 570, e: 630 }, { s: 660, e: 720 }, { s: 600, e: 660 }]);
+  assert.deepEqual(lanes, [{ lane: 0, lanes: 2 }, { lane: 1, lanes: 2 }, { lane: 0, lanes: 1 }, { lane: 0, lanes: 2 }]);
+  assert.deepEqual(layoutLanes([]), []);
+});
+
+test("isPostponement only counts moving an open task's date later", () => {
+  const task = { id: "a", due: "2026-11-27", completed: false };
+  assert.equal(isPostponement(task, { due: "2026-11-28" }), true);
+  assert.equal(isPostponement(task, { due: "2026-11-20" }), false);
+  assert.equal(isPostponement(task, { due: void 0 }), false);
+  assert.equal(isPostponement({ id: "b", completed: false }, { due: "2026-11-28" }), false);
+  assert.equal(isPostponement(task, { due: "2026-12-04", completedOccurrences: ["2026-11-27"] }), false);
+  assert.equal(isPostponement({ ...task, planning: true }, { due: "2026-11-28" }), false);
+  assert.equal(isPostponement(task, { priority: "P1" }), false);
+});
+
+test("prunePostponeCounts keeps only open tasks and never wipes on an empty file", () => {
+  const tasks = [{ id: "a", completed: false }, { id: "b", completed: true }];
+  assert.deepEqual(prunePostponeCounts({ a: 2, b: 1, gone: 3 }, tasks), { a: 2 });
+  assert.equal(prunePostponeCounts({ a: 2 }, tasks), null);
+  assert.equal(prunePostponeCounts({ a: 2 }, []), null);
+});
+
+test("intentionIsCurrent lasts two weeks", () => {
+  assert.equal(intentionIsCurrent("2026-11-20", "2026-11-27"), true);
+  assert.equal(intentionIsCurrent("2026-11-13", "2026-11-27"), false);
+  assert.equal(intentionIsCurrent(void 0, "2026-11-27"), false);
+});
+
+test("longTermSector finds the long-term sector", () => {
+  assert.equal(longTermSector([{ tag: "01this-week", label: "This week" }, { tag: "05longterm", label: "Long term" }]).tag, "05longterm");
+  assert.equal(longTermSector([{ tag: "x", label: "Soon" }]), void 0);
+});
+
+// 2026-11-27 is a Friday.
+const FRI = "2026-11-27";
+test("dateForWords reads the listed words", () => {
+  assert.equal(dateForWords("heute", FRI, true), FRI);
+  assert.equal(dateForWords("Morgen", FRI, true), "2026-11-28");
+  assert.equal(dateForWords("übermorgen", FRI, true), "2026-11-29");
+  assert.equal(dateForWords("fr", FRI, true), "2026-12-04"); // never today
+  assert.equal(dateForWords("montag", FRI, true), "2026-11-30");
+  assert.equal(dateForWords("mon", FRI, false), void 0); // short names need permission
+  assert.equal(dateForWords("nächste woche", FRI, true), "2026-11-30");
+  assert.equal(dateForWords("in 3 tagen", FRI, true), "2026-11-30");
+  assert.equal(dateForWords("in 2 wochen", FRI, true), "2026-12-11");
+  assert.equal(dateForWords("15.12.", FRI, true), "2026-12-15");
+  assert.equal(dateForWords("3.1.", FRI, true), "2027-01-03"); // past this year: next year
+  assert.equal(dateForWords("15.12.2027", FRI, true), "2027-12-15");
+  assert.equal(dateForWords("31.2.", FRI, true), void 0);
+  assert.equal(dateForWords("1.2", FRI, true), void 0);
+});
+
+test("extractDateWords takes a date at the end, keeping trailing tags", () => {
+  assert.deepEqual(extractDateWords("Bescheid an Krause fr", FRI), { title: "Bescheid an Krause", due: "2026-12-04", matched: "fr" });
+  assert.equal(extractDateWords("Folien schicken in 3 tagen #grk", FRI).title, "Folien schicken #grk");
+  assert.equal(extractDateWords("Folien schicken in 3 tagen #grk", FRI).due, "2026-11-30");
+  assert.equal(extractDateWords("Jahresbericht 15.12.", FRI).due, "2026-12-15");
+});
+
+test("extractDateWords takes a date at the start, strictly", () => {
+  assert.deepEqual(extractDateWords("morgen Bescheid an Krause", FRI), { title: "Bescheid an Krause", due: "2026-11-28", matched: "morgen" });
+  assert.equal(extractDateWords("fr: Bescheid an Krause", FRI).due, "2026-12-04");
+  assert.equal(extractDateWords("fr: Bescheid an Krause", FRI).title, "Bescheid an Krause");
+  assert.equal(extractDateWords("15.12. Jahresbericht abgeben", FRI).due, "2026-12-15");
+  assert.equal(extractDateWords("So viel wie möglich vorbereiten", FRI).due, void 0);
+  assert.equal(extractDateWords("Do the taxes", FRI).due, void 0);
+  assert.equal(extractDateWords("Montag-Meeting vorbereiten", FRI).due, void 0);
+});
+
+test("extractDateWords leaves ambiguous or complete text alone", () => {
+  assert.equal(extractDateWords("Morgenrunde vorbereiten", FRI).due, void 0);
+  assert.equal(extractDateWords("Mail an Anna heute morgen", FRI).due, void 0);
+  assert.equal(extractDateWords("Mach das so", FRI).due, void 0);
+  assert.equal(extractDateWords("things to do", FRI).due, void 0);
+  assert.equal(extractDateWords("Termin Freitag.", FRI).due, void 0);
+  assert.equal(extractDateWords("Update auf Version 1.2", FRI).due, void 0);
+  assert.equal(extractDateWords("morgen", FRI).due, void 0); // nothing would be left
+  assert.equal(extractDateWords("Report fr 📅 2026-12-01", FRI).due, void 0);
+  assert.equal(extractDateWords("Krause anrufen morgen fr", FRI).due, "2026-12-04"); // the end wins
+});
+
+test("recurrence: 'every monday' is weekly, not yearly", () => {
+  const rule = parseTasksRecurrence("every monday");
+  assert.equal(rule.frequency, "weekly");
+  assert.equal(rule.weekday, 1);
+  assert.equal(nextOccurrence(rule, "2026-11-30"), "2026-12-07");
+});
+
+test("recurrence: weekly on a weekday goes to the next such day", () => {
+  const rule = parseTasksRecurrence("every week on monday when done");
+  assert.equal(nextOccurrence(rule, "2026-12-01"), "2026-12-07"); // done on a Tuesday: the next Monday, not 13 days later
+  assert.equal(nextOccurrence(parseTasksRecurrence("every 2 weeks on friday"), "2026-11-27"), "2026-12-11");
+});
+
+test("recurrence: monthly on the 31st doesn't drift after February", () => {
+  const rule = parseTasksRecurrence("every month on the 31st");
+  assert.equal(nextOccurrence(rule, "2027-01-31"), "2027-02-28");
+  assert.equal(nextOccurrence(rule, "2027-02-28"), "2027-03-31");
+});
+
+test("recurrence: yearly reads the day next to the month, not the interval", () => {
+  const rule = parseTasksRecurrence("every 2 years on july 15");
+  assert.equal(rule.dayOfMonth, 15);
+  assert.equal(rule.month, 7);
+  assert.equal(nextOccurrence(rule, "2026-07-15"), "2028-07-15");
+  // A due date on the 31st must not spill into the next month.
+  assert.equal(nextOccurrence(parseTasksRecurrence("every year on april 30"), "2026-01-31"), "2027-04-30");
+});
+
+test("a sector tag after the repeat rule is still the sector", () => {
+  const parsed = parseTaskLine("- [ ] Backup 🔁 every week #task #routines", "x", 0);
+  assert.equal(parsed.task.project, "routines");
+  assert.equal(parsed.task.repeat.raw, "every week");
 });

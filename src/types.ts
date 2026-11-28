@@ -4,7 +4,6 @@ export const SORT_MODES = [
   "smart",
   "due",
   "priority",
-  "deadline",
   "created",
   "project",
   "alphabetical"
@@ -171,6 +170,13 @@ export interface BelkiSettings {
   waitingSince: Record<string, string>;
   /** Task id → the sector it is in and since when, to spot tasks stuck in a sector. */
   sectorSince: Record<string, { sector: string; since: string }>;
+  /** "Not today": ask what to do after a task's due date was moved this many times (0 = off). */
+  postponeAsk: number;
+  /** How often each open task (by 🆔) has been moved to a later date since the last ask. */
+  postponeCounts: Record<string, number>;
+  /** Ask for one sentence for the coming week after the weekly review. */
+  weeklyIntentionEnabled: boolean;
+  weeklyIntention: { text: string; setOn: string } | null;
   /** Mark tasks that sat this many weeks in a weekly-review sector; 0 turns it off. */
   stuckWeeks: number;
   /** Mark waiting tasks once they have waited this many days; 0 never marks them. */
@@ -182,6 +188,10 @@ export interface BelkiSettings {
   calendarRefreshMinutes: number;
   /** Module: a timeline in Today to plan tasks into time slots. */
   timeBlocking: boolean;
+  /** Upcoming as seven day columns instead of a list (desktop). */
+  upcomingWeekView: boolean;
+  /** Read dates written as words when capturing ("… fr", "morgen …", "15.12."). */
+  dateWords: boolean;
   dayStartHour: number;
   dayEndHour: number;
   /** Today's blocks; blocks from another day are dropped. */

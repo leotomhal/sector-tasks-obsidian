@@ -198,6 +198,45 @@ export function blockConflicts(block: TimeBlock, events: CalEvent[], day: string
 }
 
 /** Today's timeline: calendar events as fixed blocks, planned tasks as dashed blocks, a "now" line. */
+/**
+ * Side-by-side lanes for overlapping items (start/end in minutes), like a
+ * calendar's day view: each item gets the first free lane, and every item in a
+ * group of overlapping ones shares that group's lane count.
+ */
+export function layoutLanes(ranges: { s: number; e: number }[]): { lane: number; lanes: number }[] {
+  const order = ranges.map((r, i) => ({ ...r, i })).sort((a, b) => a.s - b.s || b.e - a.e);
+  const out: { lane: number; lanes: number }[] = ranges.map(() => ({ lane: 0, lanes: 1 }));
+  let group: number[] = [];
+  let groupEnd = -Infinity;
+  let laneEnds: number[] = [];
+  const close = () => {
+    for (const i of group) out[i].lanes = laneEnds.length;
+    group = [];
+    laneEnds = [];
+  };
+  for (const item of order) {
+    if (item.s >= groupEnd) {
+      close();
+      groupEnd = -Infinity;
+    }
+    let lane = laneEnds.findIndex((end) => end <= item.s);
+    if (lane < 0) lane = laneEnds.push(item.e) - 1;
+    else laneEnds[lane] = item.e;
+    out[item.i].lane = lane;
+    group.push(item.i);
+    groupEnd = Math.max(groupEnd, item.e);
+  }
+  close();
+  return out;
+}
+
+/** Places an item in its lane inside a column given in percent of the grid width. */
+function placeInLane(item: HTMLElement, from: number, to: number, slot: { lane: number; lanes: number }) {
+  const width = (to - from) / slot.lanes;
+  const left = from + slot.lane * width;
+  item.setCssStyles({ left: `${left}%`, right: `${100 - left - width}%` });
+}
+
 export function renderTimeline(parent: HTMLElement, host: TimelineHost, events: CalEvent[], day: string, nowMin: number) {
   const start = Math.min(host.dayStartHour, 23) * 60;
   const end = Math.max(start + 60, Math.min(host.dayEndHour, 24) * 60);
@@ -233,33 +272,35 @@ export function renderTimeline(parent: HTMLElement, host: TimelineHost, events: 
   }
   const timed = eventsOnDay(events, day).filter((p) => !p.allDay && p.endMin > start && p.startMin < end);
   const hasEvents = timed.length > 0;
-  for (const piece of timed) {
-    const s = Math.max(start, piece.startMin);
-    const e = Math.min(end, Math.max(piece.endMin, piece.startMin + 15));
+  const eventRanges = timed.map((piece) => ({ s: Math.max(start, piece.startMin), e: Math.min(end, Math.max(piece.endMin, piece.startMin + 15)) }));
+  const eventLanes = layoutLanes(eventRanges);
+  timed.forEach((piece, index) => {
+    const { s, e } = eventRanges[index];
     const item = grid.createEl("button", { cls: "belki-timeline-item belki-timeline-event", attr: { type: "button" } });
+    if (eventLanes[index].lanes > 1) placeInLane(item, 0, 54, eventLanes[index]);
     item.setCssStyles({ top: `${(s - start) * PX_PER_MIN + 1}px`, height: `${(e - s) * PX_PER_MIN - 2}px` });
     const color = host.eventColor(piece.event);
     if (color) item.setCssProps({ "--belki-event-color": color });
     item.setText(piece.event.title);
     item.createEl("small", { text: `${formatMinutes(piece.startMin)}–${formatMinutes(piece.endMin)}` });
     item.addEventListener("click", () => host.openEvent(piece.event));
-  }
-  for (const block of host.blocks) {
-    const title = host.taskTitle(block.taskId);
-    if (!title) continue;
-    const s = Math.max(start, block.start);
-    const e = Math.min(end, block.start + block.duration);
-    if (e <= s) continue;
+  });
+  const shown = host.blocks
+    .map((block) => ({ block, title: host.taskTitle(block.taskId), s: Math.max(start, block.start), e: Math.min(end, block.start + block.duration) }))
+    .filter((b): b is { block: TimeBlock; title: string; s: number; e: number } => b.title !== null && b.e > b.s);
+  const blockLanes = layoutLanes(shown);
+  shown.forEach(({ block, title, s, e }, index) => {
     const conflict = blockConflicts(block, events, day);
     const item = grid.createEl("button", { cls: "belki-timeline-item belki-timeline-block", attr: { type: "button" } });
     item.toggleClass("has-events", hasEvents);
     item.toggleClass("is-conflict", conflict);
     item.toggleClass("is-done", host.taskDone(block.taskId));
     item.setCssStyles({ top: `${(s - start) * PX_PER_MIN + 1}px`, height: `${(e - s) * PX_PER_MIN - 2}px` });
+    if (blockLanes[index].lanes > 1) placeInLane(item, hasEvents ? 56 : 0, 100, blockLanes[index]);
     item.setText(title);
     item.createEl("small", { text: `${formatMinutes(block.start)}–${formatMinutes(block.start + block.duration)}${conflict ? " · overlaps" : ""}` });
     item.addEventListener("click", () => new BlockModal(host, block, title).open());
-  }
+  });
   if (nowMin >= start && nowMin <= end) grid.createDiv({ cls: "belki-timeline-now", attr: { "aria-label": `Now ${formatMinutes(nowMin)}` } }).setCssStyles({ top: top(nowMin) });
 }
 
