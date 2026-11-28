@@ -10,12 +10,15 @@ export function nextOccurrence(rule: RepeatRule, fromDate: string): string {
       date.setDate(date.getDate() + interval);
       break;
     case "weekly":
-      date.setDate(date.getDate() + 7 * interval);
-      if (rule.weekday !== void 0 && date.getDay() !== rule.weekday) {
-        let diff = rule.weekday - date.getDay();
-        if (diff < 0) diff += 7;
-        date.setDate(date.getDate() + diff);
+      if (rule.weekday === void 0) {
+        date.setDate(date.getDate() + 7 * interval);
+        break;
       }
+      // The next such weekday after the date (not "a week later, then
+      // forward"), so a moved date or a "when done" rule doesn't skip a week.
+      date.setDate(date.getDate() + 1);
+      while (date.getDay() !== rule.weekday) date.setDate(date.getDate() + 1);
+      date.setDate(date.getDate() + 7 * (interval - 1));
       break;
     case "weekdays":
       date.setDate(date.getDate() + 1);
@@ -24,7 +27,9 @@ export function nextOccurrence(rule: RepeatRule, fromDate: string): string {
       }
       break;
     case "monthly": {
-      const targetDay = date.getDate();
+      // "on the 31st" stays on the 31st (or the month's last day), instead of
+      // drifting to the 28th after February.
+      const targetDay = rule.dayOfMonth ?? date.getDate();
       date.setDate(1);
       date.setMonth(date.getMonth() + interval);
       const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -34,10 +39,11 @@ export function nextOccurrence(rule: RepeatRule, fromDate: string): string {
     case "yearly": {
       const targetMonth = rule.month !== void 0 ? rule.month - 1 : date.getMonth();
       const targetDay2 = rule.dayOfMonth !== void 0 ? rule.dayOfMonth : date.getDate();
-      date.setFullYear(date.getFullYear() + interval);
-      const lastDay2 = new Date(date.getFullYear(), targetMonth + 1, 0).getDate();
-      date.setMonth(targetMonth);
-      date.setDate(Math.min(targetDay2, lastDay2));
+      const targetYear = date.getFullYear() + interval;
+      const lastDay2 = new Date(targetYear, targetMonth + 1, 0).getDate();
+      // Set day 1 first so a 31st can't spill into the following month.
+      date.setDate(1);
+      date.setFullYear(targetYear, targetMonth, Math.min(targetDay2, lastDay2));
       break;
     }
   }

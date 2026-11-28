@@ -48,8 +48,9 @@ export class TaskStore {
     return normalizePath(path) === this.filePath;
   }
   /** Tasks only; year-plan entries (#planning) live in getPlanningEntries(). */
+  /** Tasks (not planning entries, not cancelled "[-]" lines, which stay in the file untouched). */
   getTasks() {
-    return this.tasks.filter((t) => !t.planning).map(cloneTask);
+    return this.tasks.filter((t) => !t.planning && t.status !== "-").map(cloneTask);
   }
   getPlanningEntries() {
     return this.tasks.filter((t) => t.planning).map(cloneTask);

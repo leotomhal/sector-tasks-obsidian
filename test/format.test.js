@@ -39,6 +39,7 @@ const {
   ensureTaskMarker,
   ensureSectorInLine,
   parseTasksRecurrence,
+  nextOccurrence,
   serializeTasksRecurrence,
   normalizeLabelName,
   extractTags,
@@ -757,4 +758,38 @@ test("extractDateWords leaves ambiguous or complete text alone", () => {
   assert.equal(extractDateWords("morgen", FRI).due, void 0); // nothing would be left
   assert.equal(extractDateWords("Report fr 📅 2026-12-01", FRI).due, void 0);
   assert.equal(extractDateWords("Krause anrufen morgen fr", FRI).due, "2026-12-04"); // the end wins
+});
+
+test("recurrence: 'every monday' is weekly, not yearly", () => {
+  const rule = parseTasksRecurrence("every monday");
+  assert.equal(rule.frequency, "weekly");
+  assert.equal(rule.weekday, 1);
+  assert.equal(nextOccurrence(rule, "2026-11-30"), "2026-12-07");
+});
+
+test("recurrence: weekly on a weekday goes to the next such day", () => {
+  const rule = parseTasksRecurrence("every week on monday when done");
+  assert.equal(nextOccurrence(rule, "2026-12-01"), "2026-12-07"); // done on a Tuesday: the next Monday, not 13 days later
+  assert.equal(nextOccurrence(parseTasksRecurrence("every 2 weeks on friday"), "2026-11-27"), "2026-12-11");
+});
+
+test("recurrence: monthly on the 31st doesn't drift after February", () => {
+  const rule = parseTasksRecurrence("every month on the 31st");
+  assert.equal(nextOccurrence(rule, "2027-01-31"), "2027-02-28");
+  assert.equal(nextOccurrence(rule, "2027-02-28"), "2027-03-31");
+});
+
+test("recurrence: yearly reads the day next to the month, not the interval", () => {
+  const rule = parseTasksRecurrence("every 2 years on july 15");
+  assert.equal(rule.dayOfMonth, 15);
+  assert.equal(rule.month, 7);
+  assert.equal(nextOccurrence(rule, "2026-07-15"), "2028-07-15");
+  // A due date on the 31st must not spill into the next month.
+  assert.equal(nextOccurrence(parseTasksRecurrence("every year on april 30"), "2026-01-31"), "2027-04-30");
+});
+
+test("a sector tag after the repeat rule is still the sector", () => {
+  const parsed = parseTaskLine("- [ ] Backup 🔁 every week #task #routines", "x", 0);
+  assert.equal(parsed.task.project, "routines");
+  assert.equal(parsed.task.repeat.raw, "every week");
 });

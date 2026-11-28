@@ -246,7 +246,8 @@ function parseTasksRecurrence(raw) {
   if (/weekday/.test(body)) {
     return { frequency: "weekdays", interval, mode, ends, raw: rawTrimmed };
   }
-  if (/\bweek(s)?\b/.test(body)) {
+  const weekdayOnly = Object.keys(WEEKDAY_INDEX).find((d) => new RegExp(`^(\\d+\\s+)?${d}s?\\b`).test(body));
+  if (/\bweek(s)?\b/.test(body) || weekdayOnly) {
     const wd = Object.keys(WEEKDAY_INDEX).find((d) => body.includes(d));
     return { frequency: "weekly", interval, mode, ends, weekday: wd ? WEEKDAY_INDEX[wd] : void 0, raw: rawTrimmed };
   }
@@ -256,7 +257,8 @@ function parseTasksRecurrence(raw) {
   }
   const yearMonth = Object.keys(MONTH_INDEX).find((m) => body.includes(m));
   if (/\byear(s)?\b/.test(body) || yearMonth) {
-    const dMatch = yearMonth ? body.match(/\b(\d{1,2})\b/) : void 0;
+    const afterInterval = intMatch ? body.slice(intMatch[0].length) : body;
+    const dMatch = yearMonth ? afterInterval.match(/\b(\d{1,2})\b/) : void 0;
     return {
       frequency: "yearly",
       interval,
@@ -337,7 +339,7 @@ function parseTaskLine(line, id, order) {
   const idMatch = body.match(new RegExp(`${E_ID}\\s*([A-Za-z0-9_-]+)`));
   if (idMatch) existingId = idMatch[1];
   let repeat;
-  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+)`, "u"));
+  const recurMatch = body.match(new RegExp(`${E_RECUR}\\s*([^#📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+)`, "u"));
   if (recurMatch) repeat = parseTasksRecurrence(recurMatch[1]);
   let priority = "none";
   for (const [emoji, p] of PRIORITY_EMOJI_TO_BELKI) {
@@ -352,7 +354,7 @@ function parseTaskLine(line, id, order) {
   body = stripField(E_SCHEDULED, body);
   body = stripField(E_START, body);
   body = stripField(E_CANCELLED, body);
-  body = body.replace(new RegExp(`${E_RECUR}\\s*[^📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+`, "gu"), " ");
+  body = body.replace(new RegExp(`${E_RECUR}\\s*[^#📅✅➕🆔⏳🛫❌🔺⏫🔼🔽⏬]+`, "gu"), " ");
   body = body.replace(new RegExp(`${E_ID}\\s*[A-Za-z0-9_-]+`, "g"), " ");
   for (const e of PRIORITY_EMOJIS) body = body.split(e).join(" ");
   const tags = extractTags(body);
@@ -14375,7 +14377,7 @@ function searchableText(task) {
 
 // src/repeatUtils.ts
 function nextOccurrence(rule, fromDate) {
-  var _a;
+  var _a, _b;
   const [year, month, day] = fromDate.split("-").map(Number);
   const date = new Date(year, month - 1, day);
   const interval = (_a = rule.interval) != null ? _a : 1;
@@ -14384,12 +14386,13 @@ function nextOccurrence(rule, fromDate) {
       date.setDate(date.getDate() + interval);
       break;
     case "weekly":
-      date.setDate(date.getDate() + 7 * interval);
-      if (rule.weekday !== void 0 && date.getDay() !== rule.weekday) {
-        let diff = rule.weekday - date.getDay();
-        if (diff < 0) diff += 7;
-        date.setDate(date.getDate() + diff);
+      if (rule.weekday === void 0) {
+        date.setDate(date.getDate() + 7 * interval);
+        break;
       }
+      date.setDate(date.getDate() + 1);
+      while (date.getDay() !== rule.weekday) date.setDate(date.getDate() + 1);
+      date.setDate(date.getDate() + 7 * (interval - 1));
       break;
     case "weekdays":
       date.setDate(date.getDate() + 1);
@@ -14398,7 +14401,7 @@ function nextOccurrence(rule, fromDate) {
       }
       break;
     case "monthly": {
-      const targetDay = date.getDate();
+      const targetDay = (_b = rule.dayOfMonth) != null ? _b : date.getDate();
       date.setDate(1);
       date.setMonth(date.getMonth() + interval);
       const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -14408,10 +14411,10 @@ function nextOccurrence(rule, fromDate) {
     case "yearly": {
       const targetMonth = rule.month !== void 0 ? rule.month - 1 : date.getMonth();
       const targetDay2 = rule.dayOfMonth !== void 0 ? rule.dayOfMonth : date.getDate();
-      date.setFullYear(date.getFullYear() + interval);
-      const lastDay2 = new Date(date.getFullYear(), targetMonth + 1, 0).getDate();
-      date.setMonth(targetMonth);
-      date.setDate(Math.min(targetDay2, lastDay2));
+      const targetYear = date.getFullYear() + interval;
+      const lastDay2 = new Date(targetYear, targetMonth + 1, 0).getDate();
+      date.setDate(1);
+      date.setFullYear(targetYear, targetMonth, Math.min(targetDay2, lastDay2));
       break;
     }
   }
@@ -15046,8 +15049,9 @@ var TaskStore = class {
     return (0, import_obsidian13.normalizePath)(path) === this.filePath;
   }
   /** Tasks only; year-plan entries (#planning) live in getPlanningEntries(). */
+  /** Tasks (not planning entries, not cancelled "[-]" lines, which stay in the file untouched). */
   getTasks() {
-    return this.tasks.filter((t) => !t.planning).map(cloneTask);
+    return this.tasks.filter((t) => !t.planning && t.status !== "-").map(cloneTask);
   }
   getPlanningEntries() {
     return this.tasks.filter((t) => t.planning).map(cloneTask);
