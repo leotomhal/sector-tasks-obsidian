@@ -60,7 +60,16 @@ export default class BelkiPlugin extends Plugin {
         this.openReleaseNotes();
       }
     });
+    // Read the tasks file once the vault is indexed, as Obsidian recommends: before
+    // that, the file can look missing. "create" fires for every file while the
+    // vault loads, so that listener starts here too.
     this.app.workspace.onLayoutReady(() => {
+      void this.initializeStore();
+      this.registerEvent(
+        this.app.vault.on("create", (file) => {
+          void this.refreshIfTaskFile(file);
+        })
+      );
       void this.showReleaseNotesIfUpdated(!hadSettings);
       // Calendars: show the cached events right away, then fetch fresh ones.
       void this.calendar.loadCache().then(() => this.calendar.refresh());
@@ -174,11 +183,6 @@ export default class BelkiPlugin extends Plugin {
       })
     );
     this.registerEvent(
-      this.app.vault.on("create", (file) => {
-        void this.refreshIfTaskFile(file);
-      })
-    );
-    this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
         if (this.store.isTaskStorageFile(oldPath) || this.store.isTaskStorageFile(file.path)) {
           this.scheduleReload();
@@ -192,14 +196,12 @@ export default class BelkiPlugin extends Plugin {
         }
       })
     );
-    void this.initializeStore();
   }
   onunload() {
     if (this.reloadDebounceTimer !== null) {
       window.clearTimeout(this.reloadDebounceTimer);
     }
   }
-  /** Loads settings; returns false when there was no saved data yet (a fresh install). */
   /** "Not today": count moves to a later date; after enough of them, ask what to do. */
   recordPostponements(tasks: Task[]) {
     const limit = this.settings.postponeAsk;
@@ -255,6 +257,7 @@ export default class BelkiPlugin extends Plugin {
       }
     ).open();
   }
+  /** Loads settings; returns false when there was no saved data yet (a fresh install). */
   async loadSettings(): Promise<boolean> {
     const raw: unknown = await this.loadData();
     const saved = toSettingsData(raw);

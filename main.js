@@ -9037,8 +9037,9 @@ function buildReviewSteps(type, sectors, tasks) {
   if (type === "daily") {
     const today = todayIso();
     const tomorrow = addDaysIso(1);
-    const dueToday = active.filter((t) => t.due === today).map((t) => t.id);
-    const dueTomorrowOrOverdue = active.filter((t) => t.due && t.due !== today && t.due <= tomorrow).map((t) => t.id);
+    const inInbox = new Set(inboxIds);
+    const dueToday = active.filter((t) => t.due === today && !inInbox.has(t.id)).map((t) => t.id);
+    const dueTomorrowOrOverdue = active.filter((t) => t.due && t.due !== today && t.due <= tomorrow && !inInbox.has(t.id)).map((t) => t.id);
     if (dueToday.length) {
       steps.push({ kind: "date", label: "Due today", taskIds: dueToday, totalTasks: dueToday.length, doneTasks: 0 });
     }
@@ -9135,7 +9136,6 @@ var SORT_MODES = [
   "smart",
   "due",
   "priority",
-  "deadline",
   "created",
   "project",
   "alphabetical"
@@ -11608,7 +11608,6 @@ var SORT_OPTIONS = [
   { mode: "smart", label: "Smart" },
   { mode: "due", label: "Due date" },
   { mode: "priority", label: "Priority" },
-  { mode: "deadline", label: "Deadline" },
   { mode: "created", label: "Created date" },
   { mode: "project", label: "Sector" },
   { mode: "alphabetical", label: "Alphabetical" }
@@ -11956,7 +11955,8 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
       nav,
       "Completed",
       "completed",
-      tasks.filter((task) => task.completed || task.completedOccurrences && task.completedOccurrences.length > 0).length,
+      // The same tasks the Completed view lists (archived sectors left out).
+      tasks.filter((task) => task.completed && !archivedSet.has(normalizeTaskProject(task.project) || "")).length,
       "completed"
     );
   }
@@ -12002,6 +12002,7 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
       this.render();
       return;
     }
+    if (this.store.idsNotInFile.size > 0) await this.store.save();
     const tasks = this.store.getTasks();
     const steps = buildReviewSteps(type, this.settings.sectors, tasks);
     if (steps.length === 0) {
@@ -13528,6 +13529,7 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
       const lines = content.split(/\r?\n/);
       const needle = `${E_ID} ${task.id}`;
       line = lines.findIndex((l) => l.includes(needle));
+      if (line < 0 && task.title) line = lines.findIndex((l) => isTaskLine(l) && l.includes(task.title));
     } catch (e) {
     }
     const leaf = this.app.workspace.getLeaf(true);
@@ -13783,12 +13785,6 @@ var TaskBoardView = class extends import_obsidian9.ItemView {
         name: "Overdue",
         icon: "!",
         tasks: active.filter((task) => task.due && task.due < today)
-      },
-      {
-        id: "with-deadline",
-        name: "With deadline",
-        icon: "◆",
-        tasks: active.filter((task) => Boolean(task.deadline))
       },
       {
         id: "no-label",
@@ -15897,6 +15893,12 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       }
     });
     this.app.workspace.onLayoutReady(() => {
+      void this.initializeStore();
+      this.registerEvent(
+        this.app.vault.on("create", (file) => {
+          void this.refreshIfTaskFile(file);
+        })
+      );
       void this.showReleaseNotesIfUpdated(!hadSettings);
       void this.calendar.loadCache().then(() => this.calendar.refresh());
     });
@@ -16008,11 +16010,6 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       })
     );
     this.registerEvent(
-      this.app.vault.on("create", (file) => {
-        void this.refreshIfTaskFile(file);
-      })
-    );
-    this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
         if (this.store.isTaskStorageFile(oldPath) || this.store.isTaskStorageFile(file.path)) {
           this.scheduleReload();
@@ -16026,14 +16023,12 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
         }
       })
     );
-    void this.initializeStore();
   }
   onunload() {
     if (this.reloadDebounceTimer !== null) {
       window.clearTimeout(this.reloadDebounceTimer);
     }
   }
-  /** Loads settings; returns false when there was no saved data yet (a fresh install). */
   /** "Not today": count moves to a later date; after enough of them, ask what to do. */
   recordPostponements(tasks) {
     var _a;
@@ -16090,6 +16085,7 @@ var BelkiPlugin = class extends import_obsidian15.Plugin {
       }
     ).open();
   }
+  /** Loads settings; returns false when there was no saved data yet (a fresh install). */
   async loadSettings() {
     const raw = await this.loadData();
     const saved = toSettingsData(raw);

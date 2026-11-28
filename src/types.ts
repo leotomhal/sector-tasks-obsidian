@@ -4,7 +4,6 @@ export const SORT_MODES = [
   "smart",
   "due",
   "priority",
-  "deadline",
   "created",
   "project",
   "alphabetical"

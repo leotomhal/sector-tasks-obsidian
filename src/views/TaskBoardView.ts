@@ -8,7 +8,7 @@ import { getPriorityClass, getPriorityColor, getPriorityLabel } from "../priorit
 import { normalizeTaskProject, projectDisplayName, uniqueRealProjects } from "../projects";
 import { buildReviewSteps, findWaitingSector, pruneReviewSession, reviewSectorNeighbors, reviewTypeLabel } from "../review";
 import { applyBelkiFontSettings, applyBelkiThemeSettings, normalizeOverdueRange, overdueRangeLabel } from "../settings";
-import { E_ID, INBOX_SECTOR, SECTOR_SET } from "../tasksFormat";
+import { E_ID, INBOX_SECTOR, SECTOR_SET, isTaskLine } from "../tasksFormat";
 import { OVERDUE_RANGES } from "../types";
 import type { BelkiSettings, CalendarFeed, Task, TimeBlock } from "../types";
 import { TaskStore } from "../taskStore";
@@ -77,7 +77,6 @@ export const SORT_OPTIONS = [
   { mode: "smart", label: "Smart" },
   { mode: "due", label: "Due date" },
   { mode: "priority", label: "Priority" },
-  { mode: "deadline", label: "Deadline" },
   { mode: "created", label: "Created date" },
   { mode: "project", label: "Sector" },
   { mode: "alphabetical", label: "Alphabetical" }
@@ -456,7 +455,8 @@ export class TaskBoardView extends ItemView {
       nav,
       "Completed",
       "completed",
-      tasks.filter((task) => task.completed || task.completedOccurrences && task.completedOccurrences.length > 0).length,
+      // The same tasks the Completed view lists (archived sectors left out).
+      tasks.filter((task) => task.completed && !archivedSet.has(normalizeTaskProject(task.project) || "")).length,
       "completed"
     );
   }
@@ -502,6 +502,9 @@ export class TaskBoardView extends ItemView {
       this.render();
       return;
     }
+    // A review refers to tasks by id; lines without 🆔 would get new ids on
+    // the next read and drop out of the review, so write the ids first.
+    if (this.store.idsNotInFile.size > 0) await this.store.save();
     const tasks = this.store.getTasks();
     const steps = buildReviewSteps(type, this.settings.sectors, tasks);
     if (steps.length === 0) {
@@ -2030,6 +2033,8 @@ export class TaskBoardView extends ItemView {
       const lines = content.split(/\r?\n/);
       const needle = `${E_ID} ${task.id}`;
       line = lines.findIndex((l) => l.includes(needle));
+      // A line without 🆔 yet (typed or pasted into the file): find it by its title.
+      if (line < 0 && task.title) line = lines.findIndex((l) => isTaskLine(l) && l.includes(task.title));
     } catch {
       // best-effort: placing the cursor on the task line is optional
     }
@@ -2277,12 +2282,6 @@ export class TaskBoardView extends ItemView {
         name: "Overdue",
         icon: "!",
         tasks: active.filter((task) => task.due && task.due < today)
-      },
-      {
-        id: "with-deadline",
-        name: "With deadline",
-        icon: "\u25C6",
-        tasks: active.filter((task) => Boolean(task.deadline))
       },
       {
         id: "no-label",
